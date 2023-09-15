@@ -17,23 +17,9 @@
 
 #include <stdarg.h>
 
-#include "../xdma/cdev_sgdma.h"
+#include "cdev_sgdma.h"
 
 #include "dma_utils.c"
-
-/* ltoh: little endian to host */
-/* htol: host to little endian */
-#if __BYTE_ORDER == __LITTLE_ENDIAN
-#define ltohl(x)       (x)
-#define ltohs(x)       (x)
-#define htoll(x)       (x)
-#define htols(x)       (x)
-#elif __BYTE_ORDER == __BIG_ENDIAN
-#define ltohl(x)     __bswap_32(x)
-#define ltohs(x)     __bswap_16(x)
-#define htoll(x)     __bswap_32(x)
-#define htols(x)     __bswap_16(x)
-#endif
 
 //#define __DEBUG__
 void debug_printf(const char *fmt, ...) {
@@ -224,110 +210,6 @@ close:
     return err;
 }
 
-struct xdma_performance_ioctl perf;
-
-int xdma_api_ioctl_perf_start(char *devname, int size) {
-
-    int fd;
-    int rc = 0;
-  
-    fd = open(devname, O_RDWR);
-    if (fd < 0) {
-        debug_printf("FAILURE: Could not open %s.\n", devname);
-        debug_printf("         Make sure xdma device driver is loaded and ");
-        debug_printf("and you have access rights (maybe use sudo?).\n");
-        return -1;
-    }
-
-    perf.version = IOCTL_XDMA_PERF_V1;
-    perf.transfer_size = size;
-    rc = ioctl(fd, IOCTL_XDMA_PERF_START, &perf);
-    if (rc == 0) {
-        debug_printf("IOCTL_XDMA_PERF_START succesful.\n");
-    } else {
-        debug_printf("ioctl(..., IOCTL_XDMA_PERF_START) = %d\n", rc);
-    }
-
-    close(fd);
-
-    return rc;
-}
-
-int xdma_api_ioctl_perf_get(char *devname, 
-                            struct xdma_performance_ioctl *perf) {
-    int fd;
-    int rc = 0;
-  
-    fd = open(devname, O_RDWR);
-    if (fd < 0) {
-        debug_printf("FAILURE: Could not open %s.\n", devname);
-        debug_printf("         Make sure xdma device driver is loaded and ");
-        debug_printf("and you have access rights (maybe use sudo?).\n");
-        return -1;
-    }
-
-    rc = ioctl(fd, IOCTL_XDMA_PERF_GET, perf);
-    if (rc == 0) {
-      debug_printf("IOCTL_XDMA_PERF_GET succesful.\n");
-    } else {
-      debug_printf("ioctl(..., IOCTL_XDMA_PERF_GET) = %d\n", rc);
-      return -1;
-    }
-    debug_printf("perf.transfer_size = %d\n", perf->transfer_size);
-    debug_printf("perf.iterations = %d\n", perf->iterations);
-    debug_printf("(data transferred = %lld bytes)\n", 
-            (long long)perf->transfer_size * (long long)perf->iterations);
-    debug_printf("perf.clock_cycle_count = %lld\n", (long long)perf->clock_cycle_count);
-    debug_printf("perf.data_cycle_count = %lld\n", (long long)perf->data_cycle_count);
-    if (perf->clock_cycle_count && perf->data_cycle_count) {
-        debug_printf("(data duty cycle = %lld%%)\n", 
-                (long long)perf->data_cycle_count * 100 / (long long)perf->clock_cycle_count);
-    }
-
-    close(fd);
-
-    return 0;
-}
-
-int xdma_api_ioctl_perf_stop(char *devname, struct xdma_performance_ioctl *perf)
-{
-    int fd;
-    int rc = 0;
-  
-    fd = open(devname, O_RDWR);
-    if (fd < 0) {
-        debug_printf("FAILURE: Could not open %s.\n", devname);
-        debug_printf("         Make sure xdma device driver is loaded and ");
-        debug_printf("and you have access rights (maybe use sudo?).\n");
-        return -1;
-    }
-
-    rc = ioctl(fd, IOCTL_XDMA_PERF_STOP, perf);
-    if (rc == 0) {
-      debug_printf("IOCTL_XDMA_PERF_STOP succesful.\n");
-    } else {
-      debug_printf("ioctl(..., IOCTL_XDMA_PERF_STOP) = %d\n", rc);
-      return -1;
-    }
-    debug_printf("perf.transfer_size = %d bytes\n", perf->transfer_size);
-    debug_printf("perf.iterations = %d\n", perf->iterations);
-    debug_printf("(data transferred = %lld bytes)\n", 
-                 (long long)perf->transfer_size * (long long)perf->iterations);
-    debug_printf("perf.clock_cycle_count = %lld\n", (long long)perf->clock_cycle_count);
-    debug_printf("perf.data_cycle_count = %lld\n", (long long)perf->data_cycle_count);
-    if (perf->clock_cycle_count && perf->data_cycle_count) {
-        debug_printf("(data duty cycle = %lld%%)\n", 
-                 (long long)perf->data_cycle_count * 100 / (long long)perf->clock_cycle_count);
-        debug_printf(" data rate ***** bytes length = %d, rate = %f \n", perf->transfer_size, 
-                 (double)(long long)perf->data_cycle_count/(long long)perf->clock_cycle_count);
-    }
-    debug_printf("perf.pending_count = %lld\n", (long long)perf->pending_count);
-
-    close(fd);
-
-    return 0;
-}
-
 /* dma from device */
 int xdma_api_read_to_buffer(char *devname, char *buffer, 
                             uint64_t size, uint64_t *bytes_rcv) {
@@ -438,14 +320,3 @@ char * xdma_api_get_buffer(uint64_t size) {
     return buffer;
 }
 
-/* dma from device */
-int xdma_api_ioctl_aperture_r()
-{
-    return 0;
-}
-
-/* dma to device */
-int xdma_api_ioctl_aperture_w()
-{
-    return 0;
-}

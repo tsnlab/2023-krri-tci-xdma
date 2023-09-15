@@ -2585,6 +2585,13 @@ static void engine_free_resource(struct xdma_engine *engine)
 			engine->cyclic_result, engine->cyclic_result_bus);
 		engine->cyclic_result = NULL;
 	}
+	if (engine->tsnthp) {
+		dma_free_coherent(
+			&xdev->pdev->dev,
+			engine->desc_max * sizeof(struct xdma_result),
+			engine->tsnthp, engine->tsn_thread_bus);
+		engine->tsnthp = NULL;
+	}
 }
 
 static int engine_destroy(struct xdma_dev *xdev, struct xdma_engine *engine)
@@ -2825,6 +2832,16 @@ static int engine_alloc_resource(struct xdma_engine *engine)
 		}
 	}
 
+	engine->tsnthp = dma_alloc_coherent(
+		&xdev->pdev->dev,
+		engine->desc_max * sizeof(struct xdma_result),
+		&engine->tsn_thread_bus, GFP_KERNEL);
+
+	if (!engine->tsnthp) {
+		pr_warn("%s, %s pre-alloc tsnthp OOM.\n",
+			dev_name(&xdev->pdev->dev), engine->name);
+		goto err_out;
+	}
 	return 0;
 
 err_out:

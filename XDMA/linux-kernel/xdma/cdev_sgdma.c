@@ -720,6 +720,168 @@ static int ioctl_do_addrmode_get(struct xdma_engine *engine, unsigned long arg)
 	return rv;
 }
 
+extern unsigned int desc_blen_max;
+
+static int ioctl_do_max_buf_len_get(struct xdma_engine *engine, unsigned long arg)
+{
+	if (!engine) {
+		pr_err("Invalid DMA engine\n");
+		return -EINVAL;
+	}
+
+	dbg_tfr("IOCTL_XDMA_MAX_BUF_LEN_GET\n");
+	return put_user(desc_blen_max, (int __user *)arg);
+}
+
+static void do_print_engine_info(struct xdma_engine *e)
+{
+	dbg_tfr("**** %s engine ver. %d\n", e->name, e->version);
+
+	dbg_tfr("unsigned long magic: 0x%lx\n", e->magic);
+	dbg_tfr("u32 bypass_offset: 0x%x\n", e->bypass_offset);
+	dbg_tfr("enum shutdown_state shutdown: 0x%x\n", e->shutdown);
+	dbg_tfr("enum dma_data_direction dir: 0x%x\n", e->dir);
+	dbg_tfr("u8 addr_align: 0x%x\n", e->addr_align);
+	dbg_tfr("u8 len_granularity: 0x%x\n", e->len_granularity);
+	dbg_tfr("u8 addr_bits: 0x%x\n", e->addr_bits);
+	dbg_tfr("u8 channel:2: 0x%x\n", e->channel);
+	dbg_tfr("u8 streaming:1: 0x%x\n", e->streaming);
+	dbg_tfr("u8 device_open:1: 0x%x\n", e->device_open);
+	dbg_tfr("u8 running:1: 0x%x\n", e->running);
+	dbg_tfr("u8 non_incr_addr:1: 0x%x\n", e->non_incr_addr);
+	dbg_tfr("u8 eop_flush:1: 0x%x\n", e->eop_flush);
+	dbg_tfr("u8 filler:1: 0x%x\n", e->filler);
+	dbg_tfr("int max_extra_adj: 0x%x\n", e->max_extra_adj);
+	dbg_tfr("int desc_dequeued: 0x%x\n", e->desc_dequeued);
+	dbg_tfr("u32 desc_max: 0x%x\n", e->desc_max);
+	dbg_tfr("u32 status: 0x%x\n", e->status);
+	dbg_tfr("u32 interrupt_enable_mask_value: 0x%x\n", e->interrupt_enable_mask_value);
+	dbg_tfr("u8 *poll_mode_addr_virt: 0x%p\n", e->poll_mode_addr_virt);
+	dbg_tfr("int desc_idx: 0x%x\n", e->desc_idx);
+	dbg_tfr("int desc_used: 0x%x\n", e->desc_used);
+	dbg_tfr("unsigned int intr_work_cpu: 0x%x\n", e->intr_work_cpu);
+}
+
+static int ioctl_do_print_engine_info(struct xdma_engine *engine, unsigned long arg)
+{
+	if (!engine) {
+		pr_err("Invalid DMA engine\n");
+		return -EINVAL;
+	}
+
+	dbg_tfr("IOCTL_XDMA_PRN_ENGINE_INFO\n");
+	do_print_engine_info(engine);
+	return put_user(engine->version, (int __user *)arg);
+}
+
+static int ioctl_thread_start(struct file *file, struct xdma_engine *engine, unsigned long arg)
+{
+	if (!engine) {
+		pr_err("Invalid DMA engine\n");
+		return -EINVAL;
+	}
+
+	dbg_tfr("IOCTL_XDMA_THREAD_START\n");
+	if(tsn_thread_start(file, engine)) {
+		return -EINVAL;
+	}
+
+	return put_user(engine->version, (int __user *)arg);
+}
+
+static int ioctl_thread_stop(struct xdma_engine *engine, unsigned long arg)
+{
+	if (!engine) {
+		pr_err("Invalid DMA engine\n");
+		return -EINVAL;
+	}
+
+	dbg_tfr("IOCTL_XDMA_THREAD_STOP\n");
+	tsn_thread_stop(engine);
+
+	return put_user(engine->version, (int __user *)arg);
+}
+
+static int ioctl_thread_init(struct xdma_engine *engine, unsigned long arg)
+{
+	struct xdma_thread_init_ioctl *th_init=NULL;
+	int rv;
+
+	if (!engine) {
+		pr_err("Invalid DMA engine\n");
+		return -EINVAL;
+	}
+
+	th_init = kzalloc(sizeof(struct xdma_thread_init_ioctl),
+		GFP_KERNEL);
+
+	if (!th_init)
+		return -ENOMEM;
+
+	rv = copy_from_user(th_init,
+		(struct xdma_thread_init_ioctl __user *)arg,
+		sizeof(struct xdma_thread_init_ioctl));
+
+	if (rv < 0) {
+		dbg_perf("Failed to copy from user space 0x%lx\n", arg);
+		return -EINVAL;
+	}
+	dbg_tfr("IOCTL_XDMA_THREAD_INIT\n");
+
+	if(tsn_thread_init(engine, th_init->buffer_count)) {
+		return -EINVAL;
+	}
+
+	kfree(th_init);
+	return 0;
+}
+
+static int ioctl_thread_exit(struct xdma_engine *engine, unsigned long arg)
+{
+	if (!engine) {
+		pr_err("Invalid DMA engine\n");
+		return -EINVAL;
+	}
+
+	dbg_tfr("IOCTL_XDMA_THREAD_EXIT\n");
+	tsn_thread_exit(engine);
+
+	return put_user(engine->version, (int __user *)arg);
+}
+
+static int ioctl_bd_insert(struct xdma_engine *engine, unsigned long arg)
+{
+	if (!engine) {
+		pr_err("Invalid DMA engine\n");
+		return -EINVAL;
+	}
+
+	dbg_tfr("IOCTL_XDMA_BD_INSERT\n");
+    return tsn_bd_insert(engine, arg);
+}
+
+static int ioctl_bd_set_address(struct xdma_engine *engine, unsigned long arg)
+{
+	if (!engine) {
+		pr_err("Invalid DMA engine\n");
+		return -EINVAL;
+	}
+
+	dbg_tfr("IOCTL_XDMA_BD_SET_ADDR\n");
+    return tsn_bd_set_buffer_address(engine, arg);
+}
+
+static int ioctl_bd_get_address(struct xdma_engine *engine, unsigned long arg)
+{
+	if (!engine) {
+		pr_err("Invalid DMA engine\n");
+		return -EINVAL;
+	}
+
+	dbg_tfr("IOCTL_XDMA_BD_GET_ADDR\n");
+    return tsn_bd_get_buffer_address(engine, arg);
+}
+
 static int ioctl_do_align_get(struct xdma_engine *engine, unsigned long arg)
 {
 	if (!engine) {
@@ -836,6 +998,33 @@ static long char_sgdma_ioctl(struct file *file, unsigned int cmd,
 		break;
 	case IOCTL_XDMA_APERTURE_W:
 		rv = ioctl_do_aperture_dma(engine, arg, 1);
+		break;
+	case IOCTL_XDMA_MAX_BUF_LEN_GET:
+		rv = ioctl_do_max_buf_len_get(engine, arg);
+		break;
+	case IOCTL_XDMA_PRN_ENGINE_INFO:
+		rv = ioctl_do_print_engine_info(engine, arg);
+		break;
+	case IOCTL_XDMA_THREAD_START:
+		rv = ioctl_thread_start(file, engine, arg);
+		break;
+	case IOCTL_XDMA_THREAD_STOP:
+		rv = ioctl_thread_stop(engine, arg);
+		break;
+	case IOCTL_XDMA_THREAD_INIT:
+		rv = ioctl_thread_init(engine, arg);
+		break;
+	case IOCTL_XDMA_THREAD_EXIT:
+		rv = ioctl_thread_exit(engine, arg);
+		break;
+	case IOCTL_XDMA_BD_INSERT:
+		rv = ioctl_bd_insert(engine, arg);
+		break;
+	case IOCTL_XDMA_BD_SET_ADDR:
+		rv = ioctl_bd_set_address(engine, arg);
+		break;
+	case IOCTL_XDMA_BD_GET_ADDR:
+		rv = ioctl_bd_get_address(engine, arg);
 		break;
 	default:
 		dbg_perf("Unsupported operation\n");

@@ -97,8 +97,10 @@
 #define XDMA_ENGINE_CREDIT_XFER_MAX_DESC	0x3FF
 
 /* maximum size of a single DMA transfer descriptor */
-#define XDMA_DESC_BLEN_BITS	28
-#define XDMA_DESC_BLEN_MAX	((1 << (XDMA_DESC_BLEN_BITS)) - 1)
+//#define XDMA_DESC_BLEN_BITS	28
+#define XDMA_DESC_BLEN_BITS	12
+//#define XDMA_DESC_BLEN_MAX	((1 << (XDMA_DESC_BLEN_BITS)) - 1)
+#define XDMA_DESC_BLEN_MAX	(2048)
 
 /* bits of the SG DMA control register */
 #define XDMA_CTRL_RUN_STOP			(1UL << 0)
@@ -563,6 +565,9 @@ struct xdma_engine {
 	/* pending work thread list */
 	/* cpu attached to intr_work */
 	unsigned int intr_work_cpu;
+
+    struct tsn_kthread *tsnthp;
+	dma_addr_t tsn_thread_bus;	/* bus addr for Kernel-thread */
 };
 
 struct xdma_user_irq {
@@ -624,6 +629,107 @@ struct xdma_dev {
 	/* SD_Accel specific */
 	enum dev_capabilities capabilities;
 	u64 feature_id;
+};
+
+#include <stddef.h>
+
+/* Types for `void *' pointers.  */
+#ifndef __WORDSIZE
+#define __WORDSIZE 64
+#endif
+
+#if __WORDSIZE == 64
+# ifndef __intptr_t_defined
+typedef long int        intptr_t;
+#  define __intptr_t_defined
+# endif
+typedef unsigned long int   uintptr_t;
+#else
+# ifndef __intptr_t_defined
+typedef int         intptr_t;
+#  define __intptr_t_defined
+# endif
+typedef unsigned int        uintptr_t;
+#endif
+
+/* Types for `void *' pointers.  */
+#if __WORDSIZE == 64
+# ifndef __intptr_t_defined
+typedef long int        intptr_t;
+#  define __intptr_t_defined
+# endif
+typedef unsigned long int   uintptr_t;
+#else
+# ifndef __intptr_t_defined
+typedef int         intptr_t;
+#  define __intptr_t_defined
+# endif
+typedef unsigned int        uintptr_t;
+#endif
+
+typedef intptr_t INTPTR;
+typedef uintptr_t UINTPTR;
+
+/**
+ * The XDma_Bd is the type for a buffer descriptor (BD).
+ */
+#include "cdev_sgdma_part.h"
+
+typedef struct {
+    UINTPTR ChanBase;       /**< physical base address*/
+
+    int IsRxChannel;    /**< Is this a receive channel */
+    volatile int RunState;  /**< Whether channel is running */
+    int HasStsCntrlStrm;    /**< Whether has stscntrl stream */
+    int HasDRE;
+    int DataWidth;
+    int Addr_ext;
+    u32 MaxTransferLen;
+
+    UINTPTR FirstBdPhysAddr;    /**< Physical address of 1st BD in list */
+    UINTPTR FirstBdAddr;    /**< Virtual address of 1st BD in list */
+    UINTPTR LastBdAddr;     /**< Virtual address of last BD in the list */
+    u32 Length;     /**< Total size of ring in bytes */
+    UINTPTR Separation;     /**< Number of bytes between the starting
+                     address of adjacent BDs */
+    struct XDma_Bd *FreeHead;   /**< First BD in the free group */
+    struct XDma_Bd *PreHead;    /**< First BD in the pre-work group */
+    struct XDma_Bd *HwHead; /**< First BD in the work group */
+    struct XDma_Bd *HwTail; /**< Last BD in the work group */
+    struct XDma_Bd *PostHead;   /**< First BD in the post-work group */
+    struct XDma_Bd *BdaRestart; /**< BD to load when channel is started */
+    struct XDma_Bd *CyclicBd;   /**< Useful for Cyclic DMA operations */
+    int FreeCnt;        /**< Number of allocatable BDs in free group */
+    int PreCnt;     /**< Number of BDs in pre-work group */
+    int HwCnt;      /**< Number of BDs in work group */
+    int PostCnt;        /**< Number of BDs in post-work group */
+    int AllCnt;     /**< Total Number of BDs for channel */
+    int RingIndex;      /**< Ring Index */
+    int Cyclic;     /**< Check for cyclic DMA Mode */
+} XDma_BdRing;
+
+struct tsn_kthread {
+    /**  thread lock*/
+    spinlock_t lock;
+    struct xdma_engine *engine;
+    /**  name of the thread */
+    char name[20];
+    /**  cpu number for which the thread associated with */
+    unsigned short cpu;
+    /**  thread id */
+    unsigned short id;
+    /**  thread sleep timeout value */
+    unsigned int timeout;
+    /**  flags for thread */
+    unsigned long flag;
+
+    struct task_struct *my_thread;
+
+	struct xdma_dev *xdev;
+
+    XDma_BdRing BdRing;
+    unsigned int BufferCount;
+    u8 running:1;       /* flag if the driver started thread */
 };
 
 static inline int xdma_device_flag_check(struct xdma_dev *xdev, unsigned int f)
@@ -688,6 +794,14 @@ void get_perf_stats(struct xdma_engine *engine);
 
 int engine_addrmode_set(struct xdma_engine *engine, unsigned long arg);
 int engine_service_poll(struct xdma_engine *engine, u32 expected_desc_count);
+
+int tsn_thread_init(struct xdma_engine *engine, int BufferCount);
+void tsn_thread_exit(struct xdma_engine *engine);
+int tsn_thread_start(struct file *file, struct xdma_engine *engine);
+void tsn_thread_stop(struct xdma_engine *engine);
+int tsn_bd_insert(struct xdma_engine *engine, unsigned long arg);
+int tsn_bd_set_buffer_address(struct xdma_engine *engine, unsigned long arg);
+int tsn_bd_get_buffer_address(struct xdma_engine *engine, unsigned long arg);
 
 ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 			unsigned int aperture, struct sg_table *sgt,

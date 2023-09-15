@@ -2,11 +2,13 @@
 #define __XDMA_COMMON_H__
 
 #define BUFFER_ALIGNMENT  (0x1000)
-#define MAX_BUFFER_LENGTH (0x1000)
-//#define MAX_BUFFER_LENGTH (0x10000 * 16)
-#define NUMBER_OF_BUFFER  (4096)    // (2048)
+#define MAX_PACKET_LENGTH (0x800)
+#define MAX_PACKET_BURST  (1)	/* 16 Iterate over the userspace buffer, taking at most 255 * PAGE_SIZE bytes for each DMA transfer. */
+#define MAX_BUFFER_LENGTH (MAX_PACKET_LENGTH * MAX_PACKET_BURST)
+#define NUMBER_OF_BUFFER  (2048)
 #define NUMBER_OF_POOL_BUFFER (NUMBER_OF_BUFFER + 1)
 #define NUMBER_OF_RESERVED_BUFFER (4)
+#define ENGINE_NUMBER_OF_BUFFER  (NUMBER_OF_BUFFER/2)
 
 typedef char *    BUF_POINTER;
 
@@ -37,10 +39,14 @@ typedef struct circular_queue{
 typedef struct stats {
     unsigned long long  rxPackets;
     unsigned long long  rxBytes;
+    unsigned long long  rxErrors;
+    unsigned long long  rxNoBuffer;	// BD is not available
     unsigned long long  rxPps;
     unsigned long long  rxBps;
     unsigned long long  txPackets;
     unsigned long long  txBytes;
+    unsigned long long  txFiltered;
+    unsigned long long  txErrors;
     unsigned long long  txPps;
     unsigned long long  txBps;
 } stats_t;
@@ -53,6 +59,7 @@ enum {
     RUN_MODE_NORMAL,
     RUN_MODE_LOOPBACK,
     RUN_MODE_PERFORMANCE,
+    RUN_MODE_DEBUG,
 
     RUN_MODE_CNT,
 };
@@ -97,5 +104,7 @@ typedef struct _execTime
 void* receiver_thread(void* arg);
 void* sender_thread(void* arg);
 void* stats_thread(void* arg);
+void* rx_thread(void* arg);
+void* tx_thread(void* arg);
 
 #endif    // __XDMA_COMMON_H__
