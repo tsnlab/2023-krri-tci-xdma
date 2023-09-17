@@ -144,7 +144,6 @@ static void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
 
     BUF_POINTER buffer;
     int bytes_rcv;
-    struct rx_metadata * rx_metadata;
 
     set_register(REG_TSN_CONTROL, 1);
     while (rx_thread_run) {
@@ -153,11 +152,6 @@ static void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
             debug_printf("FAILURE: Could not buffer_pool_alloc.\n");
             rx_stats.rxNoBuffer++;
             continue;
-        }
-
-        for(int i=0; i<=MAX_PACKET_BURST; i++) {
-            rx_metadata = (struct rx_metadata * )&buffer[i*MAX_PACKET_LENGTH];
-            rx_metadata->frame_length = 0;
         }
 
         bytes_rcv = 0;
@@ -169,7 +163,6 @@ static void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
             rx_stats.rxErrors++;
             continue;
         }
-#if 0
         if(bytes_rcv > MAX_BUFFER_LENGTH) {
             if(buffer_pool_free(buffer)) {
                 debug_printf("FAILURE: Could not buffer_pool_free.\n");
@@ -177,23 +170,8 @@ static void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
             rx_stats.rxErrors++;
             continue;
         }
-#endif
-
-//        printf("bytes_rcv: %d\n", bytes_rcv);
-
-        struct tsn_rx_buffer * rx;
-        for(int i=0; i<=MAX_PACKET_BURST; i++) {
-//            packet_dump(stdout, (BUF_POINTER)&buffer[i*MAX_PACKET_LENGTH], 32);
-            rx = (struct tsn_rx_buffer*)&buffer[i*MAX_PACKET_LENGTH];
-            if(rx->metadata.frame_length != 0) {
-                rx_stats.rxPackets++;
-                rx_stats.rxBytes += (rx->metadata.frame_length + sizeof(struct rx_metadata));
-            } else {
-				if (i) {
-					break;
-				}
-			}
-        }
+		rx_stats.rxPackets++;
+		rx_stats.rxBytes += bytes_rcv;
 
         xbuffer_enqueue((QueueElement)buffer);
     }

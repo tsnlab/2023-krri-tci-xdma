@@ -614,7 +614,6 @@ static int process_copy_packet(struct tsn_rx_buffer* rx, struct tsn_tx_buffer* t
 }
 #endif
 
-#define ALIGNMENT_8B (8)
 static void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
 
     QueueElement buffer = NULL;
@@ -627,20 +626,11 @@ static void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
             continue;
         }
 
-		struct tsn_rx_buffer * rx;
-        for(int i=0; i<=MAX_PACKET_BURST; i++) {
-			rx = (struct tsn_rx_buffer*)&buffer[i*MAX_PACKET_LENGTH];
-			if(rx->metadata.frame_length == 0) {
-				if(i) {
-					break;
-				}
-				continue;
-			}
-			status = process_send_packet((struct tsn_rx_buffer*)&buffer[i*MAX_PACKET_LENGTH]);
-			if(status == XST_FAILURE) {
-				tx_stats.txFiltered++;
-			}
+		status = process_send_packet((struct tsn_rx_buffer*)buffer);
+		if(status == XST_FAILURE) {
+			tx_stats.txFiltered++;
 		}
+
         buffer_pool_free((BUF_POINTER)buffer);
     }
 }
