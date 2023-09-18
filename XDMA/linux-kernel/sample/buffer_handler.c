@@ -75,7 +75,7 @@ int isStackFull() {
 
 int buffer_pool_free(BUF_POINTER element) {
 
-    element = (BUF_POINTER)(((uint64_t)element / BUFFER_ALIGNMENT) * BUFFER_ALIGNMENT);
+    element = (BUF_POINTER)((uint64_t)element & PACKET_ADDRESS_MASK);
     if (element >= RESERVED_BUFFER_BASE ) {
         pthread_mutex_lock(&reserved_stack->mutex);
 
