@@ -69,20 +69,11 @@ static ssize_t read_to_buffer(char *fname, int fd, char *buffer, uint64_t size,
         /* read data from file into memory buffer */
         rc = read(fd, buf, bytes);
         if (rc < 0) {
-#if 0
-            fprintf(stderr, "%s, read 0x%lx @ 0x%lx failed %ld.\n",
-                fname, bytes, offset, rc);
-            perror("read file");
-#endif
             return -EIO;
         }
 
         count += rc;
         if (rc != bytes) {
-#if 0
-            fprintf(stderr, "%s, read underflow 0x%lx/0x%lx @ 0x%lx.\n",
-                fname, rc, bytes, offset);
-#endif
             break;
         }
 

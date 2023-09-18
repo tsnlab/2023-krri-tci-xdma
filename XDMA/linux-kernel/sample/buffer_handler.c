@@ -53,7 +53,6 @@ BUF_POINTER get_reserved_tx_buffer() {
     pthread_mutex_lock(&reserved_stack->mutex);
 
     if (isReservedStackEmpty()) {
-//        debug_printf("Stack is empty. Cannot reserved_buffer_pool_alloc.\n");
         pthread_mutex_unlock(&reserved_stack->mutex);
         return EMPTY_ELEMENT;
     }

@@ -1,6 +1,7 @@
 #ifndef __CDEV_SGDMA_PART_H__
 #define __CDEV_SGDMA_PART_H__
 
+#if 0
 struct xdma_thread_init_ioctl {
     int buffer_count;
 };
@@ -34,7 +35,6 @@ struct XDma_Bd {
 };
 
 
-#if 1 // 20230830 POOKY TSNLAB
 #define IOCTL_XDMA_MAX_BUF_LEN_GET _IOR('q', 9, int)
 #define IOCTL_XDMA_PRN_ENGINE_INFO _IOR('q', 10, int)
 #define IOCTL_XDMA_THREAD_START _IOR('q', 11, int)

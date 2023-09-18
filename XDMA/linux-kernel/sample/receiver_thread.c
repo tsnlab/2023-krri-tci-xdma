@@ -170,8 +170,8 @@ static void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
             rx_stats.rxErrors++;
             continue;
         }
-		rx_stats.rxPackets++;
-		rx_stats.rxBytes += bytes_rcv;
+        rx_stats.rxPackets++;
+        rx_stats.rxBytes += bytes_rcv;
 
         xbuffer_enqueue((QueueElement)buffer);
     }
@@ -208,47 +208,22 @@ void receiver_in_loopback_mode(char* devname, int fd, char *fn, uint64_t size) {
         return;
     }
 
-#ifndef __USE_BUFFER_STACK__
     buffer = buffer_pool_alloc();
     if(buffer == NULL) {
         printf("FAILURE: Could not buffer_pool_alloc.\n");
         return;
     }
-#endif
 
     while (rx_thread_run) {
-#ifdef __USE_BUFFER_STACK__
-        buffer = buffer_pool_alloc();
-        if(buffer == NULL) {
-            debug_printf("FAILURE: Could not buffer_pool_alloc.\n");
-            continue;
-        }
-#endif
 
-#ifdef __DEVICE_OPEN_ONCE__
         if(xdma_api_read_to_buffer_with_fd(devname, fd, buffer, 
-                                           size, &bytes_rcv)) 
-#else
-        if(xdma_api_read_to_buffer(devname, buffer, 
-                                           size, &bytes_rcv)) 
-#endif
-    {
-#ifdef __USE_BUFFER_STACK__
-            if(buffer_pool_free(buffer)) {
-                debug_printf("FAILURE: Could not buffer_pool_free.\n");
-            }
-#endif
+                                           size, &bytes_rcv)) {
             continue;
         }
 
         if(size != bytes_rcv) {
             debug_printf("FAILURE: size(%ld) and bytes_rcv(%ld) are different.\n", 
                          size, bytes_rcv);
-#ifdef __USE_BUFFER_STACK__
-            if(buffer_pool_free(buffer)) {
-                debug_printf("FAILURE: Could not buffer_pool_free.\n");
-            }
-#endif
             rx_stats.rxErrors++;
             continue;
         }
@@ -256,11 +231,6 @@ void receiver_in_loopback_mode(char* devname, int fd, char *fn, uint64_t size) {
         if(memcmp((const void *)data, (const void *)buffer, size)) {
             debug_printf("FAILURE: data(%p) and buffer(%p) are different.\n", 
                          data, buffer);
-#ifdef __USE_BUFFER_STACK__
-            if(buffer_pool_free(buffer)) {
-                debug_printf("FAILURE: Could not buffer_pool_free.\n");
-            }
-#endif
             rx_stats.rxErrors++;
             continue;
         }
@@ -268,13 +238,8 @@ void receiver_in_loopback_mode(char* devname, int fd, char *fn, uint64_t size) {
         rx_stats.rxPackets++;
         rx_stats.rxBytes += bytes_rcv;
 
-#ifdef __USE_BUFFER_STACK__
-        buffer_pool_free(buffer);
-#endif
     }
-#ifndef __USE_BUFFER_STACK__
     buffer_pool_free(buffer);
-#endif
 }
 
 void receiver_in_performance_mode(char* devname, int fd, char *fn, uint64_t size) {
@@ -334,8 +299,6 @@ void receiver_in_debug_mode(char* devname, int fd, char *fn, uint64_t size) {
             continue;
         }
 
-//        printf("bytes_rcv: %d\n", bytes_rcv);
-
         for(int i=0; i<MAX_PACKET_BURST; i++) {
 //            packet_dump(stdout, (BUF_POINTER)&buffer[i*MAX_PACKET_LENGTH], 32);
         }
@@ -354,13 +317,11 @@ void* receiver_thread(void* arg) {
                 __func__, p_arg->devname, p_arg->fn,
                 p_arg->mode, p_arg->size);
 
-#ifdef __DEVICE_OPEN_ONCE__
     if(xdma_api_dev_open(p_arg->devname, 1 /* eop_flush */, &fd)) {
         printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", p_arg->devname);
         printf("<<< %s\n", __func__);
         return NULL;
     }
-#endif
 
     initialize_queue(&g_queue);
     initialize_statistics(&rx_stats);
@@ -378,146 +339,6 @@ void* receiver_thread(void* arg) {
     break;
     case RUN_MODE_DEBUG:
         receiver_in_debug_mode(p_arg->devname, fd, p_arg->fn, p_arg->size);
-    break;
-    default:
-        printf("%s - Unknown mode(%d)\n", __func__, p_arg->mode);
-    break;
-    }
-
-    pthread_mutex_destroy(&g_queue.mutex);
-
-    xdma_api_dev_close(fd);
-    printf("<<< %s\n", __func__);
-    return NULL;
-}
-
-void rx_in_normal_mode(char* devname, int fd, uint64_t size) {
-
-    BUF_POINTER buffer;
-    int bytes_rcv;
-
-    set_register(REG_TSN_CONTROL, 1);
-    sleep(10);
-
-    while (rx_thread_run) {
-        buffer = buffer_pool_alloc();
-        if(buffer == NULL) {
-            debug_printf("FAILURE: Could not buffer_pool_alloc.\n");
-            rx_stats.rxNoBuffer++;
-            continue;
-        }
-
-        memset(buffer, 0, MAX_BUFFER_LENGTH + BUFFER_ALIGNMENT);
-
-        bytes_rcv = 0;
-        if(xdma_api_read_to_buffer_with_fd(devname, fd, buffer, 
-                                           MAX_BUFFER_LENGTH, &bytes_rcv)) {
-            if(buffer_pool_free(buffer)) {
-                debug_printf("FAILURE: Could not buffer_pool_free.\n");
-            }
-            rx_stats.rxErrors++;
-            continue;
-        }
-
-//        printf("bytes_rcv: %d\n", bytes_rcv);
-
-        struct tsn_rx_buffer * rx;
-        for(int i=0; i<=MAX_PACKET_BURST; i++) {
-            rx = (struct tsn_rx_buffer*)&buffer[i*MAX_PACKET_LENGTH];
-            if(rx->metadata.frame_length != 0) {
-			    bytes_rcv = rx->metadata.frame_length + sizeof(struct rx_metadata);
-                rx_stats.rxPackets++;
-                rx_stats.rxBytes += bytes_rcv;
-#if 0
-			    memset(file_name, 0, 256);
-			    sprintf(file_name, "./rx-packet//rx-packet-%03d.txt", i);
-			    fp = fopen(file_name, "w");
-
-                if(fp == NULL) {
-                    packet_dump(stdout, (BUF_POINTER)rx, bytes_rcv);
-                } else {
-                    packet_dump(fp, (BUF_POINTER)rx, bytes_rcv);
-                    fclose(fp);
-                }
-#endif
-            }
-        }
-
-		if(buffer_pool_free(buffer)) {
-			debug_printf("FAILURE: Could not buffer_pool_free.\n");
-		}
-
-		rx_thread_run = 0;
-    }
-    set_register(REG_TSN_CONTROL, 0);
-}
-
-int init_rx_kernel_thread(char *devname) {
-
-	int id;
-	int version;
-    BUF_POINTER buffer;
-
-	if(xdma_api_ioctl_thread_init(devname, ENGINE_NUMBER_OF_BUFFER)) {
-		return -1;
-	}
-
-	for(id = 0; id < ENGINE_NUMBER_OF_BUFFER; id++) {
-        buffer = buffer_pool_alloc();
-
-        if(buffer == NULL) {
-            debug_printf("FAILURE: Could not buffer_pool_alloc.\n");
-            continue;
-        }
-        memset(buffer, 0, MAX_BUFFER_LENGTH + BUFFER_ALIGNMENT);
-        if(xdma_api_ioctl_bd_set_buffer_address(devname, id, (char *)buffer)) {
-		    return -1;
-		}
-        if(xdma_api_ioctl_bd_get_buffer_address(devname, id, (char *)buffer)) {
-		    return -1;
-		}
-	}
-
-	if(xdma_api_ioctl_thread_start(devname, &version)) {
-		return -1;
-	}
-
-	return 0;
-}
-
-void* rx_thread(void* arg) {
-
-    rx_thread_arg_t* p_arg = (rx_thread_arg_t*)arg;
-    int fd = 0;
-
-    printf(">>> %s(devname: %s, mode: %d, size: %d)\n", 
-                __func__, p_arg->devname, p_arg->mode, p_arg->size);
-
-#if 1
-    if(init_rx_kernel_thread(p_arg->devname)) {
-        printf("FAILURE to initialize kernel thread for %s\n", p_arg->devname);
-		return NULL;
-	}
-
-    return NULL;
-#endif
-
-#ifdef __DEVICE_OPEN_ONCE__
-    if(xdma_api_dev_open(p_arg->devname, 1 /* eop_flush */, &fd)) {
-        printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", p_arg->devname);
-        printf("<<< %s\n", __func__);
-        return NULL;
-    }
-#endif
-
-
-    initialize_queue(&g_queue);
-    initialize_statistics(&rx_stats);
-
-    switch(p_arg->mode) {
-    case RUN_MODE_TSN:
-    case RUN_MODE_NORMAL:
-        rx_in_normal_mode(p_arg->devname, fd, p_arg->size);
     break;
     default:
         printf("%s - Unknown mode(%d)\n", __func__, p_arg->mode);

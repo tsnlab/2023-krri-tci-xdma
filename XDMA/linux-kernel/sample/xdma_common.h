@@ -3,7 +3,7 @@
 
 #define BUFFER_ALIGNMENT  (0x1000)
 #define MAX_PACKET_LENGTH (0x800)
-#define MAX_PACKET_BURST  (1)	/* 16 Iterate over the userspace buffer, taking at most 255 * PAGE_SIZE bytes for each DMA transfer. */
+#define MAX_PACKET_BURST  (1)    /* 16 Iterate over the userspace buffer, taking at most 255 * PAGE_SIZE bytes for each DMA transfer. */
 #define MAX_BUFFER_LENGTH (MAX_PACKET_LENGTH * MAX_PACKET_BURST)
 #define NUMBER_OF_BUFFER  (2048)
 #define NUMBER_OF_POOL_BUFFER (NUMBER_OF_BUFFER + 1)
@@ -40,7 +40,7 @@ typedef struct stats {
     unsigned long long  rxPackets;
     unsigned long long  rxBytes;
     unsigned long long  rxErrors;
-    unsigned long long  rxNoBuffer;	// BD is not available
+    unsigned long long  rxNoBuffer;    // BD is not available
     unsigned long long  rxPps;
     unsigned long long  rxBps;
     unsigned long long  txPackets;

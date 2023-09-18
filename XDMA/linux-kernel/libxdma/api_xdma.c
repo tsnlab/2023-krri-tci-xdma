@@ -211,37 +211,6 @@ close:
 }
 
 /* dma from device */
-int xdma_api_read_to_buffer(char *devname, char *buffer, 
-                            uint64_t size, uint64_t *bytes_rcv) {
-
-    int fd;
-    int bytes_done = 0;
-
-    /*
-     * use O_TRUNC to indicate to the driver to flush the data up based on
-     * EOP (end-of-packet), streaming mode only
-     */
-    fd = open(devname, O_RDWR | O_TRUNC);
-
-    if (fd < 0) {
-        fprintf(stderr, "unable to open device %s, %d.\n", devname, fd);
-        perror("open device");
-        return -EINVAL;
-    }
-
-    bytes_done = (int)read_to_buffer(devname, fd, buffer, size, 0 /*addr*/);
-    close(fd);
-
-    if (bytes_done < 0) {
-        *bytes_rcv = 0;
-        return -1;
-    }
-
-    *bytes_rcv = bytes_done;
-
-    return 0;
-}
-
 int xdma_api_read_to_buffer_with_fd(char *devname, int fd, char *buffer, 
                                     uint64_t size, int *bytes_rcv) {
 
@@ -260,36 +229,6 @@ int xdma_api_read_to_buffer_with_fd(char *devname, int fd, char *buffer,
 }
 
 /* dma to device */
-int xdma_api_write_from_buffer(char *devname, char *buffer, 
-                               uint64_t size, uint64_t *bytes_tr) {
-
-    int fd;
-    size_t bytes_done = 0;
-
-    fd = open(devname, O_RDWR);
-
-    if (fd < 0) {
-        fprintf(stderr, "unable to open device %s, %d.\n", devname, fd);
-        perror("open device");
-        return -EINVAL;
-    }
-
-    /* write buffer to AXI MM address using SGDMA */
-    bytes_done = write_from_buffer(devname, fd, buffer, size, 0 /*addr */);
-    close(fd);
-    if (bytes_done < 0) {
-        return -1;
-    }
-
-    *bytes_tr = bytes_done;
-    if (bytes_done < size) {
-        debug_printf("underflow %ld/%ld.\n", bytes_done, size);
-        return -2;
-    }
-
-    return 0;
-}
-
 int xdma_api_write_from_buffer_with_fd(char *devname, int fd, char *buffer, 
                                        uint64_t size, uint64_t *bytes_tr) {
 

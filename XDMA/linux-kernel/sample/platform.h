@@ -35,7 +35,4 @@
 
 #include "platform_config.h"
 
-void init_platform();
-void cleanup_platform();
-
 #endif

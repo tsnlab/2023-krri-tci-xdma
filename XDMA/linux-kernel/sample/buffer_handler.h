@@ -20,6 +20,7 @@ int buffer_pool_free(BUF_POINTER element);
 BUF_POINTER buffer_pool_alloc();
 int initialize_buffer_allocation();
 
+BUF_POINTER get_reserved_tx_buffer();
 void buffer_release();
 
 #endif     // __BUFFER_HANDLER_H__

@@ -77,6 +77,4 @@ struct xdma_aperture_ioctl {
 #define IOCTL_XDMA_APERTURE_R   _IOW('q', 7, struct xdma_aperture_ioctl *)
 #define IOCTL_XDMA_APERTURE_W   _IOW('q', 8, struct xdma_aperture_ioctl *)
 
-#include "cdev_sgdma_part.h"
-
 #endif /* _XDMA_IOCALLS_POSIX_H_ */

@@ -203,7 +203,7 @@ void* stats_thread(void* arg) {
 
         if (elapsedTime >= 1.0) {
             print_stats();
-			memcpy(&previousTime, &currentTime, sizeof(struct timeval));
+            memcpy(&previousTime, &currentTime, sizeof(struct timeval));
         }
     }
 

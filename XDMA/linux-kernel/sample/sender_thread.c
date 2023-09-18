@@ -36,6 +36,7 @@
 #include "tsn.h"
 
 #include "../libxdma/api_xdma.h"
+#include "buffer_handler.h"
 
 /******************** Constant Definitions **********************************/
 #define HW_ADDR_LEN 6
@@ -53,11 +54,6 @@ char tx_devname[MAX_DEVICE_NAME];
 int tx_fd;
 
 extern int tx_thread_run;
-
-BUF_POINTER get_reserved_tx_buffer();
-
-static int enqueue(struct tsn_tx_buffer* tx);
-static struct tsn_tx_buffer* dequeue();
 
 static struct tsn_tx_buffer* dequeue() {
     timestamp_t now = gptp_get_timestamp(get_sys_count());
@@ -81,13 +77,8 @@ static int transmit_tsn_packet(struct tsn_tx_buffer* packet) {
         return XST_FAILURE;
     }
 
-#ifdef __DEVICE_OPEN_ONCE__
     status = xdma_api_write_from_buffer_with_fd(tx_devname, tx_fd, (char *)packet,
                                        mem_len, &bytes_tr);
-#else
-    status = xdma_api_write_from_buffer(tx_devname, (char *)packet,
-                                       mem_len, &bytes_tr);
-#endif
 
     if(status != XST_SUCCESS) {
         tx_stats.txErrors++;
@@ -112,13 +103,8 @@ static int transmit_tsn_packet_no_free(struct tsn_tx_buffer* packet) {
         return XST_FAILURE;
     }
 
-#ifdef __DEVICE_OPEN_ONCE__
     status = xdma_api_write_from_buffer_with_fd(tx_devname, tx_fd, (char *)packet,
                                        mem_len, &bytes_tr);
-#else
-    status = xdma_api_write_from_buffer(tx_devname, (char *)packet,
-                                       mem_len, &bytes_tr);
-#endif
 
     if(status != XST_SUCCESS) {
         tx_stats.txErrors++;
@@ -366,7 +352,7 @@ static int process_send_packet(struct tsn_rx_buffer* rx) {
         return XST_FAILURE;
     }
     tx_metadata->frame_length = tx_len;
-	transmit_tsn_packet_no_free(tx); 
+    transmit_tsn_packet_no_free(tx); 
     return XST_SUCCESS;
 }
 
@@ -450,8 +436,6 @@ static void periodic_process_ptp()
     enqueue(buffer);
 }
 
-void packet_dump(FILE *fp, BUF_POINTER buffer, int length);
-
 static void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
 
     QueueElement buffer = NULL;
@@ -504,116 +488,6 @@ static void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
     }
 }
 
-#ifdef __COPY_PACKET__
-static int process_copy_packet(struct tsn_rx_buffer* rx, struct tsn_tx_buffer* tx, int *byte_tr) {
-
-    int tx_len;
-    struct tx_metadata* tx_metadata = &tx->metadata;
-    uint8_t* rx_frame = (uint8_t*)&rx->data;
-    uint8_t* tx_frame = (uint8_t*)&tx->data;
-    struct ethernet_header* rx_eth = (struct ethernet_header*)rx_frame;
-    struct ethernet_header* tx_eth = (struct ethernet_header*)tx_frame;
-
-    // make tx metadata
-    tx_metadata->vlan_tag = rx->metadata.vlan_tag;
-    tx_metadata->timestamp_id = 0;
-    tx_metadata->reserved = 0;
-
-    // make ethernet frame
-    memcpy(&(tx_eth->dmac), &(rx_eth->smac), 6);
-    memcpy(&(tx_eth->smac), myMAC, 6);
-    tx_eth->type = rx_eth->type;
-
-    tx_len = ETH_HLEN;
-
-    // do arp, udp echo, etc.
-    switch (rx_eth->type) {
-#ifndef DISABLE_GPTP
-    case ETH_TYPE_PTPv2:
-        ;
-        int len = process_gptp_packet(rx);
-        if (len <= 0) { return XST_FAILURE; }
-        tx_len += len;
-        break;
-#endif
-    case ETH_TYPE_ARP: // arp
-        ;
-        struct arp_header* rx_arp = (struct arp_header*)ETH_PAYLOAD(rx_frame);
-        struct arp_header* tx_arp = (struct arp_header*)ETH_PAYLOAD(tx_frame);
-        if (rx_arp->opcode != ARP_OPCODE_ARP_REQUEST) { return XST_FAILURE; }
-
-        // make arp packet
-        tx_arp->hw_type = rx_arp->hw_type;
-        tx_arp->proto_type = rx_arp->proto_type;
-        tx_arp->hw_size = rx_arp->hw_size;
-        tx_arp->proto_size = rx_arp->proto_size;
-        tx_arp->opcode = ARP_OPCODE_ARP_REPLY;
-        memcpy(tx_arp->target_hw, rx_arp->sender_hw, HW_ADDR_LEN);
-        memcpy(tx_arp->sender_hw, myMAC, HW_ADDR_LEN);
-        uint8_t sender_proto[4];
-        memcpy(sender_proto, rx_arp->sender_proto, IP_ADDR_LEN);
-        memcpy(tx_arp->sender_proto, rx_arp->target_proto, IP_ADDR_LEN);
-        memcpy(tx_arp->target_proto, sender_proto, IP_ADDR_LEN);
-
-        tx_len += ARP_HLEN;
-        break;
-    case ETH_TYPE_IPv4: // ip
-        ;
-        struct ipv4_header* rx_ipv4 = (struct ipv4_header*)ETH_PAYLOAD(rx_frame);
-        struct ipv4_header* tx_ipv4 = (struct ipv4_header*)ETH_PAYLOAD(tx_frame);
-
-        uint32_t src;
-
-        // Fill IPv4 header
-        memcpy(tx_ipv4, rx_ipv4, IPv4_HLEN(rx_ipv4));
-        src = rx_ipv4->dst;
-        tx_ipv4->dst = rx_ipv4->src;
-        tx_ipv4->src = src;
-        tx_len += IPv4_HLEN(rx_ipv4);
-
-        if (rx_ipv4->proto == IP_PROTO_ICMP) {
-            struct icmp_header* rx_icmp = (struct icmp_header*)IPv4_PAYLOAD(rx_ipv4);
-
-            if (rx_icmp->type != ICMP_TYPE_ECHO_REQUEST) { return XST_FAILURE; }
-
-            struct icmp_header* tx_icmp = (struct icmp_header*)IPv4_PAYLOAD(tx_ipv4);
-            unsigned long icmp_len = IPv4_BODY_LEN(rx_ipv4);
-
-            // Fill ICMP header and body
-            memcpy(tx_icmp, rx_icmp, icmp_len);
-            tx_icmp->type = ICMP_TYPE_ECHO_REPLY;
-            icmp_checksum(tx_icmp, icmp_len);
-            tx_len += icmp_len;
-
-        } else if (rx_ipv4->proto == IP_PROTO_UDP){
-            struct udp_header* rx_udp = (struct udp_header*)IPv4_PAYLOAD(rx_ipv4);
-            if (rx_udp->dstport != 7) { return XST_FAILURE; }
-
-            struct udp_header* tx_udp = IPv4_PAYLOAD(tx_ipv4);
-
-            // Fill UDP header
-            memcpy(tx_udp, rx_udp, rx_udp->length);
-            uint16_t srcport;
-            srcport = rx_udp->dstport;
-            tx_udp->dstport = rx_udp->srcport;
-            tx_udp->srcport = srcport;
-            tx_udp->checksum = 0;
-            tx_len += rx_udp->length; // UDP.length contains header length
-        } else {
-            return XST_FAILURE;
-        }
-        break;
-    default:
-        printf_debug("Unknown type: %04x\n", rx_eth->type);
-        return XST_FAILURE;
-    }
-    tx_metadata->frame_length = tx_len;
-	*byte_tr = tx_len + sizeof(struct tx_metadata); 
-
-    return XST_SUCCESS;
-}
-#endif
-
 static void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
 
     QueueElement buffer = NULL;
@@ -626,10 +500,10 @@ static void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
             continue;
         }
 
-		status = process_send_packet((struct tsn_rx_buffer*)buffer);
-		if(status == XST_FAILURE) {
-			tx_stats.txFiltered++;
-		}
+        status = process_send_packet((struct tsn_rx_buffer*)buffer);
+        if(status == XST_FAILURE) {
+            tx_stats.txFiltered++;
+        }
 
         buffer_pool_free((BUF_POINTER)buffer);
     }
@@ -700,13 +574,13 @@ static void sender_in_debug_mode(char* devname, int fd, char *fn, uint64_t size)
     }
 
     for(int i=0; i<=MAX_PACKET_BURST; i++) {
-		fseek( fp, 0, SEEK_SET );
+        fseek( fp, 0, SEEK_SET );
         rc = fread((QueueElement)&buffer[i*MAX_PACKET_LENGTH], sizeof(char), size, fp);
-		if (rc < 0 || rc < size) {
-			free(buffer);
-			fclose(fp);
-			return;
-		}
+        if (rc < 0 || rc < size) {
+            free(buffer);
+            fclose(fp);
+            return;
+        }
     }
 
     fclose(fp);
@@ -720,10 +594,6 @@ static void sender_in_debug_mode(char* devname, int fd, char *fn, uint64_t size)
 
         tx_stats.txPackets += MAX_PACKET_BURST;
         tx_stats.txBytes += bytes_tr;
-
-//        printf("bytes_tr: %ld\n", bytes_tr);
-
-//		if(tx_stats.txPackets == 16) tx_thread_run = 0;
 
         tx_thread_run = 0;
     }
@@ -742,13 +612,11 @@ void* sender_thread(void* arg) {
     memset(tx_devname, 0, MAX_DEVICE_NAME);
     memcpy(tx_devname, p_arg->devname, MAX_DEVICE_NAME);
 
-#ifdef __DEVICE_OPEN_ONCE__
     if(xdma_api_dev_open(p_arg->devname, 0 /* eop_flush */, &tx_fd)) {
         printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", p_arg->devname);
         printf("<<< %s\n", __func__);
         return NULL;
     }
-#endif
 
     initialize_statistics(&tx_stats);
 
@@ -760,47 +628,9 @@ void* sender_thread(void* arg) {
         sender_in_normal_mode(p_arg->devname, tx_fd, p_arg->size);
     break;
     case RUN_MODE_LOOPBACK:
-        sender_in_performance_mode(p_arg->devname, tx_fd, p_arg->fn, p_arg->size);
-    break;
     case RUN_MODE_PERFORMANCE:
         sender_in_performance_mode(p_arg->devname, tx_fd, p_arg->fn, p_arg->size);
     break;
-    case RUN_MODE_DEBUG:
-        sender_in_debug_mode(p_arg->devname, tx_fd, p_arg->fn, p_arg->size);
-    break;
-    default:
-        printf("%s - Unknown mode(%d)\n", __func__, p_arg->mode);
-    break;
-    }
-
-    close(tx_fd);
-    printf("<<< %s()\n", __func__);
-
-    return NULL;
-}
-
-void* tx_thread(void* arg) {
-
-    tx_thread_arg_t* p_arg = (tx_thread_arg_t*)arg;
-
-    printf(">>> %s(devname: %s, fn: %s, mode: %d, size: %d)\n", 
-               __func__, p_arg->devname, p_arg->fn, 
-               p_arg->mode, p_arg->size);
-
-    memset(tx_devname, 0, MAX_DEVICE_NAME);
-    memcpy(tx_devname, p_arg->devname, MAX_DEVICE_NAME);
-
-#ifdef __DEVICE_OPEN_ONCE__
-    if(xdma_api_dev_open(p_arg->devname, 0 /* eop_flush */, &tx_fd)) {
-        printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", p_arg->devname);
-        printf("<<< %s\n", __func__);
-        return NULL;
-    }
-#endif
-
-    initialize_statistics(&tx_stats);
-
-    switch(p_arg->mode) {
     case RUN_MODE_DEBUG:
         sender_in_debug_mode(p_arg->devname, tx_fd, p_arg->fn, p_arg->size);
     break;
