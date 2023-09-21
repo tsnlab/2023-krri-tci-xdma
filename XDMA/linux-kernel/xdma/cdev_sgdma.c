@@ -856,10 +856,10 @@ static int ioctl_do_burst_read_write(struct xdma_engine *engine, unsigned long a
 
 	io.error = 0;
 
-#if 1
+#if 0
 #if 0 // POOKY 20230921
     res = xdma_xfer_submit(xdev, engine->channel, write, 0, &cb.sgt,
-                0,  write ? h2c_timeout * 1000 : 10);
+                0,  write ? h2c_timeout * 1000 : 1000);
 #else
     res = xdma_xfer_submit(xdev, engine->channel, write, 0, &cb.sgt,
                 0, write ? h2c_timeout * 1000 :
@@ -867,8 +867,7 @@ static int ioctl_do_burst_read_write(struct xdma_engine *engine, unsigned long a
 #endif
 #else
     res = xdma_multi_buffer_xfer_submit(xdev, engine->channel, write, 0, &cb.sgt,
-                0, write ? h2c_timeout * 1000 :
-                       c2h_timeout * 1000);
+                0,  write ? h2c_timeout * 1000 : c2h_timeout * 10, &io);
 #endif
 
 	if (res < 0)

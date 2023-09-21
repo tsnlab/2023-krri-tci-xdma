@@ -204,6 +204,7 @@ void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
 
 #ifdef __BURST_READ_WRITE__
 	struct xdma_multi_read_write_ioctl bd;
+//	struct xdma_multi_read_write_ioctl io;
 	int bd_num;
 	int id;
 	struct tsn_rx_buffer* rx;
@@ -238,6 +239,7 @@ void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
 			printf("bd.bd[%2d].buffer: %p, bd.bd[%2d].len: %ld\n", id, bd.bd[id].buffer, id, bd.bd[id].len);
 		}
 #endif
+//		memcpy(&io, &bd, sizeof(struct xdma_multi_read_write_ioctl));
         if(xdma_api_read_to_multi_buffers_with_fd(devname, fd, &bd, 
                                            &bytes_rcv)) {
             multi_buffer_pool_free(&bd);
@@ -254,11 +256,21 @@ void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
 		for(id = 0; id < bd_num; id++) {
 			rx = (struct tsn_rx_buffer*)bd.bd[id].buffer;
 			bytes_rcv = rx->metadata.frame_length;
+#if 0
+			if(bd.bd[id].len != (bytes_rcv + sizeof(struct rx_metadata))) {
+				printf("%s - %s -Length mismatch - bd.bd[%d].len: %ld, cal -len: %ld\n",
+				    __FILE__, __func__, id, bd.bd[id].len, (bytes_rcv + sizeof(struct rx_metadata))); 
+				packet_dump(bd.bd[id].buffer, bd.bd[id].len);
+			}
+#endif
 			if(bytes_rcv) {
 				pkt_cnt++;
 //				packet_dump(bd.bd[id].buffer, 80);
 			    if(bytes_rcv > MAX_BUFFER_LENGTH) {
-				    continue;
+					printf("%s - %s -Length mismatch - bd.bd[%d].len: %ld, cal -len: %ld\n",
+						__FILE__, __func__, id, bd.bd[id].len, (bytes_rcv + sizeof(struct rx_metadata))); 
+					packet_dump(bd.bd[id].buffer, bd.bd[id].len);
+					continue;
 			    }
 			    rx_stats.rxPackets++;
 			    rx_stats.rxBytes = rx_stats.rxBytes + bytes_rcv;

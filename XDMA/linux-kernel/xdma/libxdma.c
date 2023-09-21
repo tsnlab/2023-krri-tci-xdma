@@ -2437,8 +2437,10 @@ static int transfer_abort(struct xdma_engine *engine,
 		return -EINVAL;
 	}
 
+#if 0 // 20230921 POOKY
 	pr_info("abort transfer 0x%p, desc %d, engine desc queued %d.\n",
 		transfer, transfer->desc_num, engine->desc_dequeued);
+#endif
 
 	head = list_entry(engine->transfer_list.next, struct xdma_transfer,
 			  entry);
@@ -2969,6 +2971,7 @@ static int transfer_build(struct xdma_engine *engine,
 	return 0;
 }
 
+#if 0
 static int multi_transfer_build(struct xdma_engine *engine,
 			struct xdma_request_cb *req, struct xdma_transfer *xfer,
 			unsigned int desc_max)
@@ -3008,6 +3011,7 @@ static int multi_transfer_build(struct xdma_engine *engine,
 	req->sw_desc_idx += desc_max;
 	return 0;
 }
+#endif
 
 
 static int transfer_init(struct xdma_engine *engine,
@@ -3060,11 +3064,7 @@ static int transfer_init(struct xdma_engine *engine,
 	/* stop engine, EOP for AXI ST, req IRQ on last descriptor */
 	control = XDMA_DESC_STOPPED;
 	control |= XDMA_DESC_EOP;
-#if 1 // POOKY 20230921
 	control |= XDMA_DESC_COMPLETED;
-#else
-	control |= XDMA_DESC_COMPLETED;
-#endif
 	xdma_desc_control_set(xfer->desc_virt + last, control);
 
 #if 1 // POOKY 20230921
@@ -3096,6 +3096,7 @@ static int transfer_init(struct xdma_engine *engine,
 	return 0;
 }
 
+#if 0
 static int multi_transfer_init(struct xdma_engine *engine,
 			struct xdma_request_cb *req, struct xdma_transfer *xfer)
 {
@@ -3173,6 +3174,7 @@ static int multi_transfer_init(struct xdma_engine *engine,
 	spin_unlock_irqrestore(&engine->lock, flags);
 	return 0;
 }
+#endif
 
 #ifdef __LIBXDMA_DEBUG__
 static void sgt_dump(struct sg_table *sgt)
@@ -3818,7 +3820,7 @@ unmap_sgl:
 }
 
 ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
-			 struct sg_table *sgt, bool dma_mapped, int timeout_ms)
+			 struct sg_table *sgt, bool dma_mapped, int timeout_ms, struct xdma_multi_read_write_ioctl *io)
 {
 	struct xdma_dev *xdev = (struct xdma_dev *)dev_hndl;
 	struct xdma_engine *engine;
@@ -3876,14 +3878,12 @@ ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u
 	}
 
 	if (!dma_mapped) {
-		for (i = 0; i < sgt->orig_nents; i++, sg = sg_next(sg)) {
-			nents = pci_map_sg(xdev->pdev, sg, 1, dir);
-			if (!nents) {
-				pr_info("map sgl failed, sgt 0x%p.\n", sgt);
-				return -EIO;
-			}
+		nents = pci_map_sg(xdev->pdev, sg, sgt->orig_nents, dir);
+		if (!nents) {
+			pr_info("map sgl failed, sgt 0x%p.\n", sgt);
+			return -EIO;
 		}
-		sgt->nents = sgt->orig_nents;
+		sgt->nents = nents;
 	} else {
 		if (!sgt->nents) {
 			pr_err("sg table has invalid number of entries 0x%p.\n",
@@ -3910,7 +3910,7 @@ ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u
 		struct xdma_transfer *xfer;
 
 		/* build transfer */
-		rv = multi_transfer_init(engine, req, &req->tfer[0]);
+		rv = transfer_init(engine, req, &req->tfer[0]);
 		if (rv < 0) {
 			mutex_unlock(&engine->desc_lock);
 			goto unmap_sgl;
@@ -3968,8 +3968,10 @@ ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u
 			    engine->dir == DMA_FROM_DEVICE) {
 				struct xdma_result *result = xfer->res_virt;
 
-				for (i = 0; i < xfer->desc_cmpl; i++)
+				for (i = 0; i < xfer->desc_cmpl; i++) {
 					done += result[i].length;
+					io->bd[i].len = result[i].length;
+				}
 
 				/* finish the whole request */
 				if (engine->eop_flush)
@@ -3991,9 +3993,15 @@ ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u
 			break;
 		default:
 			/* transfer can still be in-flight */
+#if 1 // 20230921 POOKY
 			pr_info("xfer 0x%p,%u, s 0x%x timed out, ep 0x%llx.\n",
 				xfer, xfer->len, xfer->state, req->ep_addr);
+#endif
+#if 1
+			rv = engine_status_read(engine, 0, 0);
+#else
 			rv = engine_status_read(engine, 0, 1);
+#endif
 			if (rv < 0) {
 				pr_err("Failed to read engine status\n");
 			} else if (rv == 0) {
@@ -4013,7 +4021,21 @@ ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u
 			transfer_dump(xfer);
 			sgt_dump(sgt);
 #endif
+#if 1 // 20230921 POOKY
 			rv = -ERESTARTSYS;
+			if (engine->streaming &&
+			    engine->dir == DMA_FROM_DEVICE) {
+                if(!xfer->desc_cmpl) {
+				    struct xdma_result *result = xfer->res_virt;
+			        rv = 0;
+					for (i = 0; i < xfer->desc_cmpl; i++) {
+						done += result[i].length;
+						io->bd[i].len = result[i].length;
+					}
+				}
+			}
+			//rv = -ERESTARTSYS;
+#endif
 			break;
 		}
 

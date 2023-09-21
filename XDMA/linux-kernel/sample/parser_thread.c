@@ -132,9 +132,39 @@ int pbuffer_multi_dequeue(CircularParsedQueue_t *q, struct xdma_multi_read_write
 #include "packet.h"
 
 static const char myMAC[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55 };
+
+
+extern char tx_devname[MAX_DEVICE_NAME];
+extern int tx_fd;
+
+static int transmit_tsn_packet_no_free(struct tsn_tx_buffer* packet) {
+
+    uint64_t bytes_tr;
+    uint64_t mem_len = sizeof(packet->metadata) + packet->metadata.frame_length;
+    int status = 0;
+
+    if (mem_len >= MAX_BUFFER_LENGTH) {
+        printf("%s - %p length(%ld) is out of range(%d)\r\n", __func__, packet, mem_len, MAX_BUFFER_LENGTH);
+        return XST_FAILURE;
+    }
+
+    status = xdma_api_write_from_buffer_with_fd(tx_devname, tx_fd, (char *)packet,
+                                       mem_len, &bytes_tr);
+
+    if(status != XST_SUCCESS) {
+        tx_stats.txErrors++;
+    } else {
+        tx_stats.txPackets++;
+        tx_stats.txBytes += mem_len;
+    }
+
+    return status;
+}
+
 static int parse_packet_with_bd(struct tsn_rx_buffer* rx, struct xdma_buffer_descriptor *bd) {
 
 //    printf("%s - %d\n", __FILE__, __LINE__);
+    int transmit_flag = 0;
     uint8_t *buffer =(uint8_t *)rx;
     int tx_len;
     // Reuse RX buffer as TX
@@ -198,6 +228,7 @@ static int parse_packet_with_bd(struct tsn_rx_buffer* rx, struct xdma_buffer_des
         memcpy(tx_arp->target_proto, sender_proto, IP_ADDR_LEN);
 
         tx_len += ARP_HLEN;
+        transmit_flag = 1;
         break;
     case ETH_TYPE_IPv4: // ip
         ;
@@ -250,9 +281,14 @@ static int parse_packet_with_bd(struct tsn_rx_buffer* rx, struct xdma_buffer_des
         return XST_FAILURE;
     }
     tx_metadata->frame_length = tx_len;
-    bd->buffer = (char *)tx;
-    bd->len = (unsigned long)(sizeof(struct tx_metadata) + tx_len);
-    return XST_SUCCESS;
+	if(transmit_flag) {
+		transmit_tsn_packet_no_free(tx);
+        return XST_FAILURE;
+	} else {
+		bd->buffer = (char *)tx;
+		bd->len = (unsigned long)(sizeof(struct tx_metadata) + tx_len);
+		return XST_SUCCESS;
+	}
 }
 
 void parser_in_normal_mode() {
