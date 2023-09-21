@@ -18,6 +18,7 @@
 #include <ctype.h>
 #include <fcntl.h>
 #include <sys/time.h>
+#include <sched.h>
 
 
 #include "error_define.h"
@@ -36,7 +37,7 @@
 #include "tsn.h"
 
 #include "../libxdma/api_xdma.h"
-#include "buffer_handler.h"
+#include "parser_thread.h"
 
 /******************** Constant Definitions **********************************/
 #define HW_ADDR_LEN 6
@@ -55,6 +56,26 @@ int tx_fd;
 
 extern int tx_thread_run;
 
+void packet_dump(BUF_POINTER buffer, int length);
+BUF_POINTER get_reserved_tx_buffer();
+
+static int enqueue(struct tsn_tx_buffer* tx);
+static struct tsn_tx_buffer* dequeue();
+
+static int enqueue(struct tsn_tx_buffer* tx) {
+#ifndef DISABLE_TSN_QUEUE
+    uint16_t prio = tx->metadata.vlan_prio;
+    int res = tsn_queue_enqueue(tx, prio);
+    if (res == 0) {
+        buffer_pool_free((BUF_POINTER)tx);
+    }
+    return res;
+#else
+    transmit_tsn_packet(tx);
+    return 1;
+#endif
+}
+
 static struct tsn_tx_buffer* dequeue() {
     timestamp_t now = gptp_get_timestamp(get_sys_count());
     int queue_index = tsn_select_queue(now);
@@ -65,7 +86,7 @@ static struct tsn_tx_buffer* dequeue() {
     return tsn_queue_dequeue(queue_index);
 }
 
-static int transmit_tsn_packet(struct tsn_tx_buffer* packet) {
+int transmit_tsn_packet(struct tsn_tx_buffer* packet) {
 
     uint64_t mem_len = sizeof(packet->metadata) + packet->metadata.frame_length;
     uint64_t bytes_tr;
@@ -84,7 +105,7 @@ static int transmit_tsn_packet(struct tsn_tx_buffer* packet) {
         tx_stats.txErrors++;
     } else {
         tx_stats.txPackets++;
-        tx_stats.txBytes += bytes_tr;
+        tx_stats.txBytes += mem_len;
     }
 
     buffer_pool_free((BUF_POINTER)packet);
@@ -92,10 +113,11 @@ static int transmit_tsn_packet(struct tsn_tx_buffer* packet) {
     return status;
 }
 
+#ifndef __BURST_READ_WRITE__
 static int transmit_tsn_packet_no_free(struct tsn_tx_buffer* packet) {
 
-    uint64_t mem_len = sizeof(packet->metadata) + packet->metadata.frame_length;
     uint64_t bytes_tr;
+    uint64_t mem_len = sizeof(packet->metadata) + packet->metadata.frame_length;
     int status = 0;
 
     if (mem_len >= MAX_BUFFER_LENGTH) {
@@ -110,29 +132,12 @@ static int transmit_tsn_packet_no_free(struct tsn_tx_buffer* packet) {
         tx_stats.txErrors++;
     } else {
         tx_stats.txPackets++;
-        tx_stats.txBytes += bytes_tr;
+        tx_stats.txBytes += mem_len;
     }
 
     return status;
 }
-
-int extern_transmit_tsn_packet(struct tsn_tx_buffer* packet) {
-    return transmit_tsn_packet(packet);
-}
-
-static int enqueue(struct tsn_tx_buffer* tx) {
-#ifndef DISABLE_TSN_QUEUE
-    uint16_t prio = tx->metadata.vlan_prio;
-    int res = tsn_queue_enqueue(tx, prio);
-    if (res == 0) {
-        buffer_pool_free((BUF_POINTER)tx);
-    }
-    return res;
-#else
-    transmit_tsn_packet(tx);
-    return 1;
 #endif
-}
 
 static int process_packet(struct tsn_rx_buffer* rx) {
 
@@ -246,6 +251,7 @@ static int process_packet(struct tsn_rx_buffer* rx) {
     return XST_FAILURE;
 }
 
+#ifndef __BURST_READ_WRITE__
 static int process_send_packet(struct tsn_rx_buffer* rx) {
 
     uint8_t *buffer =(uint8_t *)rx;
@@ -352,9 +358,130 @@ static int process_send_packet(struct tsn_rx_buffer* rx) {
         return XST_FAILURE;
     }
     tx_metadata->frame_length = tx_len;
-    transmit_tsn_packet_no_free(tx); 
+    transmit_tsn_packet_no_free(tx);
     return XST_SUCCESS;
 }
+#endif
+
+//#ifdef __BURST_READ_WRITE__
+#if 0
+static int process_packet_with_bd(struct tsn_rx_buffer* rx, struct xdma_buffer_descriptor *bd) {
+
+//    printf("%s - %d\n", __FILE__, __LINE__);
+    uint8_t *buffer =(uint8_t *)rx;
+    int tx_len;
+    // Reuse RX buffer as TX
+    struct tsn_tx_buffer* tx = (struct tsn_tx_buffer*)(buffer + sizeof(struct rx_metadata) - sizeof(struct tx_metadata));
+    struct tx_metadata* tx_metadata = &tx->metadata;
+    uint8_t* rx_frame = (uint8_t*)&rx->data;
+    uint8_t* tx_frame = (uint8_t*)&tx->data;
+    struct ethernet_header* rx_eth = (struct ethernet_header*)rx_frame;
+    struct ethernet_header* tx_eth = (struct ethernet_header*)tx_frame;
+
+    // make tx metadata
+    // tx_metadata->vlan_tag = rx->metadata.vlan_tag;
+    tx_metadata->timestamp_id = 0;
+    tx_metadata->reserved = 0;
+
+    // make ethernet frame
+    memcpy(&(tx_eth->dmac), &(rx_eth->smac), 6);
+    memcpy(&(tx_eth->smac), myMAC, 6);
+    // tx_eth->type = rx_eth->type;
+
+    tx_len = ETH_HLEN;
+
+//    printf("%s - %d\n", __FILE__, __LINE__);
+    bd->buffer = NULL;
+    bd->len =  0;
+
+//    printf("%s - %d\n", __FILE__, __LINE__);
+    // do arp, udp echo, etc.
+    switch (rx_eth->type) {
+#ifndef DISABLE_GPTP
+    case ETH_TYPE_PTPv2:
+        ;
+        int len = process_gptp_packet(rx);
+        if (len <= 0) { return XST_FAILURE; }
+        tx_len += len;
+        break;
+#endif
+    case ETH_TYPE_ARP: // arp
+        ;
+        struct arp_header* rx_arp = (struct arp_header*)ETH_PAYLOAD(rx_frame);
+        struct arp_header* tx_arp = (struct arp_header*)ETH_PAYLOAD(tx_frame);
+        if (rx_arp->opcode != ARP_OPCODE_ARP_REQUEST) { return XST_FAILURE; }
+
+        // make arp packet
+        // tx_arp->hw_type = rx_arp->hw_type;
+        // tx_arp->proto_type = rx_arp->proto_type;
+        // tx_arp->hw_size = rx_arp->hw_size;
+        // tx_arp->proto_size = rx_arp->proto_size;
+        tx_arp->opcode = ARP_OPCODE_ARP_REPLY;
+        memcpy(tx_arp->target_hw, rx_arp->sender_hw, HW_ADDR_LEN);
+        memcpy(tx_arp->sender_hw, myMAC, HW_ADDR_LEN);
+        uint8_t sender_proto[4];
+        memcpy(sender_proto, rx_arp->sender_proto, IP_ADDR_LEN);
+        memcpy(tx_arp->sender_proto, rx_arp->target_proto, IP_ADDR_LEN);
+        memcpy(tx_arp->target_proto, sender_proto, IP_ADDR_LEN);
+
+        tx_len += ARP_HLEN;
+        break;
+    case ETH_TYPE_IPv4: // ip
+        ;
+        struct ipv4_header* rx_ipv4 = (struct ipv4_header*)ETH_PAYLOAD(rx_frame);
+        struct ipv4_header* tx_ipv4 = (struct ipv4_header*)ETH_PAYLOAD(tx_frame);
+
+        uint32_t src;
+
+        // Fill IPv4 header
+        // memcpy(tx_ipv4, rx_ipv4, IPv4_HLEN(rx_ipv4));
+        src = rx_ipv4->dst;
+        tx_ipv4->dst = rx_ipv4->src;
+        tx_ipv4->src = src;
+        tx_len += IPv4_HLEN(rx_ipv4);
+
+        if (rx_ipv4->proto == IP_PROTO_ICMP) {
+            struct icmp_header* rx_icmp = (struct icmp_header*)IPv4_PAYLOAD(rx_ipv4);
+
+            if (rx_icmp->type != ICMP_TYPE_ECHO_REQUEST) { return XST_FAILURE; }
+
+            struct icmp_header* tx_icmp = (struct icmp_header*)IPv4_PAYLOAD(tx_ipv4);
+            unsigned long icmp_len = IPv4_BODY_LEN(rx_ipv4);
+
+            // Fill ICMP header and body
+            // memcpy(tx_icmp, rx_icmp, icmp_len);
+            tx_icmp->type = ICMP_TYPE_ECHO_REPLY;
+            icmp_checksum(tx_icmp, icmp_len);
+            tx_len += icmp_len;
+
+        } else if (rx_ipv4->proto == IP_PROTO_UDP){
+            struct udp_header* rx_udp = (struct udp_header*)IPv4_PAYLOAD(rx_ipv4);
+            if (rx_udp->dstport != 7) { return XST_FAILURE; }
+
+            struct udp_header* tx_udp = IPv4_PAYLOAD(tx_ipv4);
+
+            // Fill UDP header
+            // memcpy(tx_udp, rx_udp, rx_udp->length);
+            uint16_t srcport;
+            srcport = rx_udp->dstport;
+            tx_udp->dstport = rx_udp->srcport;
+            tx_udp->srcport = srcport;
+            tx_udp->checksum = 0;
+            tx_len += rx_udp->length; // UDP.length contains header length
+        } else {
+            return XST_FAILURE;
+        }
+        break;
+    default:
+        printf_debug("Unknown type: %04x\n", rx_eth->type);
+        return XST_FAILURE;
+    }
+    tx_metadata->frame_length = tx_len;
+    bd->buffer = (char *)tx;
+    bd->len = (unsigned long)(sizeof(struct tx_metadata) + tx_len);
+    return XST_SUCCESS;
+}
+#endif
 
 static void periodic_process_ptp()
 {
@@ -436,7 +563,7 @@ static void periodic_process_ptp()
     enqueue(buffer);
 }
 
-static void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
+void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
 
     QueueElement buffer = NULL;
     double elapsedTime;
@@ -444,7 +571,6 @@ static void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
     struct timeval currentTime;
     int received_packet_count;
     int index;
-    int status;
 
     gettimeofday(&previousTime, NULL);
     while (tx_thread_run) {
@@ -452,27 +578,20 @@ static void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
         elapsedTime = (currentTime.tv_sec - previousTime.tv_sec) + (currentTime.tv_usec - previousTime.tv_usec) / 1000000.0;
         if (elapsedTime >= 1.0) {
             periodic_process_ptp();
-            memcpy(&previousTime, &currentTime, sizeof(struct timeval));
+            gettimeofday(&previousTime, NULL);
         }
 
         // Process RX
         received_packet_count = getQueueCount();
 
         if (received_packet_count > 0) {
-            if(received_packet_count > 16) {
-                received_packet_count = 16;
-            }
             for(index=0; index<received_packet_count; index++) {
                 buffer = NULL;
                 buffer = xbuffer_dequeue();
                 if(buffer == NULL) {
                     continue;
                 }
-                status = process_packet((struct tsn_rx_buffer*)buffer);
-                if(status == XST_FAILURE) {
-                    tx_stats.txFiltered++;
-                    buffer_pool_free((BUF_POINTER)buffer);
-                }
+                process_packet((struct tsn_rx_buffer*)buffer);
             }
         }
 #ifndef DISABLE_TSN_QUEUE
@@ -488,14 +607,80 @@ static void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
     }
 }
 
-static void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
+extern CircularParsedQueue_t g_parsed_queue;
 
+void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
+
+#ifdef __BURST_READ_WRITE__
+    struct xdma_multi_read_write_ioctl bd;
+    int bytes_tr;
+    int max_bd_num = 0;
+    int bd_num;
+    int id;
+    unsigned long curr_done;
+    unsigned long max_done = 0;
+#else
     QueueElement buffer = NULL;
     int status;
+#endif
 
     while (tx_thread_run) {
+#ifdef __BURST_READ_WRITE__
+        bd_num = 0;
+        curr_done = 0;
+        if((bd_num = pbuffer_multi_dequeue(&g_parsed_queue, &bd)) ==0) {
+            continue;
+        }
+        for(id=0; id<bd_num; id++) {
+            curr_done += bd.bd[bd_num].len;
+//			printf("bd.bd[%2d].buffer: %p, bd.bd[%2d].len: %ld\n", id, bd.bd[id].buffer, id, bd.bd[id].len);
+        }
+//		printf("\n");
+
+        for(id = bd_num; id < MAX_BD_NUMBER; id++) {
+            bd.bd[id].buffer = NULL;
+            bd.bd[id].len = 0;
+        }
+
+        if(xdma_api_write_to_multi_buffers_with_fd(devname, fd, &bd,
+                                           &bytes_tr)) {
+            tx_stats.txErrors+=bd_num;
+            multi_buffer_pool_free(&bd);
+            continue;
+        }
+		if(bd_num > max_bd_num) {
+            printf("%s max_pkt_cnt from %d to %d\n", __func__, max_bd_num, bd_num);
+			max_bd_num = bd_num;
+		}
+		if(curr_done > max_done) {
+            printf("%s max_done from %ld to %ld\n", __func__, max_done, curr_done);
+			max_done = curr_done;
+		}
+
+//		sleep(1);
+
+//        done_cnt = bd.done;
+//        if(done_cnt != curr_done) {
+//            printf("%s done count mismatch done_cnt %ld curr_done %ld\n", __func__, done_cnt, curr_done);
+//        }
+//        if(done_cnt > max_done) {
+//            printf("%s max_done from %ld to %ld\n", __func__, max_done, done_cnt);
+//            max_done = done_cnt;
+//        }
+
+        for(id = 0; id < bd_num; id++) {
+            if(bd.bd[id].len) {
+                tx_stats.txPackets++;
+                tx_stats.txBytes += bd.bd[id].len;
+            } else {
+                tx_stats.txErrors++;
+            }
+        }
+        multi_buffer_pool_free(&bd);
+#else
         buffer = NULL;
         buffer = xbuffer_dequeue();
+
         if(buffer == NULL) {
             continue;
         }
@@ -506,21 +691,64 @@ static void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
         }
 
         buffer_pool_free((BUF_POINTER)buffer);
+#endif
     }
 }
 
-static void sender_in_performance_mode(char* devname, int fd, char *fn, uint64_t size) {
+void sender_in_loopback_mode(char* devname, int fd, char *fn, uint64_t size) {
 
     QueueElement buffer = NULL;
     uint64_t bytes_tr;
     int infile_fd = -1;
     ssize_t rc;
-    FILE *fp = NULL;
 
-    printf(">>> %s\n", __func__);
+    infile_fd = open(fn, O_RDONLY);
+    if (infile_fd < 0) {
+        printf("Unable to open input file %s, %d.\n", fn, infile_fd);
+        return;
+    }
 
-    fp = fopen(fn, "rb");
-    if(fp == NULL) {
+    while (tx_thread_run) {
+        buffer = NULL;
+        buffer = xbuffer_dequeue();
+
+        if(buffer == NULL) {
+            continue;
+        }
+
+        lseek(infile_fd, 0, SEEK_SET);
+        rc = read_to_buffer(fn, infile_fd, buffer, size, 0);
+        if (rc < 0 || rc < size) {
+            printf("%s - Error, read_to_buffer: size - %ld, rc - %ld.\n", __func__, size, rc);
+            close(infile_fd);
+            return;
+        }
+
+        if(xdma_api_write_from_buffer_with_fd(devname, fd, buffer,
+                                       size, &bytes_tr)) {
+            printf("%s - Error, xdma_api_write_from_buffer_with_fd.\n", __func__);
+            continue;
+        }
+
+        tx_stats.txPackets++;
+        tx_stats.txBytes += bytes_tr;
+
+        buffer_pool_free((BUF_POINTER)buffer);
+    }
+    close(infile_fd);
+}
+
+void sender_in_performance_mode(char* devname, int fd, char *fn, uint64_t size) {
+
+    QueueElement buffer = NULL;
+    uint64_t bytes_tr;
+    int infile_fd = -1;
+    ssize_t rc;
+    struct timeval previousTime, currentTime;
+    double elapsedTime;
+
+    infile_fd = open(fn, O_RDONLY);
+    if (infile_fd < 0) {
         printf("Unable to open input file %s, %d.\n", fn, infile_fd);
         return;
     }
@@ -531,82 +759,41 @@ static void sender_in_performance_mode(char* devname, int fd, char *fn, uint64_t
         return;
     }
 
-    rc = fread(buffer, sizeof(char), size, fp);
-    fclose(fp);
+    rc = read_to_buffer(fn, infile_fd, buffer, size, 0);
     if (rc < 0 || rc < size) {
+        close(infile_fd);
         free(buffer);
         return;
     }
 
+    gettimeofday(&previousTime, NULL);
     while (tx_thread_run) {
-        if(xdma_api_write_from_buffer_with_fd(devname, fd, buffer,
-                                       size, &bytes_tr)) {
-            tx_stats.txErrors++;
-            continue;
-        }
+        gettimeofday(&currentTime, NULL);
+        elapsedTime = (currentTime.tv_sec - previousTime.tv_sec) + (currentTime.tv_usec - previousTime.tv_usec) / 1000000.0;
+        if (elapsedTime >= 0.00001) {
+            if(xdma_api_write_from_buffer_with_fd(devname, fd, buffer,
+                                           size, &bytes_tr)) {
+                continue;
+            }
 
-        tx_stats.txPackets++;
-        tx_stats.txBytes += bytes_tr;
-    }
-
-    free(buffer);
-}
-
-static void sender_in_debug_mode(char* devname, int fd, char *fn, uint64_t size) {
-
-    QueueElement buffer = NULL;
-    uint64_t bytes_tr;
-    int infile_fd = -1;
-    ssize_t rc;
-    FILE *fp = NULL;
-
-    printf(">>> %s\n", __func__);
-
-    fp = fopen(fn, "rb");
-    if(fp == NULL) {
-        printf("Unable to open input file %s, %d.\n", fn, infile_fd);
-        return;
-    }
-
-    if(posix_memalign((void **)&buffer, BUFFER_ALIGNMENT /*alignment */, MAX_BUFFER_LENGTH + BUFFER_ALIGNMENT)) {
-        fprintf(stderr, "OOM %u.\n", MAX_BUFFER_LENGTH + BUFFER_ALIGNMENT);
-        return;
-    }
-
-    for(int i=0; i<=MAX_PACKET_BURST; i++) {
-        fseek( fp, 0, SEEK_SET );
-        rc = fread((QueueElement)&buffer[i*MAX_PACKET_LENGTH], sizeof(char), size, fp);
-        if (rc < 0 || rc < size) {
-            free(buffer);
-            fclose(fp);
-            return;
+            tx_stats.txPackets++;
+            tx_stats.txBytes += bytes_tr;
+            gettimeofday(&previousTime, NULL);
         }
     }
 
-    fclose(fp);
-
-    while (tx_thread_run) {
-        if(xdma_api_write_from_buffer_with_fd(devname, fd, buffer,
-                                       MAX_BUFFER_LENGTH, &bytes_tr)) {
-            tx_stats.txErrors++;
-            continue;
-        }
-
-        tx_stats.txPackets += MAX_PACKET_BURST;
-        tx_stats.txBytes += bytes_tr;
-
-        tx_thread_run = 0;
-    }
-
+    close(infile_fd);
     free(buffer);
 }
 
 void* sender_thread(void* arg) {
 
+    int cpu;
     tx_thread_arg_t* p_arg = (tx_thread_arg_t*)arg;
 
-    printf(">>> %s(devname: %s, fn: %s, mode: %d, size: %d)\n", 
-               __func__, p_arg->devname, p_arg->fn, 
+    cpu = sched_getcpu();
+    printf(">>> %s(cpu: %d, devname: %s, fn: %s, mode: %d, size: %d)\n", 
+               __func__, cpu, p_arg->devname, p_arg->fn, 
                p_arg->mode, p_arg->size);
 
     memset(tx_devname, 0, MAX_DEVICE_NAME);
@@ -628,11 +815,10 @@ void* sender_thread(void* arg) {
         sender_in_normal_mode(p_arg->devname, tx_fd, p_arg->size);
     break;
     case RUN_MODE_LOOPBACK:
-    case RUN_MODE_PERFORMANCE:
         sender_in_performance_mode(p_arg->devname, tx_fd, p_arg->fn, p_arg->size);
     break;
-    case RUN_MODE_DEBUG:
-        sender_in_debug_mode(p_arg->devname, tx_fd, p_arg->fn, p_arg->size);
+    case RUN_MODE_PERFORMANCE:
+        sender_in_performance_mode(p_arg->devname, tx_fd, p_arg->fn, p_arg->size);
     break;
     default:
         printf("%s - Unknown mode(%d)\n", __func__, p_arg->mode);

@@ -67,7 +67,9 @@ struct xdma_aperture_ioctl {
 	unsigned long done;
 };
 
+
 /* IOCTL codes */
+
 #define IOCTL_XDMA_PERF_START   _IOW('q', 1, struct xdma_performance_ioctl *)
 #define IOCTL_XDMA_PERF_STOP    _IOW('q', 2, struct xdma_performance_ioctl *)
 #define IOCTL_XDMA_PERF_GET     _IOR('q', 3, struct xdma_performance_ioctl *)
@@ -76,5 +78,7 @@ struct xdma_aperture_ioctl {
 #define IOCTL_XDMA_ALIGN_GET    _IOR('q', 6, int)
 #define IOCTL_XDMA_APERTURE_R   _IOW('q', 7, struct xdma_aperture_ioctl *)
 #define IOCTL_XDMA_APERTURE_W   _IOW('q', 8, struct xdma_aperture_ioctl *)
+
+#include "cdev_sgdma_part.h"
 
 #endif /* _XDMA_IOCALLS_POSIX_H_ */

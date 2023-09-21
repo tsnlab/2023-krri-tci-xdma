@@ -15,14 +15,13 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <time.h>
+#include <sched.h>
 
 #include "xdma_common.h"
 #include "platform_config.h"
 #include "buffer_handler.h"
 
 #include "../libxdma/api_xdma.h"
-#include "../libxdma/ioctl_xdma.h"
 
 static CircularQueue_t g_queue;
 static CircularQueue_t* queue = NULL;
@@ -40,11 +39,11 @@ void initialize_queue(CircularQueue_t* p_queue) {
     pthread_mutex_init(&p_queue->mutex, NULL);
 }
 
-static int isQueueEmpty() {
+int isQueueEmpty() {
     return (queue->count == 0);
 }
 
-static int isQueueFull() {
+int isQueueFull() {
     return (queue->count == NUMBER_OF_QUEUE);
 }
 
@@ -52,10 +51,10 @@ int getQueueCount() {
     return queue->count;
 }
 
-static void xbuffer_enqueue(QueueElement element) {
+void xbuffer_enqueue(QueueElement element) {
     pthread_mutex_lock(&queue->mutex);
 
-    if (isQueueFull()) {
+    if (isQueueFull(queue)) {
         debug_printf("Queue is full. Cannot xbuffer_enqueue.\n");
         pthread_mutex_unlock(&queue->mutex);
         return;
@@ -68,10 +67,10 @@ static void xbuffer_enqueue(QueueElement element) {
     pthread_mutex_unlock(&queue->mutex);
 }
 
-static QueueElement xbuffer_dequeue() {
+QueueElement xbuffer_dequeue() {
     pthread_mutex_lock(&queue->mutex);
 
-    if (isQueueEmpty()) {
+    if (isQueueEmpty(queue)) {
         debug_printf("Queue is empty. Cannot xbuffer_dequeue.\n");
         pthread_mutex_unlock(&queue->mutex);
         return EMPTY_ELEMENT;
@@ -86,44 +85,105 @@ static QueueElement xbuffer_dequeue() {
     return dequeuedElement;
 }
 
+void xbuffer_multi_enqueue(struct xdma_multi_read_write_ioctl *bd) {
+    pthread_mutex_lock(&queue->mutex);
+	int cnt;
+    QueueElement element;
+
+    for(cnt=0; cnt<bd->bd_num; cnt++) {
+		if (isQueueFull(queue)) {
+			debug_printf("Queue is full. Cannot xbuffer_enqueue.\n");
+			pthread_mutex_unlock(&queue->mutex);
+			return;
+		}
+
+        element = (QueueElement)bd->bd[cnt].buffer;
+		queue->rear = (queue->rear + 1) % NUMBER_OF_QUEUE;
+		queue->elements[queue->rear] = element;
+		queue->count++;
+	}
+
+    pthread_mutex_unlock(&queue->mutex);
+}
+
+int xbuffer_multi_dequeue(struct xdma_multi_read_write_ioctl *bd) {
+    pthread_mutex_lock(&queue->mutex);
+	int cnt;
+
+    if (isQueueEmpty()) {
+		bd->bd_num = 0;
+        debug_printf("Queue is empty. Cannot xbuffer_dequeue.\n");
+        pthread_mutex_unlock(&queue->mutex);
+        return -1;
+    }
+
+    for(cnt=0; (cnt < MAX_BD_NUMBER) && (queue->count > 0); cnt++) {
+        bd->bd[cnt].buffer = queue->elements[queue->front];
+		queue->front = (queue->front + 1) % NUMBER_OF_QUEUE;
+		queue->count--;
+    }
+
+    bd->bd_num = cnt;
+
+    pthread_mutex_unlock(&queue->mutex);
+
+    return cnt;
+}
+
 void initialize_statistics(stats_t* p_stats) {
 
+#if 1
     memset(p_stats, 0, sizeof(stats_t));
+#else
+    p_stats->readPackets = 0;
+    p_stats->writePackets = 0;
+    p_stats->rxPackets = 0;
+    p_stats->rxBytes = 0;
+    p_stats->rxErrors = 0;
+    p_stats->rxDrops = 0;
+    p_stats->rxPps = 0;
+    p_stats->rxBps = 0;
+    p_stats->txPackets = 0;
+    p_stats->txFiltered = 0;
+    p_stats->txBytes = 0;
+    p_stats->txPps = 0;
+    p_stats->txBps = 0;
+#endif
 }
 
 #define BUFFER_SIZE 16
 
-void print_hex_ascii(FILE *fp, int addr, const unsigned char *buffer, size_t length) {
+void print_hex_ascii(int addr, const unsigned char *buffer, size_t length) {
 
     size_t i, j;
 
-    fprintf(fp, "%7d: ", addr);
+    printf("%7d: ", addr);
     for (i = 0; i < length; i++) {
-        fprintf(fp, "%02X ", buffer[i]);
+        printf("%02X ", buffer[i]);
         if (i == 7)
-            fprintf(fp, " ");
+            printf(" ");
     }
     if (length < BUFFER_SIZE) {
         for (j = 0; j < (BUFFER_SIZE - length); j++) {
-            fprintf(fp, "   ");
+            printf("   ");
             if (j == 7)
-                fprintf(fp, " ");
+                printf(" ");
         }
     }
-    fprintf(fp, " ");
+    printf(" ");
     for (i = 0; i < length; i++) {
         if (buffer[i] >= 32 && buffer[i] <= 126) {
-            fprintf(fp, "%c", buffer[i]);
+            printf("%c", buffer[i]);
         } else {
-            fprintf(fp, ".");
+            printf(".");
         }
         if (i == 7)
-            fprintf(fp, " ");
+            printf(" ");
     }
-    fprintf(fp, "\n");
+    printf("\n");
 }
 
-void packet_dump(FILE *fp, BUF_POINTER buffer, int length) {
+void packet_dump(BUF_POINTER buffer, int length) {
 
     int total = 0, len;
     int address = 0;
@@ -134,46 +194,115 @@ void packet_dump(FILE *fp, BUF_POINTER buffer, int length) {
         } else {
             len = length;
         }
-        print_hex_ascii(fp, address, (const unsigned char *)&buffer[total], len);
+        print_hex_ascii(address, (const unsigned char *)&buffer[total], len);
         total += len;
         address += BUFFER_SIZE;
     }
 }
 
-static void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
+void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
 
+#ifdef __BURST_READ_WRITE__
+	struct xdma_multi_read_write_ioctl bd;
+	int bd_num;
+	int id;
+	struct tsn_rx_buffer* rx;
+	int pkt_cnt;
+	int max_pkt_cnt = 0;
+	unsigned long done_cnt;
+	unsigned long max_done = 0;
+#else
     BUF_POINTER buffer;
+#endif
     int bytes_rcv;
 
     set_register(REG_TSN_CONTROL, 1);
     while (rx_thread_run) {
+#ifdef __BURST_READ_WRITE__
+        bd_num = multi_buffer_pool_alloc(&bd);
+		if(bd.bd_num <= 0) {
+            debug_printf("FAILURE: Could not buffer_pool_alloc.\n");
+            continue;
+		}
+		for(id = 0; id < MAX_BD_NUMBER; id++) {
+			if(id >= bd.bd_num) {
+			    bd.bd[id].buffer = NULL;
+			    bd.bd[id].len = (unsigned long) 0;
+			} else {
+			    bd.bd[id].len = (unsigned long) MAX_BUFFER_LENGTH;
+			}
+		}
+
+#if 0
+		for(id = 0; id < MAX_BD_NUMBER; id++) {
+			printf("bd.bd[%2d].buffer: %p, bd.bd[%2d].len: %ld\n", id, bd.bd[id].buffer, id, bd.bd[id].len);
+		}
+#endif
+        if(xdma_api_read_to_multi_buffers_with_fd(devname, fd, &bd, 
+                                           &bytes_rcv)) {
+            multi_buffer_pool_free(&bd);
+//			printf("%s - %d\n", __FILE__, __LINE__);
+            continue;
+        }
+//		printf("%s - %d, bytes_rcv: %d\n", __FILE__, __LINE__, bytes_rcv);
+	    done_cnt = bd.done;
+		if(done_cnt > max_done) {
+			printf("%s max_done from %ld to %ld\n", __func__, max_done, done_cnt);
+	        max_done = done_cnt;
+		}
+        pkt_cnt = 0;
+		for(id = 0; id < bd_num; id++) {
+			rx = (struct tsn_rx_buffer*)bd.bd[id].buffer;
+			bytes_rcv = rx->metadata.frame_length;
+			if(bytes_rcv) {
+				pkt_cnt++;
+//				packet_dump(bd.bd[id].buffer, 80);
+			    if(bytes_rcv > MAX_BUFFER_LENGTH) {
+				    continue;
+			    }
+			    rx_stats.rxPackets++;
+			    rx_stats.rxBytes = rx_stats.rxBytes + bytes_rcv;
+        // printf("  rx_stats.rxPackets: %16lld \n    rx_stats.rxBytes: %16lld\n", rx_stats.rxPackets, rx_stats.rxBytes);
+        // packet_dump(bd.bd[id].buf, bytes_rcv);
+                xbuffer_enqueue((QueueElement)bd.bd[id].buffer);
+			} else {
+                buffer_pool_free((QueueElement)bd.bd[id].buffer);
+			}
+		}
+		if(pkt_cnt > max_pkt_cnt) {
+			printf("%s max_pkt_cnt from %d to %d\n", __func__, max_pkt_cnt, pkt_cnt);
+			max_pkt_cnt = pkt_cnt;
+		}
+
+#else
         buffer = buffer_pool_alloc();
         if(buffer == NULL) {
             debug_printf("FAILURE: Could not buffer_pool_alloc.\n");
-            rx_stats.rxNoBuffer++;
             continue;
         }
 
         bytes_rcv = 0;
         if(xdma_api_read_to_buffer_with_fd(devname, fd, buffer, 
-                                           size, &bytes_rcv)) {
+                                           size, &bytes_rcv)) 
+        {
             if(buffer_pool_free(buffer)) {
                 debug_printf("FAILURE: Could not buffer_pool_free.\n");
             }
-            rx_stats.rxErrors++;
             continue;
         }
         if(bytes_rcv > MAX_BUFFER_LENGTH) {
-            if(buffer_pool_free(buffer)) {
-                debug_printf("FAILURE: Could not buffer_pool_free.\n");
-            }
-            rx_stats.rxErrors++;
             continue;
         }
-        rx_stats.rxPackets++;
-        rx_stats.rxBytes += bytes_rcv;
 
+        rx_stats.rxPackets++;
+        rx_stats.rxBytes = rx_stats.rxBytes + bytes_rcv;
+
+        // printf("  rx_stats.rxPackets: %16lld \n    rx_stats.rxBytes: %16lld\n", rx_stats.rxPackets, rx_stats.rxBytes);
+        // packet_dump(buffer, bytes_rcv);
+
+//		packet_dump(buffer, 80);
         xbuffer_enqueue((QueueElement)buffer);
+#endif
     }
     set_register(REG_TSN_CONTROL, 0);
 }
@@ -185,12 +314,9 @@ void receiver_in_loopback_mode(char* devname, int fd, char *fn, uint64_t size) {
     int bytes_rcv;
     int infile_fd = -1;
     ssize_t rc;
-    FILE *fp = NULL;
 
-    printf(">>> %s\n", __func__);
-
-    fp = fopen(fn, "rb");
-    if(fp == NULL) {
+    infile_fd = open(fn, O_RDONLY);
+    if (infile_fd < 0) {
         printf("Unable to open input file %s, %d.\n", fn, infile_fd);
         return;
     }
@@ -201,45 +327,54 @@ void receiver_in_loopback_mode(char* devname, int fd, char *fn, uint64_t size) {
         return;
     }
 
-    rc = fread(data, sizeof(char), size, fp);
-    fclose(fp);
+    rc = read_to_buffer(fn, infile_fd, data, size, 0);
     if (rc < 0 || rc < size) {
+        close(infile_fd);
         free(data);
         return;
     }
-
-    buffer = buffer_pool_alloc();
-    if(buffer == NULL) {
-        printf("FAILURE: Could not buffer_pool_alloc.\n");
-        return;
-    }
+    close(infile_fd);
 
     while (rx_thread_run) {
+        buffer = buffer_pool_alloc();
+        if(buffer == NULL) {
+            debug_printf("FAILURE: Could not buffer_pool_alloc.\n");
+            continue;
+        }
 
         if(xdma_api_read_to_buffer_with_fd(devname, fd, buffer, 
                                            size, &bytes_rcv)) {
+            if(buffer_pool_free(buffer)) {
+                debug_printf("FAILURE: Could not buffer_pool_free.\n");
+            }
             continue;
         }
 
         if(size != bytes_rcv) {
             debug_printf("FAILURE: size(%ld) and bytes_rcv(%ld) are different.\n", 
                          size, bytes_rcv);
-            rx_stats.rxErrors++;
+            if(buffer_pool_free(buffer)) {
+                debug_printf("FAILURE: Could not buffer_pool_free.\n");
+            }
             continue;
         }
 
         if(memcmp((const void *)data, (const void *)buffer, size)) {
             debug_printf("FAILURE: data(%p) and buffer(%p) are different.\n", 
                          data, buffer);
-            rx_stats.rxErrors++;
+            if(buffer_pool_free(buffer)) {
+                debug_printf("FAILURE: Could not buffer_pool_free.\n");
+            }
             continue;
         }
 
         rx_stats.rxPackets++;
         rx_stats.rxBytes += bytes_rcv;
 
+//        printf("  rx_stats.rxPackets: %16lld \n    rx_stats.rxBytes: %16lld\n", rx_stats.rxPackets, rx_stats.rxBytes);
+
+        buffer_pool_free(buffer);
     }
-    buffer_pool_free(buffer);
 }
 
 void receiver_in_performance_mode(char* devname, int fd, char *fn, uint64_t size) {
@@ -269,7 +404,6 @@ void receiver_in_performance_mode(char* devname, int fd, char *fn, uint64_t size
             if(buffer_pool_free(buffer)) {
                 debug_printf("FAILURE: Could not buffer_pool_free.\n");
             }
-            rx_stats.rxErrors++;
             continue;
         }
 
@@ -281,40 +415,15 @@ void receiver_in_performance_mode(char* devname, int fd, char *fn, uint64_t size
     set_register(REG_TSN_CONTROL, 0);
 }
 
-void receiver_in_debug_mode(char* devname, int fd, char *fn, uint64_t size) {
-
-    BUF_POINTER buffer;
-    int bytes_rcv;
-
-    printf(">>> %s\n", __func__);
-
-    if(posix_memalign((void **)&buffer, BUFFER_ALIGNMENT /*alignment */, MAX_BUFFER_LENGTH)) {
-        fprintf(stderr, "OOM %u.\n", MAX_BUFFER_LENGTH);
-        return;
-    }
-
-    while (rx_thread_run) {
-        if(xdma_api_read_to_buffer_with_fd(devname, fd, buffer, 
-                                           MAX_BUFFER_LENGTH, &bytes_rcv)) {
-            continue;
-        }
-
-        for(int i=0; i<MAX_PACKET_BURST; i++) {
-//            packet_dump(stdout, (BUF_POINTER)&buffer[i*MAX_PACKET_LENGTH], 32);
-        }
-
-        rx_stats.rxPackets++;
-        rx_stats.rxBytes += bytes_rcv;
-    }
-}
-
 void* receiver_thread(void* arg) {
 
     rx_thread_arg_t* p_arg = (rx_thread_arg_t*)arg;
     int fd = 0;
+	int cpu;
 
-    printf(">>> %s(devname: %s, fn: %s, mode: %d, size: %d)\n", 
-                __func__, p_arg->devname, p_arg->fn,
+    cpu = sched_getcpu();
+    printf(">>> %s(cpu: %d, devname: %s, fn: %s, mode: %d, size: %d)\n", 
+                __func__, cpu, p_arg->devname, p_arg->fn,
                 p_arg->mode, p_arg->size);
 
     if(xdma_api_dev_open(p_arg->devname, 1 /* eop_flush */, &fd)) {
@@ -337,9 +446,6 @@ void* receiver_thread(void* arg) {
     case RUN_MODE_PERFORMANCE:
         receiver_in_performance_mode(p_arg->devname, fd, p_arg->fn, p_arg->size);
     break;
-    case RUN_MODE_DEBUG:
-        receiver_in_debug_mode(p_arg->devname, fd, p_arg->fn, p_arg->size);
-    break;
     default:
         printf("%s - Unknown mode(%d)\n", __func__, p_arg->mode);
     break;
@@ -351,6 +457,4 @@ void* receiver_thread(void* arg) {
     printf("<<< %s\n", __func__);
     return NULL;
 }
-
-#include "./sender_thread.c"
 

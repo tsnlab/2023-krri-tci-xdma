@@ -108,6 +108,7 @@ struct xdma_kthread {
 	int (*fdone)(struct xdma_kthread *);
 };
 
+
 /*****************************************************************************/
 /**
  * xdma_threads_create() - create xdma threads

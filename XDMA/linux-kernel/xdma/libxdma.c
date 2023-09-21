@@ -1135,6 +1135,15 @@ static int engine_service(struct xdma_engine *engine, int desc_writeback)
 	 * engine was running but is no longer busy, or writeback occurred,
 	 * shut down
 	 */
+#if 1 // 20230921 POOKY
+	if (engine->running && !(engine->status & XDMA_STAT_BUSY)) {
+		rv = engine_service_shutdown(engine);
+		if (rv < 0) {
+			pr_err("Failed to shutdown engine\n");
+			return rv;
+		}
+	}
+#else
 	if ((engine->running && !(engine->status & XDMA_STAT_BUSY)) ||
 	    (!engine->eop_flush && desc_count != 0)) {
 		rv = engine_service_shutdown(engine);
@@ -1143,6 +1152,7 @@ static int engine_service(struct xdma_engine *engine, int desc_writeback)
 			return rv;
 		}
 	}
+#endif
 
 	/*
 	 * If called from the ISR, or if an error occurred, the descriptor
@@ -1192,11 +1202,17 @@ static int engine_service(struct xdma_engine *engine, int desc_writeback)
 	transfer = engine_service_final_transfer(engine, transfer, &desc_count);
 
 	/* Restart the engine following the servicing */
+#if 1 // 20230921 POOKY
+	rv = engine_service_resume(engine);
+	if (rv < 0)
+		pr_err("Failed to resume engine\n");
+#else
 	if (!engine->eop_flush) {
 		rv = engine_service_resume(engine);
 		if (rv < 0)
 			pr_err("Failed to resume engine\n");
 	}
+#endif
 
 done:
 	/* If polling detected an error, signal to the caller */
@@ -2585,13 +2601,6 @@ static void engine_free_resource(struct xdma_engine *engine)
 			engine->cyclic_result, engine->cyclic_result_bus);
 		engine->cyclic_result = NULL;
 	}
-	if (engine->tsnthp) {
-		dma_free_coherent(
-			&xdev->pdev->dev,
-			engine->desc_max * sizeof(struct xdma_result),
-			engine->tsnthp, engine->tsn_thread_bus);
-		engine->tsnthp = NULL;
-	}
 }
 
 static int engine_destroy(struct xdma_dev *xdev, struct xdma_engine *engine)
@@ -2832,16 +2841,6 @@ static int engine_alloc_resource(struct xdma_engine *engine)
 		}
 	}
 
-	engine->tsnthp = dma_alloc_coherent(
-		&xdev->pdev->dev,
-		engine->desc_max * sizeof(struct xdma_result),
-		&engine->tsn_thread_bus, GFP_KERNEL);
-
-	if (!engine->tsnthp) {
-		pr_warn("%s, %s pre-alloc tsnthp OOM.\n",
-			dev_name(&xdev->pdev->dev), engine->name);
-		goto err_out;
-	}
 	return 0;
 
 err_out:
@@ -2970,6 +2969,46 @@ static int transfer_build(struct xdma_engine *engine,
 	return 0;
 }
 
+static int multi_transfer_build(struct xdma_engine *engine,
+			struct xdma_request_cb *req, struct xdma_transfer *xfer,
+			unsigned int desc_max)
+{
+	struct sw_desc *sdesc = &(req->sdesc[req->sw_desc_idx]);
+	int i = 0;
+	int j = 0;
+	dma_addr_t bus = xfer->res_bus;
+
+	for (; i < desc_max; i++, j++, sdesc++) {
+		dbg_desc("sw desc %d/%u: 0x%llx, 0x%x, ep 0x%llx.\n",
+			 i + req->sw_desc_idx, req->sw_desc_cnt, sdesc->addr,
+			 sdesc->len, req->ep_addr);
+
+		/* fill in descriptor entry j with transfer details */
+		xdma_desc_set(xfer->desc_virt + j, sdesc->addr, req->ep_addr,
+			      sdesc->len, xfer->dir);
+		xfer->len += sdesc->len;
+
+		/* for non-inc-add mode don't increment ep_addr */
+#if 1
+		if (!engine->non_incr_addr)
+			req->ep_addr += sdesc->len;
+#endif
+
+		if (engine->streaming && engine->dir == DMA_FROM_DEVICE) {
+			memset(xfer->res_virt + j, 0,
+				sizeof(struct xdma_result));
+			xfer->desc_virt[j].src_addr_lo =
+						cpu_to_le32(PCI_DMA_L(bus));
+			xfer->desc_virt[j].src_addr_hi =
+						cpu_to_le32(PCI_DMA_H(bus));
+			bus += sizeof(struct xdma_result);
+		}
+
+	}
+	req->sw_desc_idx += desc_max;
+	return 0;
+}
+
 
 static int transfer_init(struct xdma_engine *engine,
 			struct xdma_request_cb *req, struct xdma_transfer *xfer)
@@ -3013,6 +3052,92 @@ static int transfer_init(struct xdma_engine *engine,
 	dbg_sg("xfer= %p transfer->desc_bus = 0x%llx.\n",
 		xfer, (u64)xfer->desc_bus);
 	transfer_build(engine, req, xfer, desc_max);
+
+	xfer->desc_adjacent = desc_max;
+
+	/* terminate last descriptor */
+	last = desc_max - 1;
+	/* stop engine, EOP for AXI ST, req IRQ on last descriptor */
+	control = XDMA_DESC_STOPPED;
+	control |= XDMA_DESC_EOP;
+#if 1 // POOKY 20230921
+	control |= XDMA_DESC_COMPLETED;
+#else
+	control |= XDMA_DESC_COMPLETED;
+#endif
+	xdma_desc_control_set(xfer->desc_virt + last, control);
+
+#if 1 // POOKY 20230921
+	xfer->desc_cmpl_th = desc_max;
+#else
+	if (engine->eop_flush) {
+		for (i = 0; i < last; i++)
+			xdma_desc_control_set(xfer->desc_virt + i,
+					XDMA_DESC_COMPLETED);
+		xfer->desc_cmpl_th = 1;
+	} else
+		xfer->desc_cmpl_th = desc_max;
+#endif
+
+	xfer->desc_num = desc_max;
+	engine->desc_idx = (engine->desc_idx + desc_max) % engine->desc_max;
+	engine->desc_used += desc_max;
+
+	/* fill in adjacent numbers */
+	for (i = 0; i < xfer->desc_num; i++) {
+		u32 next_adj = xdma_get_next_adj(xfer->desc_num - i - 1,
+						(xfer->desc_virt + i)->next_lo);
+
+		dbg_desc("set next adj at index %d to %u\n", i, next_adj);
+		xdma_desc_adjacent(xfer->desc_virt + i, next_adj);
+	}
+
+	spin_unlock_irqrestore(&engine->lock, flags);
+	return 0;
+}
+
+static int multi_transfer_init(struct xdma_engine *engine,
+			struct xdma_request_cb *req, struct xdma_transfer *xfer)
+{
+	unsigned int desc_max = min_t(unsigned int,
+				req->sw_desc_cnt - req->sw_desc_idx,
+				engine->desc_max);
+	int i = 0;
+	int last = 0;
+	u32 control;
+	unsigned long flags;
+
+	memset(xfer, 0, sizeof(*xfer));
+
+	/* lock the engine state */
+	spin_lock_irqsave(&engine->lock, flags);
+	/* initialize wait queue */
+#if HAS_SWAKE_UP
+	init_swait_queue_head(&xfer->wq);
+#else
+	init_waitqueue_head(&xfer->wq);
+#endif
+
+	/* remember direction of transfer */
+	xfer->dir = engine->dir;
+	xfer->desc_virt = engine->desc + engine->desc_idx;
+	xfer->res_virt = engine->cyclic_result + engine->desc_idx;
+	xfer->desc_bus = engine->desc_bus +
+			(sizeof(struct xdma_desc) * engine->desc_idx);
+	xfer->res_bus = engine->cyclic_result_bus +
+			(sizeof(struct xdma_result) * engine->desc_idx);
+	xfer->desc_index = engine->desc_idx;
+
+	/* Need to handle desc_used >= engine->desc_max */
+
+	if ((engine->desc_idx + desc_max) >= engine->desc_max)
+		desc_max = engine->desc_max - engine->desc_idx;
+
+	transfer_desc_init(xfer, desc_max);
+
+	dbg_sg("xfer= %p transfer->desc_bus = 0x%llx.\n",
+		xfer, (u64)xfer->desc_bus);
+	multi_transfer_build(engine, req, xfer, desc_max);
 
 	xfer->desc_adjacent = desc_max;
 
@@ -3554,6 +3679,238 @@ ssize_t xdma_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
 
 		/* build transfer */
 		rv = transfer_init(engine, req, &req->tfer[0]);
+		if (rv < 0) {
+			mutex_unlock(&engine->desc_lock);
+			goto unmap_sgl;
+		}
+		xfer = &req->tfer[0];
+
+		if (!dma_mapped)
+			xfer->flags = XFER_FLAG_NEED_UNMAP;
+
+		/* last transfer for the given request? */
+		nents -= xfer->desc_num;
+		if (!nents) {
+			xfer->last_in_request = 1;
+			xfer->sgt = sgt;
+		}
+
+		dbg_tfr("xfer, %u, ep 0x%llx, done %lu, sg %u/%u.\n", xfer->len,
+			req->ep_addr, done, req->sw_desc_idx, req->sw_desc_cnt);
+
+#ifdef __LIBXDMA_DEBUG__
+		transfer_dump(xfer);
+#endif
+
+		rv = transfer_queue(engine, xfer);
+		if (rv < 0) {
+			mutex_unlock(&engine->desc_lock);
+			pr_info("unable to submit %s, %d.\n", engine->name, rv);
+			goto unmap_sgl;
+		}
+
+		if (engine->cmplthp)
+			xdma_kthread_wakeup(engine->cmplthp);
+
+		if (timeout_ms > 0)
+			xlx_wait_event_interruptible_timeout(xfer->wq,
+				(xfer->state != TRANSFER_STATE_SUBMITTED),
+				msecs_to_jiffies(timeout_ms));
+		else
+			xlx_wait_event_interruptible(xfer->wq,
+				(xfer->state != TRANSFER_STATE_SUBMITTED));
+
+		spin_lock_irqsave(&engine->lock, flags);
+
+		switch (xfer->state) {
+		case TRANSFER_STATE_COMPLETED:
+			spin_unlock_irqrestore(&engine->lock, flags);
+
+			rv = 0;
+			dbg_tfr("transfer %p, %u, ep 0x%llx compl, +%lu.\n",
+				xfer, xfer->len, req->ep_addr - xfer->len,
+				done);
+
+			/* For C2H streaming use writeback results */
+			if (engine->streaming &&
+			    engine->dir == DMA_FROM_DEVICE) {
+				struct xdma_result *result = xfer->res_virt;
+
+				for (i = 0; i < xfer->desc_cmpl; i++)
+					done += result[i].length;
+
+				/* finish the whole request */
+				if (engine->eop_flush)
+					nents = 0;
+			} else
+				done += xfer->len;
+
+			break;
+		case TRANSFER_STATE_FAILED:
+			pr_info("xfer 0x%p,%u, failed, ep 0x%llx.\n", xfer,
+				xfer->len, req->ep_addr - xfer->len);
+			spin_unlock_irqrestore(&engine->lock, flags);
+
+#ifdef __LIBXDMA_DEBUG__
+			transfer_dump(xfer);
+			sgt_dump(sgt);
+#endif
+			rv = -EIO;
+			break;
+		default:
+			/* transfer can still be in-flight */
+			pr_info("xfer 0x%p,%u, s 0x%x timed out, ep 0x%llx.\n",
+				xfer, xfer->len, xfer->state, req->ep_addr);
+#if 1
+			rv = engine_status_read(engine, 0, 0);
+#else
+			rv = engine_status_read(engine, 0, 1);
+#endif
+			if (rv < 0) {
+				pr_err("Failed to read engine status\n");
+			} else if (rv == 0) {
+				//engine_status_dump(engine);
+				rv = transfer_abort(engine, xfer);
+				if (rv < 0) {
+					pr_err("Failed to stop engine\n");
+				} else if (rv == 0) {
+					rv = xdma_engine_stop(engine);
+					if (rv < 0)
+						pr_err("Failed to stop engine\n");
+				}
+			}
+			spin_unlock_irqrestore(&engine->lock, flags);
+
+#ifdef __LIBXDMA_DEBUG__
+			transfer_dump(xfer);
+			sgt_dump(sgt);
+#endif
+			rv = -ERESTARTSYS;
+			break;
+		}
+
+		engine->desc_used -= xfer->desc_num;
+		transfer_destroy(xdev, xfer);
+
+		/* use multiple transfers per request if we could not fit
+		 * all data within single descriptor chain.
+		 */
+		tfer_idx++;
+
+		if (rv < 0) {
+			mutex_unlock(&engine->desc_lock);
+			goto unmap_sgl;
+		}
+	} /* while (sg) */
+	mutex_unlock(&engine->desc_lock);
+
+unmap_sgl:
+	if (!dma_mapped && sgt->nents) {
+		pci_unmap_sg(xdev->pdev, sgt->sgl, sgt->orig_nents, dir);
+		sgt->nents = 0;
+	}
+
+	if (req)
+		xdma_request_free(req);
+
+	/* as long as some data is processed, return the count */
+	return done ? done : rv;
+}
+
+ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
+			 struct sg_table *sgt, bool dma_mapped, int timeout_ms)
+{
+	struct xdma_dev *xdev = (struct xdma_dev *)dev_hndl;
+	struct xdma_engine *engine;
+	int rv = 0, tfer_idx = 0, i;
+	ssize_t done = 0;
+	struct scatterlist *sg = sgt->sgl;
+	int nents;
+	enum dma_data_direction dir = write ? DMA_TO_DEVICE : DMA_FROM_DEVICE;
+	struct xdma_request_cb *req = NULL;
+
+	if (!dev_hndl)
+		return -EINVAL;
+
+	if (debug_check_dev_hndl(__func__, xdev->pdev, dev_hndl) < 0)
+		return -EINVAL;
+
+	if (write == 1) {
+		if (channel >= xdev->h2c_channel_max) {
+			pr_err("H2C channel %d >= %d.\n", channel,
+				xdev->h2c_channel_max);
+			return -EINVAL;
+		}
+		engine = &xdev->engine_h2c[channel];
+	} else if (write == 0) {
+		if (channel >= xdev->c2h_channel_max) {
+			pr_err("C2H channel %d >= %d.\n", channel,
+				xdev->c2h_channel_max);
+			return -EINVAL;
+		}
+		engine = &xdev->engine_c2h[channel];
+	}
+
+	if (!engine) {
+		pr_err("dma engine NULL\n");
+		return -EINVAL;
+	}
+
+	if (engine->magic != MAGIC_ENGINE) {
+		pr_err("%s has invalid magic number %lx\n", engine->name,
+		       engine->magic);
+		return -EINVAL;
+	}
+
+	xdev = engine->xdev;
+	if (xdma_device_flag_check(xdev, XDEV_FLAG_OFFLINE)) {
+		pr_info("xdev 0x%p, offline.\n", xdev);
+		return -EBUSY;
+	}
+
+	/* check the direction */
+	if (engine->dir != dir) {
+		pr_info("0x%p, %s, %d, W %d, 0x%x/0x%x mismatch.\n", engine,
+			engine->name, channel, write, engine->dir, dir);
+		return -EINVAL;
+	}
+
+	if (!dma_mapped) {
+		for (i = 0; i < sgt->orig_nents; i++, sg = sg_next(sg)) {
+			nents = pci_map_sg(xdev->pdev, sg, 1, dir);
+			if (!nents) {
+				pr_info("map sgl failed, sgt 0x%p.\n", sgt);
+				return -EIO;
+			}
+		}
+		sgt->nents = sgt->orig_nents;
+	} else {
+		if (!sgt->nents) {
+			pr_err("sg table has invalid number of entries 0x%p.\n",
+			       sgt);
+			return -EIO;
+		}
+	}
+
+	req = xdma_init_request(sgt, ep_addr);
+	if (!req) {
+		rv = -ENOMEM;
+		goto unmap_sgl;
+	}
+
+	dbg_tfr("%s, len %u sg cnt %u.\n", engine->name, req->total_len,
+		req->sw_desc_cnt);
+
+	sg = sgt->sgl;
+	nents = req->sw_desc_cnt;
+	mutex_lock(&engine->desc_lock);
+
+	while (nents) {
+		unsigned long flags;
+		struct xdma_transfer *xfer;
+
+		/* build transfer */
+		rv = multi_transfer_init(engine, req, &req->tfer[0]);
 		if (rv < 0) {
 			mutex_unlock(&engine->desc_lock);
 			goto unmap_sgl;

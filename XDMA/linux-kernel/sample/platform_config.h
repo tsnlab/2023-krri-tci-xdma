@@ -21,9 +21,11 @@ typedef uint64_t timestamp_t;
 
 typedef uintptr_t UINTPTR;
 
-//#define PLATFORM_DEBUG
+#define PLATFORM_DEBUG
 
-#define SDK_VERSION                                 (0x2309180D)
+//#define __USE_MULTI_CORE__
+
+#define SDK_VERSION                                 (0x2305260C)
 /*
  *     0x23050309 : TSN v1 0.7. First Release
  *     0x2305110A : Add RTT(Round Trip Time) test function
@@ -32,7 +34,6 @@ typedef uintptr_t UINTPTR;
  *     0x2305170B : Added an example function(int32_t transmit_arp_paket()) to send
  *                  a packet to the src/tsn/packet_handler.c file
  *     0x2305260C : Added P2P protocol function 
- *     0x2309180D : PCIe version
  */
 
 #define REG_TSN_VERSION                             0x0000
@@ -86,19 +87,10 @@ typedef uintptr_t UINTPTR;
 
 #define TSCB_ADDRESS                            (0x44C00000)
 
-#define DUMPREG_GENERAL 0x01
-#define DUMPREG_RX      0x02
-#define DUMPREG_TX      0x04
-#define XDMA_REG_H2C    0x08
-#define XDMA_REG_C2H    0x10
-#define XDMA_REG_IRQ    0x20
-#define XDMA_REG_CON    0x40
-#define XDMA_REG_H2CS   0x80
-#define XDMA_REG_C2HS   0x100
-#define XDMA_REG_SCOM   0x200
-#define XDMA_REG_MSIX   0x400
-#define DUMPREG_ALL     0x7FF
-
+#define DUMPREG_GENERAL 0x1
+#define DUMPREG_RX      0x2
+#define DUMPREG_TX      0x4
+#define DUMPREG_ALL     0x7
 
 struct rx_metadata {
     uint64_t timestamp;

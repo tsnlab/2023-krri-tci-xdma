@@ -140,6 +140,9 @@ ssize_t xdma_xfer_submit_nowait(void *cb_hndl, void *dev_hndl, int channel, bool
 ssize_t xdma_xfer_completion(void *cb_hndl, void *dev_hndl, int channel, bool write, u64 ep_addr,
             struct sg_table *sgt, bool dma_mapped, int timeout_ms);
             
+ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
+            struct sg_table *sgt, bool dma_mapped, int timeout_ms);
+
 
 /////////////////////missing API////////////////////
 

@@ -15,8 +15,11 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <string.h>
+#include <sched.h>
 
 #include "xdma_common.h"
+
+#define MAX_COUNTERS            29
 
 #define MAX_COUNTERS            29
 
@@ -53,21 +56,6 @@ enum {
     COUNTERS_CNT,
 };
 
-int printCounters[] =
-{
-    COUNTERS_RXPACKETS,
-    COUNTERS_RXBYTES,
-    COUNTERS_RXPPS,
-    COUNTERS_RXBPS,
-
-    COUNTERS_TXPACKETS,
-    COUNTERS_TXBYTES,
-    COUNTERS_TXPPS,
-    COUNTERS_TXBPS,
-
-    0xffff,
-};
-
 extern int stats_thread_run;
 
 time_t  start_time;
@@ -87,10 +75,12 @@ void calculate_stats()
 
     cs.rxPackets = rx_stats.rxPackets;
     cs.rxBytes = rx_stats.rxBytes;
+    cs.rxErrors = rx_stats.rxErrors;
+    cs.rxNoBuffer = rx_stats.rxNoBuffer;
     cs.txPackets = tx_stats.txPackets;
     cs.txBytes = tx_stats.txBytes;
-    cs.rxPps = ((rx_stats.rxPackets - os.rxPackets) * 1000000) / usec;
-    cs.rxBps = ((rx_stats.rxBytes - os.rxBytes) * 8000000) / usec;
+    cs.rxPps = ((cs.rxPackets - os.rxPackets) * 1000000) / usec;
+    cs.rxBps = ((cs.rxBytes - os.rxBytes) * 8000000) / usec;
     cs.txPps = ((tx_stats.txPackets - os.txPackets) * 1000000) / usec;
     cs.txBps = ((tx_stats.txBytes - os.txBytes) * 8000000) / usec;
     memcpy(&os, &cs, sizeof(stats_t));
@@ -98,14 +88,15 @@ void calculate_stats()
 
 void print_counter() {
 
+
     printf("%20s", counter_name[COUNTERS_RXPACKETS]);
-    printf("%16llu\n", rx_stats.rxPackets);
+    printf("%16llu\n", cs.rxPackets);
     printf("%20s", counter_name[COUNTERS_RXBYTES]);
-    printf("%16llu\n", rx_stats.rxBytes);
+    printf("%16llu\n", cs.rxBytes);
     printf("%20s", counter_name[COUNTERS_RXERRORS]);
-    printf("%16llu\n", rx_stats.rxErrors);
+    printf("%16llu\n", cs.rxErrors);
     printf("%20s", counter_name[COUNTERS_RXNOBUF]);
-    printf("%16llu\n", rx_stats.rxNoBuffer);
+    printf("%16llu\n", cs.rxNoBuffer);
     printf("%20s", counter_name[COUNTERS_RXPPS]);
     printf("%16llu\n", cs.rxPps);
     printf("%20s", counter_name[COUNTERS_RXBPS]);
@@ -122,6 +113,7 @@ void print_counter() {
     printf("%16llu\n", cs.txPps);
     printf("%20s", counter_name[COUNTERS_TXBPS]);
     printf("%16llu\n", cs.txBps);
+
 }
 
 void CalExecTimeInfo(int seed, execTime_t *info) {
@@ -185,11 +177,12 @@ void* stats_thread(void* arg) {
     struct timeval previousTime, currentTime;
     double elapsedTime;
     struct timeval  tv;
+	int cpu;
 
-    printf(">>> %s(mode: %d)\n", __func__, p_arg->mode);
+	cpu = sched_getcpu();
+    printf(">>> %s(cpu: %d, mode: %d)\n", __func__, cpu, p_arg->mode);
 
-    if(p_arg->mode == RUN_MODE_DEBUG) return NULL;
-    if(p_arg->mode == RUN_MODE_NORMAL) return NULL;
+//    return NULL;
 
     time(&start_time);
     gettimeofday(&tv, NULL);
@@ -203,7 +196,7 @@ void* stats_thread(void* arg) {
 
         if (elapsedTime >= 1.0) {
             print_stats();
-            memcpy(&previousTime, &currentTime, sizeof(struct timeval));
+			memcpy(&previousTime, &currentTime, sizeof(struct timeval));
         }
     }
 

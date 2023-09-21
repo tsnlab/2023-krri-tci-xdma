@@ -13,6 +13,7 @@
 #define __BUFFER_HANDLER_H__
 
 #include "xdma_common.h"
+#include "../xdma/cdev_sgdma_part.h"
 
 void relese_buffers(int count);
 
@@ -20,7 +21,8 @@ int buffer_pool_free(BUF_POINTER element);
 BUF_POINTER buffer_pool_alloc();
 int initialize_buffer_allocation();
 
-BUF_POINTER get_reserved_tx_buffer();
+int multi_buffer_pool_alloc(struct xdma_multi_read_write_ioctl *bd);
+int multi_buffer_pool_free(struct xdma_multi_read_write_ioctl *bd);
 void buffer_release();
 
 #endif     // __BUFFER_HANDLER_H__

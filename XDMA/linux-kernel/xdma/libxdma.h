@@ -97,10 +97,9 @@
 #define XDMA_ENGINE_CREDIT_XFER_MAX_DESC	0x3FF
 
 /* maximum size of a single DMA transfer descriptor */
-//#define XDMA_DESC_BLEN_BITS	28
-#define XDMA_DESC_BLEN_BITS	12
+#define XDMA_DESC_BLEN_BITS	28
 //#define XDMA_DESC_BLEN_MAX	((1 << (XDMA_DESC_BLEN_BITS)) - 1)
-#define XDMA_DESC_BLEN_MAX	(2048)
+#define XDMA_DESC_BLEN_MAX	(4096)
 
 /* bits of the SG DMA control register */
 #define XDMA_CTRL_RUN_STOP			(1UL << 0)
@@ -565,9 +564,6 @@ struct xdma_engine {
 	/* pending work thread list */
 	/* cpu attached to intr_work */
 	unsigned int intr_work_cpu;
-
-    struct tsn_kthread *tsnthp;
-	dma_addr_t tsn_thread_bus;	/* bus addr for Kernel-thread */
 };
 
 struct xdma_user_irq {
@@ -693,14 +689,6 @@ void get_perf_stats(struct xdma_engine *engine);
 
 int engine_addrmode_set(struct xdma_engine *engine, unsigned long arg);
 int engine_service_poll(struct xdma_engine *engine, u32 expected_desc_count);
-
-int tsn_thread_init(struct xdma_engine *engine, int BufferCount);
-void tsn_thread_exit(struct xdma_engine *engine);
-int tsn_thread_start(struct file *file, struct xdma_engine *engine);
-void tsn_thread_stop(struct xdma_engine *engine);
-int tsn_bd_insert(struct xdma_engine *engine, unsigned long arg);
-int tsn_bd_set_buffer_address(struct xdma_engine *engine, unsigned long arg);
-int tsn_bd_get_buffer_address(struct xdma_engine *engine, unsigned long arg);
 
 ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 			unsigned int aperture, struct sg_table *sgt,

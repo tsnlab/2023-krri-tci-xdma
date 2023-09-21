@@ -5,7 +5,6 @@
 
 #include "../xdma/cdev_sgdma.h"
 
-
 void debug_printf(const char *fmt, ...);
 
 int xdma_api_dev_open(char *devname, int eop_flush, int *fd);
@@ -22,9 +21,14 @@ int xdma_api_ioctl_perf_stop(char *devname,
                              struct xdma_performance_ioctl *perf);
 
 /* dma from device */
+int xdma_api_read_to_buffer(char *devname, char *buffer, 
+                            uint64_t size, uint64_t *bytes_rcv);
 int xdma_api_read_to_buffer_with_fd(char *devname, int fd, char *buffer,
                                     uint64_t size, int *bytes_rcv);
 /* dma to device */
+int xdma_api_write_from_buffer(char *devname, char *buffer, 
+                               uint64_t size, uint64_t *bytes_tr);
+
 int xdma_api_write_from_buffer_with_fd(char *devname, int fd, 
                       char *buffer, uint64_t size, uint64_t *bytes_tr);
 char * xdma_api_get_buffer(uint64_t size);
@@ -32,4 +36,9 @@ char * xdma_api_get_buffer(uint64_t size);
 ssize_t read_to_buffer(char *fname, int fd, char *buffer, 
                        uint64_t size, uint64_t base);
 
+
+int xdma_api_read_to_multi_buffers_with_fd(char *devname, int fd,  
+                      struct xdma_multi_read_write_ioctl *bd, int *bytes_rcv);
+int xdma_api_write_to_multi_buffers_with_fd(char *devname, int fd,  
+                      struct xdma_multi_read_write_ioctl *bd, int *bytes_rcv);
 #endif // __API_XDMA_H__

@@ -15,7 +15,6 @@
 #include <errno.h>
 #include <sys/types.h>
 
-#include "../sample/xdma_common.h"
 /*
  * man 2 write:
  * On Linux, write() (and similar system calls) will transfer at most
@@ -24,8 +23,8 @@
  *    systems.)
  */
 
-#define RW_MAX_SIZE    0x7ffff000
-//#define RW_MAX_SIZE MAX_BUFFER_LENGTH
+//#define RW_MAX_SIZE    0x7ffff000
+#define RW_MAX_SIZE    (0x1000) // #define MAX_BUFFER_LENGTH (0x1000)
 
 
 uint64_t getopt_integer(char *optarg)
@@ -41,7 +40,7 @@ uint64_t getopt_integer(char *optarg)
     return value;
 }
 
-static ssize_t read_to_buffer(char *fname, int fd, char *buffer, uint64_t size,
+ssize_t read_to_buffer(char *fname, int fd, char *buffer, uint64_t size,
             uint64_t base)
 {
     ssize_t rc;
@@ -69,11 +68,20 @@ static ssize_t read_to_buffer(char *fname, int fd, char *buffer, uint64_t size,
         /* read data from file into memory buffer */
         rc = read(fd, buf, bytes);
         if (rc < 0) {
+#if 0
+            fprintf(stderr, "%s, read 0x%lx @ 0x%lx failed %ld.\n",
+                fname, bytes, offset, rc);
+            perror("read file");
+#endif
             return -EIO;
         }
 
         count += rc;
         if (rc != bytes) {
+#if 0
+            fprintf(stderr, "%s, read underflow 0x%lx/0x%lx @ 0x%lx.\n",
+                fname, rc, bytes, offset);
+#endif
             break;
         }
 
@@ -88,7 +96,7 @@ static ssize_t read_to_buffer(char *fname, int fd, char *buffer, uint64_t size,
     return count;
 }
 
-static ssize_t write_from_buffer(char *fname, int fd, char *buffer, uint64_t size,
+ssize_t write_from_buffer(char *fname, int fd, char *buffer, uint64_t size,
             uint64_t base)
 {
     ssize_t rc;
