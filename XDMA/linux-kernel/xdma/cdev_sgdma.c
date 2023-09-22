@@ -358,8 +358,10 @@ static int char_sgdma_multi_map_user_buf_to_sgl(struct xdma_io_cb *cb, bool writ
 	int id;
 	int rv;
 
+#if 0 // 20230922 POOKY
 	if (pages_nr == 0)
 		return -EINVAL;
+#endif
 
 	if (sg_alloc_table(sgt, pages_nr, GFP_KERNEL)) {
 		pr_err("sgl OOM.\n");
@@ -839,6 +841,7 @@ static int ioctl_do_burst_read_write(struct xdma_engine *engine, unsigned long a
 		return -EINVAL;
 	}
 
+#if 0 // 20230922 POOKY
 	for(id=0; id<io.bd_num; id++) {
 		rv = check_transfer_align(engine, (const char __user *)io.bd[id].buffer, 
 		            io.bd[id].len, 0, 1);
@@ -847,6 +850,7 @@ static int ioctl_do_burst_read_write(struct xdma_engine *engine, unsigned long a
 			return rv;
 		}
 	}
+#endif
 
 	memset(&cb, 0, sizeof(struct xdma_io_cb));
 	cb.buf = (char __user *)io.bd[0].buffer;
@@ -858,6 +862,7 @@ static int ioctl_do_burst_read_write(struct xdma_engine *engine, unsigned long a
 		return rv;
 
 	io.error = 0;
+	io.done = 0;
 
 #if 0
 #if 0 // POOKY 20230921

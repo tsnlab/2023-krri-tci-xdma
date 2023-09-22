@@ -2470,6 +2470,7 @@ static int transfer_queue(struct xdma_engine *engine,
 	struct xdma_dev *xdev;
 	unsigned long flags;
 
+#if 0	// 20230922 POOKY
 	if (!engine) {
 		pr_err("dma engine NULL\n");
 		return -EINVAL;
@@ -2490,6 +2491,7 @@ static int transfer_queue(struct xdma_engine *engine,
 		       engine->name);
 		return -EINVAL;
 	}
+#endif
 	dbg_tfr("%s (transfer=0x%p).\n", __func__, transfer);
 
 	xdev = engine->xdev;
@@ -3836,8 +3838,10 @@ ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u
 		return -EINVAL;
 #endif
 
+#if 0	// 20230922 POOKY
 	if (debug_check_dev_hndl(__func__, xdev->pdev, dev_hndl) < 0)
 		return -EINVAL;
+#endif
 
 	if (write == 1) {
 		if (channel >= xdev->h2c_channel_max) {
@@ -3999,7 +4003,7 @@ ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u
 			break;
 		default:
 			/* transfer can still be in-flight */
-#if 1 // 20230921 POOKY
+#if 0 // 20230921 POOKY
 			pr_info("xfer 0x%p,%u, s 0x%x timed out, ep 0x%llx.\n",
 				xfer, xfer->len, xfer->state, req->ep_addr);
 #endif
