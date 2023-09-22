@@ -3831,8 +3831,10 @@ ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u
 	enum dma_data_direction dir = write ? DMA_TO_DEVICE : DMA_FROM_DEVICE;
 	struct xdma_request_cb *req = NULL;
 
+#if 0	// 20230922 POOKY
 	if (!dev_hndl)
 		return -EINVAL;
+#endif
 
 	if (debug_check_dev_hndl(__func__, xdev->pdev, dev_hndl) < 0)
 		return -EINVAL;
@@ -3853,6 +3855,7 @@ ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u
 		engine = &xdev->engine_c2h[channel];
 	}
 
+#if 0	// 20230922 POOKY
 	if (!engine) {
 		pr_err("dma engine NULL\n");
 		return -EINVAL;
@@ -3863,6 +3866,7 @@ ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u
 		       engine->magic);
 		return -EINVAL;
 	}
+#endif
 
 	xdev = engine->xdev;
 	if (xdma_device_flag_check(xdev, XDEV_FLAG_OFFLINE)) {
@@ -3870,12 +3874,14 @@ ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u
 		return -EBUSY;
 	}
 
+#if 0	// 20230922 POOKY
 	/* check the direction */
 	if (engine->dir != dir) {
 		pr_info("0x%p, %s, %d, W %d, 0x%x/0x%x mismatch.\n", engine,
 			engine->name, channel, write, engine->dir, dir);
 		return -EINVAL;
 	}
+#endif
 
 	if (!dma_mapped) {
 		nents = pci_map_sg(xdev->pdev, sg, sgt->orig_nents, dir);
@@ -4032,9 +4038,11 @@ ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u
 						done += result[i].length;
 						io->bd[i].len = result[i].length;
 					}
+					for (i = xfer->desc_cmpl; i < io->bd_num; i++) {
+						io->bd[i].len = 0;
+					}
 				}
 			}
-			//rv = -ERESTARTSYS;
 #endif
 			break;
 		}

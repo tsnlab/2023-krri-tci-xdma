@@ -5,7 +5,7 @@ struct xdma_thread_init_ioctl {
     int buffer_count;
 };
 
-#define MAX_BD_NUMBER (16)
+#define MAX_BD_NUMBER (32)
 struct xdma_buffer_descriptor {
     char * buffer;
 	unsigned long len;

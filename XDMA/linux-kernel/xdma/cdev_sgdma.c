@@ -404,7 +404,6 @@ static int char_sgdma_multi_map_user_buf_to_sgl(struct xdma_io_cb *cb, bool writ
 
 	sg = sgt->sgl;
 	for (i = 0; i < pages_nr; i++, sg = sg_next(sg)) {
-//		#define offset_in_page(p)   ((unsigned long)(p) & ~PAGE_MASK)
         unsigned int offset = offset_in_page((void __user *)io->bd[i].buffer);
 		flush_dcache_page(cb->pages[i]);
 		sg_set_page(sg, cb->pages[i], io->bd[i].len, offset);
@@ -823,12 +822,16 @@ static int ioctl_do_burst_read_write(struct xdma_engine *engine, unsigned long a
 		return -EINVAL;
 	}
 
-	dbg_tfr("%s, W %d, bd_num %d\n", engine->name, write, io.bd_num);
+	dbg_tfr("%s, W %d, bd_num %d, done %ld\n", engine->name, write, io.bd_num, io.done);
+#if 0 // 20230922 POOKY
+	len = io.done;
+#else
 	for(id=0; id<io.bd_num; id++) {
 		dbg_tfr("%s, W %d, buf %p, %ld\n",
 			engine->name, write, (const char __user *)io.bd[id].buffer, io.bd[id].len);
 		len += io.bd[id].len;
 	}
+#endif
 
 	if ((write && engine->dir != DMA_TO_DEVICE) ||
 	    (!write && engine->dir != DMA_FROM_DEVICE)) {

@@ -631,16 +631,17 @@ void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
         if((bd_num = pbuffer_multi_dequeue(&g_parsed_queue, &bd)) ==0) {
             continue;
         }
-        for(id=0; id<bd_num; id++) {
-            curr_done += bd.bd[bd_num].len;
+        for(id=0; id<bd.bd_num; id++) {
+            curr_done += bd.bd[id].len;
 //			printf("bd.bd[%2d].buffer: %p, bd.bd[%2d].len: %ld\n", id, bd.bd[id].buffer, id, bd.bd[id].len);
         }
 //		printf("\n");
 
-        for(id = bd_num; id < MAX_BD_NUMBER; id++) {
+        for(id = bd.bd_num; id < MAX_BD_NUMBER; id++) {
             bd.bd[id].buffer = NULL;
             bd.bd[id].len = 0;
         }
+		bd.done = curr_done;
 
         if(xdma_api_write_to_multi_buffers_with_fd(devname, fd, &bd,
                                            &bytes_tr)) {
@@ -648,6 +649,12 @@ void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
             multi_buffer_pool_free(&bd);
             continue;
         }
+#if 1
+		if(curr_done != bytes_tr) {
+			printf("Transmit counter wrong, curr_done: %ld, bytes_tr: %d\n", curr_done, bytes_tr);
+		}
+#endif
+
 		if(bd_num > max_bd_num) {
             printf("%s max_pkt_cnt from %d to %d\n", __func__, max_bd_num, bd_num);
 			max_bd_num = bd_num;
@@ -668,7 +675,7 @@ void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
 //            max_done = done_cnt;
 //        }
 
-        for(id = 0; id < bd_num; id++) {
+        for(id = 0; id < bd.bd_num; id++) {
             if(bd.bd[id].len) {
                 tx_stats.txPackets++;
                 tx_stats.txBytes += bd.bd[id].len;

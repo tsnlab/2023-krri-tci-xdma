@@ -203,11 +203,9 @@ void packet_dump(BUF_POINTER buffer, int length) {
 void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
 
 #ifdef __BURST_READ_WRITE__
-	struct xdma_multi_read_write_ioctl bd;
-//	struct xdma_multi_read_write_ioctl io;
-	int bd_num;
-	int id;
 	struct tsn_rx_buffer* rx;
+	struct xdma_multi_read_write_ioctl bd;
+	int id;
 	int pkt_cnt;
 	int max_pkt_cnt = 0;
 	unsigned long done_cnt;
@@ -220,9 +218,11 @@ void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
     set_register(REG_TSN_CONTROL, 1);
     while (rx_thread_run) {
 #ifdef __BURST_READ_WRITE__
-        bd_num = multi_buffer_pool_alloc(&bd);
+		done_cnt = 0;
+        multi_buffer_pool_alloc(&bd);
 		if(bd.bd_num <= 0) {
             debug_printf("FAILURE: Could not buffer_pool_alloc.\n");
+			rx_stats.rxNoBuffer++;
             continue;
 		}
 		for(id = 0; id < MAX_BD_NUMBER; id++) {
@@ -231,38 +231,44 @@ void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
 			    bd.bd[id].len = (unsigned long) 0;
 			} else {
 			    bd.bd[id].len = (unsigned long) MAX_BUFFER_LENGTH;
+				done_cnt += MAX_BUFFER_LENGTH;
 			}
 		}
+		bd.done = done_cnt;
 
-#if 0
-		for(id = 0; id < MAX_BD_NUMBER; id++) {
-			printf("bd.bd[%2d].buffer: %p, bd.bd[%2d].len: %ld\n", id, bd.bd[id].buffer, id, bd.bd[id].len);
-		}
-#endif
-//		memcpy(&io, &bd, sizeof(struct xdma_multi_read_write_ioctl));
         if(xdma_api_read_to_multi_buffers_with_fd(devname, fd, &bd, 
                                            &bytes_rcv)) {
             multi_buffer_pool_free(&bd);
-//			printf("%s - %d\n", __FILE__, __LINE__);
+			rx_stats.rxErrors++;
             continue;
         }
-//		printf("%s - %d, bytes_rcv: %d\n", __FILE__, __LINE__, bytes_rcv);
 	    done_cnt = bd.done;
 		if(done_cnt > max_done) {
 			printf("%s max_done from %ld to %ld\n", __func__, max_done, done_cnt);
 	        max_done = done_cnt;
 		}
         pkt_cnt = 0;
-		for(id = 0; id < bd_num; id++) {
+		for(id = 0; id < bd.bd_num; id++) {
+#if 0 // 20230922 POOKY
+			if(bd.bd[id].len) {
+				pkt_cnt++;
+//				packet_dump(bd.bd[id].buffer, bd.bd[id].len);
+			    if(bd.bd[id].len > MAX_BUFFER_LENGTH) {
+					printf("%s - %s -Wrong Length - bd.bd[%d].len: %ld, MAX_BUFFER_LENGTH: %d\n",
+						__FILE__, __func__, id, bd.bd[id].len, MAX_BUFFER_LENGTH);
+					packet_dump(bd.bd[id].buffer, bd.bd[id].len);
+                    buffer_pool_free((QueueElement)bd.bd[id].buffer);
+					continue;
+			    }
+			    rx_stats.rxPackets++;
+			    rx_stats.rxBytes = rx_stats.rxBytes + bd.bd[id].len;
+                xbuffer_enqueue((QueueElement)bd.bd[id].buffer);
+			} else {
+                buffer_pool_free((QueueElement)bd.bd[id].buffer);
+			}
+#else
 			rx = (struct tsn_rx_buffer*)bd.bd[id].buffer;
 			bytes_rcv = rx->metadata.frame_length;
-#if 0
-			if(bd.bd[id].len != (bytes_rcv + sizeof(struct rx_metadata))) {
-				printf("%s - %s -Length mismatch - bd.bd[%d].len: %ld, cal -len: %ld\n",
-				    __FILE__, __func__, id, bd.bd[id].len, (bytes_rcv + sizeof(struct rx_metadata))); 
-				packet_dump(bd.bd[id].buffer, bd.bd[id].len);
-			}
-#endif
 			if(bytes_rcv) {
 				pkt_cnt++;
 //				packet_dump(bd.bd[id].buffer, 80);
@@ -280,6 +286,7 @@ void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
 			} else {
                 buffer_pool_free((QueueElement)bd.bd[id].buffer);
 			}
+#endif
 		}
 		if(pkt_cnt > max_pkt_cnt) {
 			printf("%s max_pkt_cnt from %d to %d\n", __func__, max_pkt_cnt, pkt_cnt);
