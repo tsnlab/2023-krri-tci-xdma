@@ -793,6 +793,84 @@ void sender_in_performance_mode(char* devname, int fd, char *fn, uint64_t size) 
     free(buffer);
 }
 
+static void sender_in_debug_mode(char* devname, int fd, char *fn, uint64_t size) {
+
+    struct xdma_multi_read_write_ioctl bd;
+    int bytes_tr;
+    int id;
+    unsigned long curr_done;
+
+    QueueElement buffer = NULL;
+    int infile_fd = -1;
+    ssize_t rc;
+    FILE *fp = NULL;
+
+    printf(">>> %s\n", __func__);
+
+    fp = fopen(fn, "rb");
+    if(fp == NULL) {
+        printf("Unable to open input file %s, %d.\n", fn, infile_fd);
+        return;
+    }
+
+    if(posix_memalign((void **)&buffer, BUFFER_ALIGNMENT /*alignment */, MAX_BUFFER_LENGTH * MAX_BD_NUMBER)) {
+        fprintf(stderr, "OOM %u.\n", MAX_BUFFER_LENGTH * MAX_BD_NUMBER);
+		fclose(fp);
+        return;
+    }
+
+    for(int i=0; i<MAX_BD_NUMBER; i++) {
+        fseek( fp, 0, SEEK_SET );
+        rc = fread((QueueElement)&buffer[i*MAX_BUFFER_LENGTH], sizeof(char), size, fp);
+        if (rc < 0 || rc < size) {
+            free(buffer);
+            fclose(fp);
+            return;
+        }
+    }
+    fclose(fp);
+   
+    set_register(REG_TSN_CONTROL, 1);
+    while (tx_thread_run) {
+		curr_done = 0;
+//		bd.bd_num = MAX_BD_NUMBER;
+		bd.bd_num = 1;
+        for(id=0; id<bd.bd_num; id++) {
+            bd.bd[id].buffer = (char *)&buffer[id*MAX_BUFFER_LENGTH];
+            bd.bd[id].len = size;
+            curr_done += bd.bd[id].len;
+        }
+
+        for(id = bd.bd_num; id < MAX_BD_NUMBER; id++) {
+            bd.bd[id].buffer = NULL;
+            bd.bd[id].len = 0;
+        }
+        bd.done = curr_done;
+
+        if(xdma_api_write_to_multi_buffers_with_fd(devname, fd, &bd,
+                                           &bytes_tr)) {
+            tx_stats.txErrors+=bd.bd_num;
+            continue;
+        }
+
+        if(curr_done != bytes_tr) {
+            printf("Transmit counter wrong, curr_done: %ld, bytes_tr: %d\n", curr_done, bytes_tr);
+        }
+
+        for(id = 0; id < bd.bd_num; id++) {
+            if(bd.bd[id].len) {
+                tx_stats.txPackets++;
+                tx_stats.txBytes += bd.bd[id].len;
+            } else {
+                tx_stats.txErrors++;
+            }
+        }
+    }
+	set_register(REG_TSN_CONTROL, 0);
+
+    free(buffer);
+}
+
 void* sender_thread(void* arg) {
 
     int cpu;
@@ -826,6 +904,42 @@ void* sender_thread(void* arg) {
     break;
     case RUN_MODE_PERFORMANCE:
         sender_in_performance_mode(p_arg->devname, tx_fd, p_arg->fn, p_arg->size);
+    break;
+    default:
+        printf("%s - Unknown mode(%d)\n", __func__, p_arg->mode);
+    break;
+    }
+
+    close(tx_fd);
+    printf("<<< %s()\n", __func__);
+
+    return NULL;
+}
+
+void* tx_thread(void* arg) {
+
+    int cpu;
+    tx_thread_arg_t* p_arg = (tx_thread_arg_t*)arg;
+
+    cpu = sched_getcpu();
+    printf(">>> %s(cpu: %d, devname: %s, fn: %s, mode: %d, size: %d)\n",
+               __func__, cpu, p_arg->devname, p_arg->fn,
+               p_arg->mode, p_arg->size);
+
+    memset(tx_devname, 0, MAX_DEVICE_NAME);
+    memcpy(tx_devname, p_arg->devname, MAX_DEVICE_NAME);
+
+    if(xdma_api_dev_open(p_arg->devname, 0 /* eop_flush */, &tx_fd)) {
+        printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", p_arg->devname);
+        printf("<<< %s\n", __func__);
+        return NULL;
+    }
+
+    initialize_statistics(&tx_stats);
+
+    switch(p_arg->mode) {
+    case RUN_MODE_DEBUG:
+        sender_in_debug_mode(p_arg->devname, tx_fd, p_arg->fn, p_arg->size);
     break;
     default:
         printf("%s - Unknown mode(%d)\n", __func__, p_arg->mode);

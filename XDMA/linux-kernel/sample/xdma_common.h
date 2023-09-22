@@ -63,6 +63,7 @@ enum {
     RUN_MODE_NORMAL,
     RUN_MODE_LOOPBACK,
     RUN_MODE_PERFORMANCE,
+    RUN_MODE_DEBUG,
 
     RUN_MODE_CNT,
 };
@@ -115,5 +116,6 @@ void* receiver_thread(void* arg);
 void* sender_thread(void* arg);
 void* stats_thread(void* arg);
 void* parse_thread(void* arg);
+void* tx_thread(void* arg);
 
 #endif    // __XDMA_COMMON_H__
