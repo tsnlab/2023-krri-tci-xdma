@@ -45,13 +45,13 @@ typedef struct stats {
     unsigned long long  rxErrors;
     unsigned long long  rxNoBuffer;    // BD is not available
     unsigned long long  rxPps;
-    unsigned long long  rxBps;
+    unsigned long long  rxbps;
     unsigned long long  txPackets;
     unsigned long long  txBytes;
     unsigned long long  txFiltered;
     unsigned long long  txErrors;
     unsigned long long  txPps;
-    unsigned long long  txBps;
+    unsigned long long  txbps;
 
 } stats_t;
 

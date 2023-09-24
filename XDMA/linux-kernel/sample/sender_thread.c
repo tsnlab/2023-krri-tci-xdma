@@ -833,8 +833,8 @@ static void sender_in_debug_mode(char* devname, int fd, char *fn, uint64_t size)
     set_register(REG_TSN_CONTROL, 1);
     while (tx_thread_run) {
 		curr_done = 0;
-//		bd.bd_num = MAX_BD_NUMBER;
-		bd.bd_num = 1;
+		bd.bd_num = MAX_BD_NUMBER;
+//		bd.bd_num = 2;
         for(id=0; id<bd.bd_num; id++) {
             bd.bd[id].buffer = (char *)&buffer[id*MAX_BUFFER_LENGTH];
             bd.bd[id].len = size;
@@ -865,6 +865,7 @@ static void sender_in_debug_mode(char* devname, int fd, char *fn, uint64_t size)
                 tx_stats.txErrors++;
             }
         }
+		sleep(1);
     }
 	set_register(REG_TSN_CONTROL, 0);
 

@@ -825,7 +825,7 @@ static int ioctl_do_burst_read_write(struct xdma_engine *engine, unsigned long a
 	}
 
 	dbg_tfr("%s, W %d, bd_num %d, done %ld\n", engine->name, write, io.bd_num, io.done);
-#if 0 // 20230922 POOKY
+#if 1 // 20230922 POOKY
 	len = io.done;
 #else
 	for(id=0; id<io.bd_num; id++) {

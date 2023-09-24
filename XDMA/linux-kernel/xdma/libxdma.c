@@ -1135,7 +1135,7 @@ static int engine_service(struct xdma_engine *engine, int desc_writeback)
 	 * engine was running but is no longer busy, or writeback occurred,
 	 * shut down
 	 */
-#if 1 // 20230921 POOKY
+#if 0 // 20230921 POOKY
 	if (engine->running && !(engine->status & XDMA_STAT_BUSY)) {
 		rv = engine_service_shutdown(engine);
 		if (rv < 0) {
@@ -3071,6 +3071,14 @@ static int transfer_init(struct xdma_engine *engine,
 
 #if 1 // POOKY 20230921
 	xfer->desc_cmpl_th = desc_max;
+#if 1 // POOKY 20230925
+    if(engine->dir == DMA_TO_DEVICE) {
+        for (i = 0; i < last; i++) {
+            xdma_desc_control_set(xfer->desc_virt + i,
+                        XDMA_DESC_EOP);
+        }
+    }
+#endif
 #else
 	if (engine->eop_flush) {
 		for (i = 0; i < last; i++)

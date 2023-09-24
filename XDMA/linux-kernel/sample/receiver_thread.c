@@ -142,12 +142,12 @@ void initialize_statistics(stats_t* p_stats) {
     p_stats->rxErrors = 0;
     p_stats->rxDrops = 0;
     p_stats->rxPps = 0;
-    p_stats->rxBps = 0;
+    p_stats->rxbps = 0;
     p_stats->txPackets = 0;
     p_stats->txFiltered = 0;
     p_stats->txBytes = 0;
     p_stats->txPps = 0;
-    p_stats->txBps = 0;
+    p_stats->txbps = 0;
 #endif
 }
 

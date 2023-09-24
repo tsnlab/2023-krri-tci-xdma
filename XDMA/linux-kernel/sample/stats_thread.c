@@ -29,13 +29,13 @@ char* counter_name[MAX_COUNTERS] = {
     "rxErrors",
     "rxNoBuffer",
     "rxPps",
-    "rxBps",
+    "rxbps",
     "txPackets",
     "txBytes",
     "txFiltered",
     "txErrors",
     "txPps",
-    "txBps",
+    "txbps",
     NULL,
 };
 
@@ -80,9 +80,9 @@ void calculate_stats()
     cs.txPackets = tx_stats.txPackets;
     cs.txBytes = tx_stats.txBytes;
     cs.rxPps = ((cs.rxPackets - os.rxPackets) * 1000000) / usec;
-    cs.rxBps = ((cs.rxBytes - os.rxBytes) * 8000000) / usec;
+    cs.rxbps = ((cs.rxBytes - os.rxBytes) * 8000000) / usec;
     cs.txPps = ((tx_stats.txPackets - os.txPackets) * 1000000) / usec;
-    cs.txBps = ((tx_stats.txBytes - os.txBytes) * 8000000) / usec;
+    cs.txbps = ((tx_stats.txBytes - os.txBytes) * 8000000) / usec;
     memcpy(&os, &cs, sizeof(stats_t));
 }
 
@@ -100,7 +100,7 @@ void print_counter() {
     printf("%20s", counter_name[COUNTERS_RXPPS]);
     printf("%16llu\n", cs.rxPps);
     printf("%20s", counter_name[COUNTERS_RXBPS]);
-    printf("%16llu\n", cs.rxBps);
+    printf("%16llu\n", cs.rxbps);
     printf("%20s", counter_name[COUNTERS_TXPACKETS]);
     printf("%16llu\n", tx_stats.txPackets);
     printf("%20s", counter_name[COUNTERS_TXBYTES]);
@@ -112,7 +112,7 @@ void print_counter() {
     printf("%20s", counter_name[COUNTERS_TXPPS]);
     printf("%16llu\n", cs.txPps);
     printf("%20s", counter_name[COUNTERS_TXBPS]);
-    printf("%16llu\n", cs.txBps);
+    printf("%16llu\n", cs.txbps);
 
 }
 
