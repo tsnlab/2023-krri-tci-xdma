@@ -40,7 +40,7 @@ unsigned int h2c_timeout = 10;
 module_param(h2c_timeout, uint, 0644);
 MODULE_PARM_DESC(h2c_timeout, "H2C sgdma timeout in seconds, default is 10 sec.");
 
-unsigned int c2h_timeout = 10;
+unsigned int c2h_timeout = 1;
 module_param(c2h_timeout, uint, 0644);
 MODULE_PARM_DESC(c2h_timeout, "C2H sgdma timeout in seconds, default is 10 sec.");
 
@@ -875,7 +875,7 @@ static int ioctl_do_burst_read_write(struct xdma_engine *engine, unsigned long a
 #endif
 #else
     res = xdma_multi_buffer_xfer_submit(xdev, engine->channel, write, 0, &cb.sgt,
-                0,  write ? h2c_timeout * 1000 : c2h_timeout * 10, &io);
+                0,  write ? h2c_timeout * 1000 : c2h_timeout * 1, &io);
 #endif
 
 	if (res < 0)

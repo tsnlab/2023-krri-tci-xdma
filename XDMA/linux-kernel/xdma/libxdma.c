@@ -3066,12 +3066,14 @@ static int transfer_init(struct xdma_engine *engine,
 	/* stop engine, EOP for AXI ST, req IRQ on last descriptor */
 	control = XDMA_DESC_STOPPED;
 	control |= XDMA_DESC_EOP;
+#if 1 // POOKY 20230925
 	control |= XDMA_DESC_COMPLETED;
+#endif
 	xdma_desc_control_set(xfer->desc_virt + last, control);
 
 #if 1 // POOKY 20230921
 	xfer->desc_cmpl_th = desc_max;
-#if 1 // POOKY 20230925
+#if 1 // POOKY 20230924
     if(engine->dir == DMA_TO_DEVICE) {
         for (i = 0; i < last; i++) {
             xdma_desc_control_set(xfer->desc_virt + i,

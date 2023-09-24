@@ -203,7 +203,11 @@
 
 #define WB_COUNT_MASK 0x00ffffffUL
 #define WB_ERR_MASK (1UL << 31)
+#if 1 // 20230925 POOKY
+#define POLL_TIMEOUT_SECONDS 1
+#else
 #define POLL_TIMEOUT_SECONDS 10
+#endif
 
 #define MAX_USER_IRQ 16
 
