@@ -439,20 +439,17 @@ static void periodic_process_ptp()
 static void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
 
     QueueElement buffer = NULL;
-    double elapsedTime;
-    struct timeval previousTime;
-    struct timeval currentTime;
     int received_packet_count;
     int index;
     int status;
+	uint64_t last_timer = 0;
 
-    gettimeofday(&previousTime, NULL);
     while (tx_thread_run) {
-        gettimeofday(&currentTime, NULL);
-        elapsedTime = (currentTime.tv_sec - previousTime.tv_sec) + (currentTime.tv_usec - previousTime.tv_usec) / 1000000.0;
-        if (elapsedTime >= 1.0) {
+		 uint64_t now = get_sys_count();
+        // Might need to be changed into get_timestamp from gPTP module
+        if ((now - last_timer) > (1000000000 / 8)) {
             periodic_process_ptp();
-            memcpy(&previousTime, &currentTime, sizeof(struct timeval));
+            last_timer = now;
         }
 
         // Process RX
