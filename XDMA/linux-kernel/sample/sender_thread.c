@@ -442,10 +442,10 @@ static void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
     int received_packet_count;
     int index;
     int status;
-	uint64_t last_timer = 0;
+    uint64_t last_timer = 0;
 
     while (tx_thread_run) {
-		 uint64_t now = get_sys_count();
+         uint64_t now = get_sys_count();
         // Might need to be changed into get_timestamp from gPTP module
         if ((now - last_timer) > (1000000000 / 8)) {
             periodic_process_ptp();
