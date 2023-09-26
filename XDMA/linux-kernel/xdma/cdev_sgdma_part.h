@@ -1,7 +1,7 @@
 #ifndef __CDEV_SGDMA_PART_H__
 #define __CDEV_SGDMA_PART_H__
 
-#define MAX_BD_NUMBER (32)
+#define MAX_BD_NUMBER (8)
 struct xdma_buffer_descriptor {
     char * buffer;
 	unsigned long len;

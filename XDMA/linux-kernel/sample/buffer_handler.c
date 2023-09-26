@@ -182,7 +182,7 @@ int multi_buffer_pool_alloc(struct xdma_multi_read_write_ioctl *bd) {
     for(cnt=0; (cnt < MAX_BD_NUMBER) && (g_stackP->top >= 0); 
                 cnt++, g_stackP->top--) 
 #else
-    for(cnt=0; (cnt < 16) && (g_stackP->top >= 0); 
+    for(cnt=0; (cnt < 4) && (g_stackP->top >= 0); 
                 cnt++, g_stackP->top--) 
 #endif
 	{
