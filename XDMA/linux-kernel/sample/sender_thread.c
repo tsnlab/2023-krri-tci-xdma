@@ -185,12 +185,43 @@ static void periodic_process_ptp()
     enqueue(buffer);
 }
 
-void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
+static void send_burst_packet(char* devname, int fd, int bd_num, unsigned long curr_done, struct xdma_multi_read_write_ioctl *io) {
+
+	int bytes_tr;
+	int id;
+
+	io->bd_num = bd_num;
+	io->done = curr_done;
+	if(xdma_api_write_to_multi_buffers_with_fd(devname, fd, io,
+								   &bytes_tr)) {
+		tx_stats.txErrors+=bd_num;
+		multi_buffer_pool_free(io);
+		return;
+	}
+	if(curr_done != bytes_tr) {
+		printf("Transmit counter wrong, curr_done: %ld, bytes_tr: %d\n", curr_done, bytes_tr);
+	}
+	for(id = 0; id < io->bd_num; id++) {
+		if(io->bd[id].len) {
+			tx_stats.txPackets++;
+			tx_stats.txBytes += io->bd[id].len;
+		} else {
+			tx_stats.txErrors++;
+		}
+	}
+	multi_buffer_pool_free(io);
+}
+
+int pbuffer_dequeue(CircularParsedQueue_t *q, struct xdma_buffer_descriptor *element);
+static void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
 
     int received_packet_count;
     int index;
     uint64_t last_timer = 0;
     struct xdma_buffer_descriptor bd;
+	struct xdma_multi_read_write_ioctl io;
+	int bd_num;
+	unsigned long curr_done;
 
     while (tx_thread_run) {
         uint64_t now = get_sys_count();
@@ -203,8 +234,11 @@ void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
         received_packet_count = getParsedQueueCount(&g_parsed_queue);
 
         if (received_packet_count > 0) {
+			if(received_packet_count > 16) {
+				received_packet_count = 16;
+			}
             for(index=0; index<received_packet_count; index++) {
-                xbuffer_dequeue(&g_parsed_queue, &bd);
+                pbuffer_dequeue(&g_parsed_queue, &bd);
                 if(bd.buffer == NULL) {
                     continue;
                 }
@@ -218,19 +252,35 @@ void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
         }
 #ifndef DISABLE_TSN_QUEUE
         // Process TX
+		bd_num = 0;
+		curr_done = 0;
         for (int i = 0; i < 20; i += 1) {
             struct tsn_tx_buffer* tx_buffer = dequeue();
             if (tx_buffer == NULL) {
                 break;
             }
-            transmit_tsn_packet(tx_buffer);
+			io.bd[bd_num].buffer = (char *)tx_buffer;
+            io.bd[bd_num].len = (unsigned long)(tx_buffer->metadata.frame_length + sizeof(struct tx_metadata));
+			curr_done += io.bd[bd_num].len;
+            bd_num++;
+//			if(bd_num >= MAX_BD_NUMBER) 
+			if(bd_num >= 1) 
+			{
+                send_burst_packet(devname, fd, bd_num, curr_done, &io);
+				bd_num = 0;
+				curr_done = 0;
+			}
         }
+
+		if(bd_num) {
+            send_burst_packet(devname, fd, bd_num, curr_done, &io);
+		}
 #endif
     }
 }
 
 
-void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
+static void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
 
     struct xdma_multi_read_write_ioctl bd;
     int bytes_tr;
