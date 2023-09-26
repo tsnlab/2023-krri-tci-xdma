@@ -40,21 +40,13 @@
 #include "parser_thread.h"
 
 /******************** Constant Definitions **********************************/
-#define HW_ADDR_LEN 6
-#define IP_ADDR_LEN 4
-
-#define FCS_LEN 4
-
-#define RESERVED_TX_COUNT 4
-
-static const char* myMAC = "\x00\x11\x22\x33\x44\x55";
-
 stats_t tx_stats;
 
 char tx_devname[MAX_DEVICE_NAME];
 int tx_fd;
 
 extern int tx_thread_run;
+extern CircularParsedQueue_t g_parsed_queue;
 
 void packet_dump(BUF_POINTER buffer, int length);
 BUF_POINTER get_reserved_tx_buffer();
@@ -113,381 +105,15 @@ int transmit_tsn_packet(struct tsn_tx_buffer* packet) {
     return status;
 }
 
-#ifndef __BURST_READ_WRITE__
-static int transmit_tsn_packet_no_free(struct tsn_tx_buffer* packet) {
-
-    uint64_t bytes_tr;
-    uint64_t mem_len = sizeof(packet->metadata) + packet->metadata.frame_length;
-    int status = 0;
-
-    if (mem_len >= MAX_BUFFER_LENGTH) {
-        printf("%s - %p length(%ld) is out of range(%d)\r\n", __func__, packet, mem_len, MAX_BUFFER_LENGTH);
-        return XST_FAILURE;
-    }
-
-    status = xdma_api_write_from_buffer_with_fd(tx_devname, tx_fd, (char *)packet,
-                                       mem_len, &bytes_tr);
-
-    if(status != XST_SUCCESS) {
-        tx_stats.txErrors++;
-    } else {
-        tx_stats.txPackets++;
-        tx_stats.txBytes += mem_len;
-    }
-
-    return status;
-}
-#endif
-
-static int process_packet(struct tsn_rx_buffer* rx) {
-
-    uint8_t *buffer =(uint8_t *)rx;
-    int tx_len;
-    // Reuse RX buffer as TX
-    struct tsn_tx_buffer* tx = (struct tsn_tx_buffer*)(buffer + sizeof(struct rx_metadata) - sizeof(struct tx_metadata));
-    struct tx_metadata* tx_metadata = &tx->metadata;
-    uint8_t* rx_frame = (uint8_t*)&rx->data;
-    uint8_t* tx_frame = (uint8_t*)&tx->data;
-    struct ethernet_header* rx_eth = (struct ethernet_header*)rx_frame;
-    struct ethernet_header* tx_eth = (struct ethernet_header*)tx_frame;
-
-    // make tx metadata
-    // tx_metadata->vlan_tag = rx->metadata.vlan_tag;
-    tx_metadata->timestamp_id = 0;
-    tx_metadata->reserved = 0;
-
-    // make ethernet frame
-    memcpy(&(tx_eth->dmac), &(rx_eth->smac), 6);
-    memcpy(&(tx_eth->smac), myMAC, 6);
-    // tx_eth->type = rx_eth->type;
-
-    tx_len = ETH_HLEN;
-
-    // do arp, udp echo, etc.
-    switch (rx_eth->type) {
-#ifndef DISABLE_GPTP
-    case ETH_TYPE_PTPv2:
-        ;
-        int len = process_gptp_packet(rx);
-        if (len <= 0) { return XST_FAILURE; }
-        tx_len += len;
-        break;
-#endif
-    case ETH_TYPE_ARP: // arp
-        ;
-        struct arp_header* rx_arp = (struct arp_header*)ETH_PAYLOAD(rx_frame);
-        struct arp_header* tx_arp = (struct arp_header*)ETH_PAYLOAD(tx_frame);
-        if (rx_arp->opcode != ARP_OPCODE_ARP_REQUEST) { return XST_FAILURE; }
-
-        // make arp packet
-        // tx_arp->hw_type = rx_arp->hw_type;
-        // tx_arp->proto_type = rx_arp->proto_type;
-        // tx_arp->hw_size = rx_arp->hw_size;
-        // tx_arp->proto_size = rx_arp->proto_size;
-        tx_arp->opcode = ARP_OPCODE_ARP_REPLY;
-        memcpy(tx_arp->target_hw, rx_arp->sender_hw, HW_ADDR_LEN);
-        memcpy(tx_arp->sender_hw, myMAC, HW_ADDR_LEN);
-        uint8_t sender_proto[4];
-        memcpy(sender_proto, rx_arp->sender_proto, IP_ADDR_LEN);
-        memcpy(tx_arp->sender_proto, rx_arp->target_proto, IP_ADDR_LEN);
-        memcpy(tx_arp->target_proto, sender_proto, IP_ADDR_LEN);
-
-        tx_len += ARP_HLEN;
-        break;
-    case ETH_TYPE_IPv4: // ip
-        ;
-        struct ipv4_header* rx_ipv4 = (struct ipv4_header*)ETH_PAYLOAD(rx_frame);
-        struct ipv4_header* tx_ipv4 = (struct ipv4_header*)ETH_PAYLOAD(tx_frame);
-
-        uint32_t src;
-
-        // Fill IPv4 header
-        // memcpy(tx_ipv4, rx_ipv4, IPv4_HLEN(rx_ipv4));
-        src = rx_ipv4->dst;
-        tx_ipv4->dst = rx_ipv4->src;
-        tx_ipv4->src = src;
-        tx_len += IPv4_HLEN(rx_ipv4);
-
-        if (rx_ipv4->proto == IP_PROTO_ICMP) {
-            struct icmp_header* rx_icmp = (struct icmp_header*)IPv4_PAYLOAD(rx_ipv4);
-
-            if (rx_icmp->type != ICMP_TYPE_ECHO_REQUEST) { return XST_FAILURE; }
-
-            struct icmp_header* tx_icmp = (struct icmp_header*)IPv4_PAYLOAD(tx_ipv4);
-            unsigned long icmp_len = IPv4_BODY_LEN(rx_ipv4);
-
-            // Fill ICMP header and body
-            // memcpy(tx_icmp, rx_icmp, icmp_len);
-            tx_icmp->type = ICMP_TYPE_ECHO_REPLY;
-            icmp_checksum(tx_icmp, icmp_len);
-            tx_len += icmp_len;
-
-        } else if (rx_ipv4->proto == IP_PROTO_UDP){
-            struct udp_header* rx_udp = (struct udp_header*)IPv4_PAYLOAD(rx_ipv4);
-            if (rx_udp->dstport != 7) { return XST_FAILURE; }
-
-            struct udp_header* tx_udp = IPv4_PAYLOAD(tx_ipv4);
-
-            // Fill UDP header
-            // memcpy(tx_udp, rx_udp, rx_udp->length);
-            uint16_t srcport;
-            srcport = rx_udp->dstport;
-            tx_udp->dstport = rx_udp->srcport;
-            tx_udp->srcport = srcport;
-            tx_udp->checksum = 0;
-            tx_len += rx_udp->length; // UDP.length contains header length
-        } else {
-            return XST_FAILURE;
-        }
-        break;
-    default:
-        printf_debug("Unknown type: %04x\n", rx_eth->type);
-        return XST_FAILURE;
-    }
-    tx_metadata->frame_length = tx_len;
-    if (enqueue(tx) > 0) {
-        return XST_SUCCESS;
-    }
-    return XST_FAILURE;
-}
-
-#ifndef __BURST_READ_WRITE__
-static int process_send_packet(struct tsn_rx_buffer* rx) {
-
-    uint8_t *buffer =(uint8_t *)rx;
-    int tx_len;
-    // Reuse RX buffer as TX
-    struct tsn_tx_buffer* tx = (struct tsn_tx_buffer*)(buffer + sizeof(struct rx_metadata) - sizeof(struct tx_metadata));
-    struct tx_metadata* tx_metadata = &tx->metadata;
-    uint8_t* rx_frame = (uint8_t*)&rx->data;
-    uint8_t* tx_frame = (uint8_t*)&tx->data;
-    struct ethernet_header* rx_eth = (struct ethernet_header*)rx_frame;
-    struct ethernet_header* tx_eth = (struct ethernet_header*)tx_frame;
-
-    // make tx metadata
-    // tx_metadata->vlan_tag = rx->metadata.vlan_tag;
-    tx_metadata->timestamp_id = 0;
-    tx_metadata->reserved = 0;
-
-    // make ethernet frame
-    memcpy(&(tx_eth->dmac), &(rx_eth->smac), 6);
-    memcpy(&(tx_eth->smac), myMAC, 6);
-    // tx_eth->type = rx_eth->type;
-
-    tx_len = ETH_HLEN;
-
-    // do arp, udp echo, etc.
-    switch (rx_eth->type) {
-#ifndef DISABLE_GPTP
-    case ETH_TYPE_PTPv2:
-        ;
-        int len = process_gptp_packet(rx);
-        if (len <= 0) { return XST_FAILURE; }
-        tx_len += len;
-        break;
-#endif
-    case ETH_TYPE_ARP: // arp
-        ;
-        struct arp_header* rx_arp = (struct arp_header*)ETH_PAYLOAD(rx_frame);
-        struct arp_header* tx_arp = (struct arp_header*)ETH_PAYLOAD(tx_frame);
-        if (rx_arp->opcode != ARP_OPCODE_ARP_REQUEST) { return XST_FAILURE; }
-
-        // make arp packet
-        // tx_arp->hw_type = rx_arp->hw_type;
-        // tx_arp->proto_type = rx_arp->proto_type;
-        // tx_arp->hw_size = rx_arp->hw_size;
-        // tx_arp->proto_size = rx_arp->proto_size;
-        tx_arp->opcode = ARP_OPCODE_ARP_REPLY;
-        memcpy(tx_arp->target_hw, rx_arp->sender_hw, HW_ADDR_LEN);
-        memcpy(tx_arp->sender_hw, myMAC, HW_ADDR_LEN);
-        uint8_t sender_proto[4];
-        memcpy(sender_proto, rx_arp->sender_proto, IP_ADDR_LEN);
-        memcpy(tx_arp->sender_proto, rx_arp->target_proto, IP_ADDR_LEN);
-        memcpy(tx_arp->target_proto, sender_proto, IP_ADDR_LEN);
-
-        tx_len += ARP_HLEN;
-        break;
-    case ETH_TYPE_IPv4: // ip
-        ;
-        struct ipv4_header* rx_ipv4 = (struct ipv4_header*)ETH_PAYLOAD(rx_frame);
-        struct ipv4_header* tx_ipv4 = (struct ipv4_header*)ETH_PAYLOAD(tx_frame);
-
-        uint32_t src;
-
-        // Fill IPv4 header
-        // memcpy(tx_ipv4, rx_ipv4, IPv4_HLEN(rx_ipv4));
-        src = rx_ipv4->dst;
-        tx_ipv4->dst = rx_ipv4->src;
-        tx_ipv4->src = src;
-        tx_len += IPv4_HLEN(rx_ipv4);
-
-        if (rx_ipv4->proto == IP_PROTO_ICMP) {
-            struct icmp_header* rx_icmp = (struct icmp_header*)IPv4_PAYLOAD(rx_ipv4);
-
-            if (rx_icmp->type != ICMP_TYPE_ECHO_REQUEST) { return XST_FAILURE; }
-
-            struct icmp_header* tx_icmp = (struct icmp_header*)IPv4_PAYLOAD(tx_ipv4);
-            unsigned long icmp_len = IPv4_BODY_LEN(rx_ipv4);
-
-            // Fill ICMP header and body
-            // memcpy(tx_icmp, rx_icmp, icmp_len);
-            tx_icmp->type = ICMP_TYPE_ECHO_REPLY;
-            icmp_checksum(tx_icmp, icmp_len);
-            tx_len += icmp_len;
-
-        } else if (rx_ipv4->proto == IP_PROTO_UDP){
-            struct udp_header* rx_udp = (struct udp_header*)IPv4_PAYLOAD(rx_ipv4);
-            if (rx_udp->dstport != 7) { return XST_FAILURE; }
-
-            struct udp_header* tx_udp = IPv4_PAYLOAD(tx_ipv4);
-
-            // Fill UDP header
-            // memcpy(tx_udp, rx_udp, rx_udp->length);
-            uint16_t srcport;
-            srcport = rx_udp->dstport;
-            tx_udp->dstport = rx_udp->srcport;
-            tx_udp->srcport = srcport;
-            tx_udp->checksum = 0;
-            tx_len += rx_udp->length; // UDP.length contains header length
-        } else {
-            return XST_FAILURE;
-        }
-        break;
-    default:
-        printf_debug("Unknown type: %04x\n", rx_eth->type);
-        return XST_FAILURE;
-    }
-    tx_metadata->frame_length = tx_len;
-    transmit_tsn_packet_no_free(tx);
-    return XST_SUCCESS;
-}
-#endif
-
-//#ifdef __BURST_READ_WRITE__
-#if 0
-static int process_packet_with_bd(struct tsn_rx_buffer* rx, struct xdma_buffer_descriptor *bd) {
-
-//    printf("%s - %d\n", __FILE__, __LINE__);
-    uint8_t *buffer =(uint8_t *)rx;
-    int tx_len;
-    // Reuse RX buffer as TX
-    struct tsn_tx_buffer* tx = (struct tsn_tx_buffer*)(buffer + sizeof(struct rx_metadata) - sizeof(struct tx_metadata));
-    struct tx_metadata* tx_metadata = &tx->metadata;
-    uint8_t* rx_frame = (uint8_t*)&rx->data;
-    uint8_t* tx_frame = (uint8_t*)&tx->data;
-    struct ethernet_header* rx_eth = (struct ethernet_header*)rx_frame;
-    struct ethernet_header* tx_eth = (struct ethernet_header*)tx_frame;
-
-    // make tx metadata
-    // tx_metadata->vlan_tag = rx->metadata.vlan_tag;
-    tx_metadata->timestamp_id = 0;
-    tx_metadata->reserved = 0;
-
-    // make ethernet frame
-    memcpy(&(tx_eth->dmac), &(rx_eth->smac), 6);
-    memcpy(&(tx_eth->smac), myMAC, 6);
-    // tx_eth->type = rx_eth->type;
-
-    tx_len = ETH_HLEN;
-
-//    printf("%s - %d\n", __FILE__, __LINE__);
-    bd->buffer = NULL;
-    bd->len =  0;
-
-//    printf("%s - %d\n", __FILE__, __LINE__);
-    // do arp, udp echo, etc.
-    switch (rx_eth->type) {
-#ifndef DISABLE_GPTP
-    case ETH_TYPE_PTPv2:
-        ;
-        int len = process_gptp_packet(rx);
-        if (len <= 0) { return XST_FAILURE; }
-        tx_len += len;
-        break;
-#endif
-    case ETH_TYPE_ARP: // arp
-        ;
-        struct arp_header* rx_arp = (struct arp_header*)ETH_PAYLOAD(rx_frame);
-        struct arp_header* tx_arp = (struct arp_header*)ETH_PAYLOAD(tx_frame);
-        if (rx_arp->opcode != ARP_OPCODE_ARP_REQUEST) { return XST_FAILURE; }
-
-        // make arp packet
-        // tx_arp->hw_type = rx_arp->hw_type;
-        // tx_arp->proto_type = rx_arp->proto_type;
-        // tx_arp->hw_size = rx_arp->hw_size;
-        // tx_arp->proto_size = rx_arp->proto_size;
-        tx_arp->opcode = ARP_OPCODE_ARP_REPLY;
-        memcpy(tx_arp->target_hw, rx_arp->sender_hw, HW_ADDR_LEN);
-        memcpy(tx_arp->sender_hw, myMAC, HW_ADDR_LEN);
-        uint8_t sender_proto[4];
-        memcpy(sender_proto, rx_arp->sender_proto, IP_ADDR_LEN);
-        memcpy(tx_arp->sender_proto, rx_arp->target_proto, IP_ADDR_LEN);
-        memcpy(tx_arp->target_proto, sender_proto, IP_ADDR_LEN);
-
-        tx_len += ARP_HLEN;
-        break;
-    case ETH_TYPE_IPv4: // ip
-        ;
-        struct ipv4_header* rx_ipv4 = (struct ipv4_header*)ETH_PAYLOAD(rx_frame);
-        struct ipv4_header* tx_ipv4 = (struct ipv4_header*)ETH_PAYLOAD(tx_frame);
-
-        uint32_t src;
-
-        // Fill IPv4 header
-        // memcpy(tx_ipv4, rx_ipv4, IPv4_HLEN(rx_ipv4));
-        src = rx_ipv4->dst;
-        tx_ipv4->dst = rx_ipv4->src;
-        tx_ipv4->src = src;
-        tx_len += IPv4_HLEN(rx_ipv4);
-
-        if (rx_ipv4->proto == IP_PROTO_ICMP) {
-            struct icmp_header* rx_icmp = (struct icmp_header*)IPv4_PAYLOAD(rx_ipv4);
-
-            if (rx_icmp->type != ICMP_TYPE_ECHO_REQUEST) { return XST_FAILURE; }
-
-            struct icmp_header* tx_icmp = (struct icmp_header*)IPv4_PAYLOAD(tx_ipv4);
-            unsigned long icmp_len = IPv4_BODY_LEN(rx_ipv4);
-
-            // Fill ICMP header and body
-            // memcpy(tx_icmp, rx_icmp, icmp_len);
-            tx_icmp->type = ICMP_TYPE_ECHO_REPLY;
-            icmp_checksum(tx_icmp, icmp_len);
-            tx_len += icmp_len;
-
-        } else if (rx_ipv4->proto == IP_PROTO_UDP){
-            struct udp_header* rx_udp = (struct udp_header*)IPv4_PAYLOAD(rx_ipv4);
-            if (rx_udp->dstport != 7) { return XST_FAILURE; }
-
-            struct udp_header* tx_udp = IPv4_PAYLOAD(tx_ipv4);
-
-            // Fill UDP header
-            // memcpy(tx_udp, rx_udp, rx_udp->length);
-            uint16_t srcport;
-            srcport = rx_udp->dstport;
-            tx_udp->dstport = rx_udp->srcport;
-            tx_udp->srcport = srcport;
-            tx_udp->checksum = 0;
-            tx_len += rx_udp->length; // UDP.length contains header length
-        } else {
-            return XST_FAILURE;
-        }
-        break;
-    default:
-        printf_debug("Unknown type: %04x\n", rx_eth->type);
-        return XST_FAILURE;
-    }
-    tx_metadata->frame_length = tx_len;
-    bd->buffer = (char *)tx;
-    bd->len = (unsigned long)(sizeof(struct tx_metadata) + tx_len);
-    return XST_SUCCESS;
-}
-#endif
-
 static void periodic_process_ptp()
 {
 #ifdef DISABLE_GPTP
     return;
 #endif
+
+    uint32_t size;
+    struct tsn_tx_buffer* buffer;
+
     if (1) {
         struct gptp_statistics_result stats[3];
         gptp_get_statistics(stats);
@@ -512,10 +138,6 @@ static void periodic_process_ptp()
 
         gptp_reset_statistics();
     }
-
-
-    uint32_t size;
-    struct tsn_tx_buffer* buffer;
 
     buffer = (struct tsn_tx_buffer*)get_reserved_tx_buffer();
     if (buffer == NULL) {
@@ -565,33 +187,33 @@ static void periodic_process_ptp()
 
 void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
 
-    QueueElement buffer = NULL;
-    double elapsedTime;
-    struct timeval previousTime;
-    struct timeval currentTime;
     int received_packet_count;
     int index;
+    uint64_t last_timer = 0;
+    struct xdma_buffer_descriptor bd;
 
-    gettimeofday(&previousTime, NULL);
     while (tx_thread_run) {
-        gettimeofday(&currentTime, NULL);
-        elapsedTime = (currentTime.tv_sec - previousTime.tv_sec) + (currentTime.tv_usec - previousTime.tv_usec) / 1000000.0;
-        if (elapsedTime >= 1.0) {
+        uint64_t now = get_sys_count();
+        // Might need to be changed into get_timestamp from gPTP module
+        if ((now - last_timer) > (1000000000 / 8)) {
             periodic_process_ptp();
-            gettimeofday(&previousTime, NULL);
+            last_timer = now;
         }
 
-        // Process RX
-        received_packet_count = getQueueCount();
+        received_packet_count = getParsedQueueCount(&g_parsed_queue);
 
         if (received_packet_count > 0) {
             for(index=0; index<received_packet_count; index++) {
-                buffer = NULL;
-                buffer = xbuffer_dequeue();
-                if(buffer == NULL) {
+                xbuffer_dequeue(&g_parsed_queue, &bd);
+                if(bd.buffer == NULL) {
                     continue;
                 }
-                process_packet((struct tsn_rx_buffer*)buffer);
+                if (enqueue((struct tsn_tx_buffer*)bd.buffer) > 0) {
+                    continue;
+                } else {
+                    tx_stats.txFiltered++;
+                    buffer_pool_free((BUF_POINTER)bd.buffer);
+                }
             }
         }
 #ifndef DISABLE_TSN_QUEUE
@@ -607,11 +229,9 @@ void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
     }
 }
 
-extern CircularParsedQueue_t g_parsed_queue;
 
 void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
 
-#ifdef __BURST_READ_WRITE__
     struct xdma_multi_read_write_ioctl bd;
     int bytes_tr;
     int max_bd_num = 0;
@@ -619,13 +239,8 @@ void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
     int id;
     unsigned long curr_done;
     unsigned long max_done = 0;
-#else
-    QueueElement buffer = NULL;
-    int status;
-#endif
 
     while (tx_thread_run) {
-#ifdef __BURST_READ_WRITE__
         bd_num = 0;
         curr_done = 0;
         if((bd_num = pbuffer_multi_dequeue(&g_parsed_queue, &bd)) ==0) {
@@ -633,15 +248,13 @@ void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
         }
         for(id=0; id<bd.bd_num; id++) {
             curr_done += bd.bd[id].len;
-//			printf("bd.bd[%2d].buffer: %p, bd.bd[%2d].len: %ld\n", id, bd.bd[id].buffer, id, bd.bd[id].len);
         }
-//		printf("\n");
 
         for(id = bd.bd_num; id < MAX_BD_NUMBER; id++) {
             bd.bd[id].buffer = NULL;
             bd.bd[id].len = 0;
         }
-		bd.done = curr_done;
+        bd.done = curr_done;
 
         if(xdma_api_write_to_multi_buffers_with_fd(devname, fd, &bd,
                                            &bytes_tr)) {
@@ -649,31 +262,17 @@ void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
             multi_buffer_pool_free(&bd);
             continue;
         }
-#if 1
-		if(curr_done != bytes_tr) {
-			printf("Transmit counter wrong, curr_done: %ld, bytes_tr: %d\n", curr_done, bytes_tr);
-		}
-#endif
-
-		if(bd_num > max_bd_num) {
+        if(curr_done != bytes_tr) {
+            printf("Transmit counter wrong, curr_done: %ld, bytes_tr: %d\n", curr_done, bytes_tr);
+        }
+        if(bd_num > max_bd_num) {
             printf("%s max_pkt_cnt from %d to %d\n", __func__, max_bd_num, bd_num);
-			max_bd_num = bd_num;
-		}
-		if(curr_done > max_done) {
+            max_bd_num = bd_num;
+        }
+        if(curr_done > max_done) {
             printf("%s max_done from %ld to %ld\n", __func__, max_done, curr_done);
-			max_done = curr_done;
-		}
-
-//		sleep(1);
-
-//        done_cnt = bd.done;
-//        if(done_cnt != curr_done) {
-//            printf("%s done count mismatch done_cnt %ld curr_done %ld\n", __func__, done_cnt, curr_done);
-//        }
-//        if(done_cnt > max_done) {
-//            printf("%s max_done from %ld to %ld\n", __func__, max_done, done_cnt);
-//            max_done = done_cnt;
-//        }
+            max_done = curr_done;
+        }
 
         for(id = 0; id < bd.bd_num; id++) {
             if(bd.bd[id].len) {
@@ -684,21 +283,6 @@ void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
             }
         }
         multi_buffer_pool_free(&bd);
-#else
-        buffer = NULL;
-        buffer = xbuffer_dequeue();
-
-        if(buffer == NULL) {
-            continue;
-        }
-
-        status = process_send_packet((struct tsn_rx_buffer*)buffer);
-        if(status == XST_FAILURE) {
-            tx_stats.txFiltered++;
-        }
-
-        buffer_pool_free((BUF_POINTER)buffer);
-#endif
     }
 }
 
@@ -815,7 +399,7 @@ static void sender_in_debug_mode(char* devname, int fd, char *fn, uint64_t size)
 
     if(posix_memalign((void **)&buffer, BUFFER_ALIGNMENT /*alignment */, MAX_BUFFER_LENGTH * MAX_BD_NUMBER)) {
         fprintf(stderr, "OOM %u.\n", MAX_BUFFER_LENGTH * MAX_BD_NUMBER);
-		fclose(fp);
+        fclose(fp);
         return;
     }
 
@@ -832,9 +416,9 @@ static void sender_in_debug_mode(char* devname, int fd, char *fn, uint64_t size)
    
     set_register(REG_TSN_CONTROL, 1);
     while (tx_thread_run) {
-		curr_done = 0;
-//		bd.bd_num = MAX_BD_NUMBER;
-		bd.bd_num = 16;
+        curr_done = 0;
+//        bd.bd_num = MAX_BD_NUMBER;
+        bd.bd_num = 2;
         for(id=0; id<bd.bd_num; id++) {
             bd.bd[id].buffer = (char *)&buffer[id*MAX_BUFFER_LENGTH];
             bd.bd[id].len = size;
@@ -865,9 +449,9 @@ static void sender_in_debug_mode(char* devname, int fd, char *fn, uint64_t size)
                 tx_stats.txErrors++;
             }
         }
-		sleep(1);
+        sleep(1);
     }
-	set_register(REG_TSN_CONTROL, 0);
+    set_register(REG_TSN_CONTROL, 0);
 
     free(buffer);
 }

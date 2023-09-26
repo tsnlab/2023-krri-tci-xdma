@@ -137,29 +137,29 @@ BUF_POINTER buffer_pool_alloc() {
 int multi_buffer_pool_free(struct xdma_multi_read_write_ioctl *bd) {
     pthread_mutex_lock(&reserved_stack->mutex);
     pthread_mutex_lock(&g_stackP->mutex);
-	int cnt = 0;
+    int cnt = 0;
     BUF_POINTER element;
 
     for(cnt = 0;cnt < bd->bd_num; cnt++) {
         element = (BUF_POINTER)bd->bd[cnt].buffer;
         element = (BUF_POINTER)((uint64_t)element & BUFFER_ADDRESS_MASK);
-		if (element >= RESERVED_BUFFER_BASE ) {
-			if (isReservedStackFull()) {
-				debug_printf("Stack is full. Cannot buffer_pool_free.\n");
-				continue;
-			}
-			reserved_stack->top++;
-			reserved_stack->elements[reserved_stack->top] = element;
-		}
-		else {
-			if (isStackFull()) {
-				debug_printf("Stack is full. Cannot buffer_pool_free.\n");
-				continue;
-			}
-			g_stackP->top++;
-			g_stackP->elements[g_stackP->top] = element;
-		}
-	}
+        if (element >= RESERVED_BUFFER_BASE ) {
+            if (isReservedStackFull()) {
+                debug_printf("Stack is full. Cannot buffer_pool_free.\n");
+                continue;
+            }
+            reserved_stack->top++;
+            reserved_stack->elements[reserved_stack->top] = element;
+        }
+        else {
+            if (isStackFull()) {
+                debug_printf("Stack is full. Cannot buffer_pool_free.\n");
+                continue;
+            }
+            g_stackP->top++;
+            g_stackP->elements[g_stackP->top] = element;
+        }
+    }
     pthread_mutex_unlock(&reserved_stack->mutex);
     pthread_mutex_unlock(&g_stackP->mutex);
 
@@ -169,19 +169,22 @@ int multi_buffer_pool_free(struct xdma_multi_read_write_ioctl *bd) {
 int multi_buffer_pool_alloc(struct xdma_multi_read_write_ioctl *bd) {
 
     pthread_mutex_lock(&g_stackP->mutex);
-	int cnt;
+    int cnt;
 
     if (isStackEmpty()) {
-		bd->bd_num = 0;
+        bd->bd_num = 0;
         debug_printf("Stack is empty. Cannot buffer_pool_alloc.\n");
         pthread_mutex_unlock(&g_stackP->mutex);
         return -1;
     }
 
-    for(cnt=0; (cnt < MAX_BD_NUMBER) && (g_stackP->top >= 0); 
-	            cnt++, g_stackP->top--) {
+//    for(cnt=0; (cnt < MAX_BD_NUMBER) && (g_stackP->top >= 0); 
+//                cnt++, g_stackP->top--) 
+    for(cnt=0; (cnt < 2) && (g_stackP->top >= 0); 
+                cnt++, g_stackP->top--) 
+	{
         bd->bd[cnt].buffer = g_stackP->elements[g_stackP->top];
-	}
+    }
     bd->bd_num = cnt;
 
     pthread_mutex_unlock(&g_stackP->mutex);
@@ -247,7 +250,7 @@ int allocate_buffers() {
 //      printf("%s - %d - buffer_list[%4d]: %p\n", __FILE__, __LINE__, id, buffer_list[id]);
     }
 #else
-	char *buffer;
+    char *buffer;
 
     for(id = 0; id < (NUMBER_OF_BUFFER + NUMBER_OF_RESERVED_BUFFER); id++) {
         buffer = NULL;
@@ -275,7 +278,7 @@ int allocate_buffers() {
     }
     debug_printf("\n");
 
-	return 0;
+    return 0;
 }
 int initialize_buffer_allocation() {
 
@@ -285,10 +288,10 @@ int initialize_buffer_allocation() {
 
 #if 1
     if(allocate_buffers()) {
-		return -1;
-	}
+        return -1;
+    }
 #else
-	char * buffer;
+    char * buffer;
 
     for(id = 0; id < (NUMBER_OF_BUFFER + NUMBER_OF_RESERVED_BUFFER); id++) {
         buffer = NULL;
@@ -340,7 +343,7 @@ int initialize_buffer_allocation() {
 
 void buffer_release() {
 
-	relese_buffers(NUMBER_OF_BUFFER + NUMBER_OF_RESERVED_BUFFER);
+    relese_buffers(NUMBER_OF_BUFFER + NUMBER_OF_RESERVED_BUFFER);
     pthread_mutex_destroy(&g_stackP->mutex);
     pthread_mutex_destroy(&reserved_stack->mutex);
 

@@ -20,7 +20,6 @@
 #include <sys/time.h>
 #include <sched.h>
 
-
 #include "error_define.h"
 #include "receiver_thread.h"
 #include "platform_config.h"
@@ -110,7 +109,9 @@ int pbuffer_multi_dequeue(CircularParsedQueue_t *q, struct xdma_multi_read_write
     pthread_mutex_lock(&q->mutex);
 
     int id;
-    for(id=0; id<MAX_BD_NUMBER; id++) {
+    //for(id=0; id<MAX_BD_NUMBER; id++) 
+    for(id=0; id<1; id++) 
+	{
         if (isParsedQueueEmpty(q)) {
             debug_printf("Parsed Queue is empty. Cannot pbuffer_dequeue.\n");
             bd->bd_num = id;
@@ -132,7 +133,6 @@ int pbuffer_multi_dequeue(CircularParsedQueue_t *q, struct xdma_multi_read_write
 #include "packet.h"
 
 static const char myMAC[] = { 0x00, 0x11, 0x22, 0x33, 0x44, 0x55 };
-
 
 extern char tx_devname[MAX_DEVICE_NAME];
 extern int tx_fd;
@@ -163,7 +163,6 @@ static int transmit_tsn_packet_no_free(struct tsn_tx_buffer* packet) {
 
 static int parse_packet_with_bd(struct tsn_rx_buffer* rx, struct xdma_buffer_descriptor *bd) {
 
-//    printf("%s - %d\n", __FILE__, __LINE__);
     int transmit_flag = 0;
     uint8_t *buffer =(uint8_t *)rx;
     int tx_len;
@@ -187,17 +186,15 @@ static int parse_packet_with_bd(struct tsn_rx_buffer* rx, struct xdma_buffer_des
 
     tx_len = ETH_HLEN;
 
-//    printf("%s - %d\n", __FILE__, __LINE__);
     if(rx->metadata.frame_length >= MAX_BUFFER_LENGTH) {
         printf("%s - %s - rx->metadata.frame_length: %d, MAX_BUFFER_LENGTH: %d\n",
-		    __FILE__, __func__, rx->metadata.frame_length, MAX_BUFFER_LENGTH);
+            __FILE__, __func__, rx->metadata.frame_length, MAX_BUFFER_LENGTH);
         return XST_FAILURE;
-	}
+    }
 
     bd->buffer = NULL;
     bd->len =  0;
 
-//    printf("%s - %d\n", __FILE__, __LINE__);
     // do arp, udp echo, etc.
     switch (rx_eth->type) {
 #ifndef DISABLE_GPTP
@@ -281,14 +278,14 @@ static int parse_packet_with_bd(struct tsn_rx_buffer* rx, struct xdma_buffer_des
         return XST_FAILURE;
     }
     tx_metadata->frame_length = tx_len;
-	if(transmit_flag) {
-		transmit_tsn_packet_no_free(tx);
+    if(transmit_flag) {
+        transmit_tsn_packet_no_free(tx);
         return XST_FAILURE;
-	} else {
-		bd->buffer = (char *)tx;
-		bd->len = (unsigned long)(sizeof(struct tx_metadata) + tx_len);
-		return XST_SUCCESS;
-	}
+    } else {
+        bd->buffer = (char *)tx;
+        bd->len = (unsigned long)(sizeof(struct tx_metadata) + tx_len);
+        return XST_SUCCESS;
+    }
 }
 
 void parser_in_normal_mode() {
@@ -308,20 +305,20 @@ void parser_in_normal_mode() {
         if(status == XST_FAILURE) {
             tx_stats.txFiltered++;
             buffer_pool_free((BUF_POINTER)buffer);
-			continue;
+            continue;
         }
 
-		if(bd.len >= MAX_BUFFER_LENGTH) {
-			printf("%s - %s - bd.len: %ld, MAX_BUFFER_LENGTH: %d\n",
-				__FILE__, __func__, bd.len, MAX_BUFFER_LENGTH);
+        if(bd.len >= MAX_BUFFER_LENGTH) {
+            printf("%s - %s - bd.len: %ld, MAX_BUFFER_LENGTH: %d\n",
+                __FILE__, __func__, bd.len, MAX_BUFFER_LENGTH);
             tx_stats.txFiltered++;
             buffer_pool_free((BUF_POINTER)buffer);
-			continue;
-		}
+            continue;
+        }
         if(pbuffer_enqueue(&g_parsed_queue, bd)) {
             tx_stats.txFiltered++;
             buffer_pool_free((BUF_POINTER)buffer);
-			continue;
+            continue;
         }
     }
 }

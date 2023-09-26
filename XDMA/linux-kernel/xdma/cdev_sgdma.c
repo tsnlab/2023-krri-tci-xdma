@@ -36,7 +36,7 @@
 #include "xdma_thread.h"
 
 /* Module Parameters */
-unsigned int h2c_timeout = 10;
+unsigned int h2c_timeout = 1;
 module_param(h2c_timeout, uint, 0644);
 MODULE_PARM_DESC(h2c_timeout, "H2C sgdma timeout in seconds, default is 10 sec.");
 
@@ -152,11 +152,6 @@ static loff_t char_sgdma_llseek(struct file *file, loff_t off, int whence)
 		return -EINVAL;
 	file->f_pos = newpos;
 	dbg_fops("%s: pos=%lld\n", __func__, (signed long long)newpos);
-
-#if 0
-	pr_err("0x%p, off %lld, whence %d -> pos %lld.\n",
-		file, (signed long long)off, whence, (signed long long)off);
-#endif
 
 	return newpos;
 }
@@ -357,11 +352,6 @@ static int char_sgdma_multi_map_user_buf_to_sgl(struct xdma_io_cb *cb, bool writ
 	int i;
 	int id;
 	int rv;
-
-#if 0 // 20230922 POOKY
-	if (pages_nr == 0)
-		return -EINVAL;
-#endif
 
 	if (sg_alloc_table(sgt, pages_nr, GFP_KERNEL)) {
 		pr_err("sgl OOM.\n");
@@ -802,18 +792,14 @@ static int ioctl_do_align_get(struct xdma_engine *engine, unsigned long arg)
 	return put_user(engine->addr_align, (int __user *)arg);
 }
 
-static int ioctl_do_burst_read_write(struct xdma_engine *engine, unsigned long arg,
-				bool write) 
+static int ioctl_do_burst_read_write(struct xdma_engine *engine, 
+                                     unsigned long arg, bool write) 
 {
 	struct xdma_multi_read_write_ioctl io;
 	struct xdma_io_cb cb;
 	ssize_t res;
 	int rv;
-	int id;
-	struct xdma_dev *xdev;
 	unsigned long len =0;
-
-    xdev = engine->xdev;
 
 	rv = copy_from_user(&io, (struct xdma_multi_read_write_ioctl __user *)arg,
 				sizeof(struct xdma_multi_read_write_ioctl));
@@ -825,32 +811,13 @@ static int ioctl_do_burst_read_write(struct xdma_engine *engine, unsigned long a
 	}
 
 	dbg_tfr("%s, W %d, bd_num %d, done %ld\n", engine->name, write, io.bd_num, io.done);
-#if 1 // 20230922 POOKY
 	len = io.done;
-#else
-	for(id=0; id<io.bd_num; id++) {
-		dbg_tfr("%s, W %d, buf %p, %ld\n",
-			engine->name, write, (const char __user *)io.bd[id].buffer, io.bd[id].len);
-		len += io.bd[id].len;
-	}
-#endif
 
 	if ((write && engine->dir != DMA_TO_DEVICE) ||
 	    (!write && engine->dir != DMA_FROM_DEVICE)) {
 		pr_err("r/w mismatch. W %d, dir %d.\n", write, engine->dir);
 		return -EINVAL;
 	}
-
-#if 0 // 20230922 POOKY
-	for(id=0; id<io.bd_num; id++) {
-		rv = check_transfer_align(engine, (const char __user *)io.bd[id].buffer, 
-		            io.bd[id].len, 0, 1);
-		if (rv) {
-			pr_info("Invalid transfer alignment detected\n");
-			return rv;
-		}
-	}
-#endif
 
 	memset(&cb, 0, sizeof(struct xdma_io_cb));
 	cb.buf = (char __user *)io.bd[0].buffer;
@@ -864,19 +831,8 @@ static int ioctl_do_burst_read_write(struct xdma_engine *engine, unsigned long a
 	io.error = 0;
 	io.done = 0;
 
-#if 0
-#if 0 // POOKY 20230921
-    res = xdma_xfer_submit(xdev, engine->channel, write, 0, &cb.sgt,
-                0,  write ? h2c_timeout * 1000 : 1000);
-#else
-    res = xdma_xfer_submit(xdev, engine->channel, write, 0, &cb.sgt,
-                0, write ? h2c_timeout * 1000 :
-                       c2h_timeout * 1000);
-#endif
-#else
-    res = xdma_multi_buffer_xfer_submit(xdev, engine->channel, write, 0, &cb.sgt,
-                0,  write ? h2c_timeout * 1000 : c2h_timeout * 1, &io);
-#endif
+    res = xdma_multi_buffer_xfer_submit(engine, engine->channel, write, 0, &cb.sgt,
+                0,  write ? h2c_timeout * 1 : c2h_timeout * 1, &io);
 
 	if (res < 0)
 		io.error = res;
@@ -965,16 +921,12 @@ static long char_sgdma_ioctl(struct file *file, unsigned int cmd,
 		unsigned long arg)
 {
 	struct xdma_cdev *xcdev = (struct xdma_cdev *)file->private_data;
-	struct xdma_dev *xdev;
+//	struct xdma_dev *xdev;
 	struct xdma_engine *engine;
 
 	int rv = 0;
 
-	rv = xcdev_check(__func__, xcdev, 1);
-	if (rv < 0)
-		return rv;
-
-	xdev = xcdev->xdev;
+//	xdev = xcdev->xdev;
 	engine = xcdev->engine;
 
 	switch (cmd) {

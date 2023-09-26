@@ -141,9 +141,15 @@ ssize_t xdma_xfer_completion(void *cb_hndl, void *dev_hndl, int channel, bool wr
             struct sg_table *sgt, bool dma_mapped, int timeout_ms);
             
 #include "../xdma/cdev_sgdma_part.h"
+#include "../xdma/libxdma.h"
 
+#if 1 // 20230925 POOKY
+ssize_t xdma_multi_buffer_xfer_submit(struct xdma_engine *engine, int channel, bool write, u64 ep_addr,
+			 struct sg_table *sgt, bool dma_mapped, int timeout_ms, struct xdma_multi_read_write_ioctl *io);
+#else
 ssize_t xdma_multi_buffer_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
 			 struct sg_table *sgt, bool dma_mapped, int timeout_ms, struct xdma_multi_read_write_ioctl *io);
+#endif
 
 
 /////////////////////missing API////////////////////

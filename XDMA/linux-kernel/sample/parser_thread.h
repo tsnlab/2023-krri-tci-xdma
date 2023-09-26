@@ -12,5 +12,7 @@ typedef struct circular_parsed_queue{
 } CircularParsedQueue_t;
 
 int pbuffer_multi_dequeue(CircularParsedQueue_t *queue, struct xdma_multi_read_write_ioctl *bd);
+int getParsedQueueCount(CircularParsedQueue_t * q);
+
 
 #endif /* __PARSER_THREAD_H__ */
