@@ -243,7 +243,9 @@ static void char_sgdma_unmap_user_buf(struct xdma_io_cb *cb, bool write)
 {
 	int i;
 
+#if 0 // 20231006 PAKJI
 	sg_free_table(&cb->sgt);
+#endif
 
 	if (!cb->pages || !cb->pages_nr)
 		return;
@@ -344,7 +346,11 @@ err_out:
 	return rv;
 }
 
-static int char_sgdma_multi_map_user_buf_to_sgl(struct xdma_io_cb *cb, bool write, struct xdma_multi_read_write_ioctl *io)
+#if 0 // 20231006 PAKJI
+//static int char_sgdma_multi_map_user_buf_to_sgl(struct xdma_io_cb *cb, bool write, struct xdma_multi_read_write_ioctl *io)
+#else
+static int char_sgdma_multi_map_user_buf_to_page(struct xdma_io_cb *cb, bool write, struct xdma_multi_read_write_ioctl *io)
+#endif
 {
 	struct sg_table *sgt = &cb->sgt;
 	struct scatterlist *sg;
@@ -353,10 +359,14 @@ static int char_sgdma_multi_map_user_buf_to_sgl(struct xdma_io_cb *cb, bool writ
 	int id;
 	int rv;
 
+#if 0 // 20231006 PAKJI
 	if (sg_alloc_table(sgt, pages_nr, GFP_KERNEL)) {
 		pr_err("sgl OOM.\n");
 		return -ENOMEM;
 	}
+#else
+	sgt = NULL;
+#endif
 
 	cb->pages = kcalloc(pages_nr, sizeof(struct page *), GFP_KERNEL);
 	if (!cb->pages) {
@@ -394,12 +404,14 @@ static int char_sgdma_multi_map_user_buf_to_sgl(struct xdma_io_cb *cb, bool writ
 		}
 	}
 
+#if 0 // 20231006 PAKJI
 	sg = sgt->sgl;
 	for (i = 0; i < pages_nr; i++, sg = sg_next(sg)) {
         unsigned int offset = offset_in_page((void __user *)io->bd[i].buffer);
 		flush_dcache_page(cb->pages[i]);
 		sg_set_page(sg, cb->pages[i], io->bd[i].len, offset);
 	}
+#endif
 
 	cb->pages_nr = pages_nr;
 	return 0;
@@ -824,15 +836,25 @@ static int ioctl_do_burst_read_write(struct xdma_engine *engine,
 	cb.len = len;
 	cb.ep_addr = 0;
 	cb.write = write;
+
+#if 0 // 20231006 PAKJI
 	rv = char_sgdma_multi_map_user_buf_to_sgl(&cb, write, &io);
+#else
+	rv = char_sgdma_multi_map_user_buf_to_page(&cb, write, &io);
+#endif
 	if (rv < 0)
 		return rv;
 
 	io.error = 0;
 	io.done = 0;
 
+#if 0 // 20231006 PAKJI
     res = xdma_multi_buffer_xfer_submit(engine, engine->channel, write, 0, &cb.sgt,
                 0,  write ? h2c_timeout * 1 : c2h_timeout * 1, &io);
+#else
+    res = xdma_multi_buffer_xfer_submit(engine, engine->channel, write, 0, &cb,
+                0,  write ? h2c_timeout * 1 : c2h_timeout * 1, &io);
+#endif
 
 	if (res < 0)
 		io.error = res;
@@ -841,6 +863,19 @@ static int ioctl_do_burst_read_write(struct xdma_engine *engine,
 
 	rv = copy_to_user((struct xdma_multi_read_write_ioctl __user *)arg, &io,
 				sizeof(struct xdma_multi_read_write_ioctl));
+
+#if 1 // 20231006 PAKJI
+	/* Unmapping PCI and PAGE.*/
+	int i;
+	for(i=0; i<cb.pages_nr; i++){
+		dma_addr_t dma_map_addr = 0;
+		
+		dma_map_addr = (dma_addr_t)cb.pages[i]->dma_addr;				// low bits
+		dma_map_addr |= (dma_addr_t)cb.pages[i]->dma_addr_upper << 32;	// high bits
+
+		pci_unmap_page(engine->xdev->pdev, dma_map_addr, io.bd[i].len, write);
+	}
+#endif
 
 	char_sgdma_unmap_user_buf(&cb, write);
 

@@ -27,6 +27,8 @@
 #include <linux/sched.h>
 #include <linux/vmalloc.h>
 
+#include <asm/cacheflush.h> // for flush_dcache_page()
+
 #include "libxdma.h"
 #include "libxdma_api.h"
 #include "cdev_sgdma.h"
@@ -2853,6 +2855,7 @@ static void transfer_destroy(struct xdma_dev *xdev, struct xdma_transfer *xfer)
     /* free descriptors */
 	xdma_desc_done(xfer->desc_virt, xfer->desc_num);
 
+#if 0 // 20231006 PAKJI
 	if (xfer->last_in_request && (xfer->flags & XFER_FLAG_NEED_UNMAP)) {
 		struct sg_table *sgt = xfer->sgt;
 
@@ -2862,6 +2865,7 @@ static void transfer_destroy(struct xdma_dev *xdev, struct xdma_transfer *xfer)
 			sgt->nents = 0;
 		}
 	}
+#endif
 }
 
 static int transfer_build(struct xdma_engine *engine,
@@ -2902,12 +2906,23 @@ static int transfer_build(struct xdma_engine *engine,
 	return 0;
 }
 
-static int transfer_init(struct xdma_engine *engine,
-			struct xdma_request_cb *req, struct xdma_transfer *xfer)
+#if 1 // 20231006 PAKJI
+static int multi_buffer_transfer_init(struct xdma_engine *engine, 
+	struct xdma_io_cb *cb, struct xdma_transfer *xfer, u64 ep_addr, struct xdma_multi_read_write_ioctl *io /* FIXME*/ )
 {
+#if 0 // 20231006 PAKJI
 	unsigned int desc_max = min_t(unsigned int,
 				req->sw_desc_cnt - req->sw_desc_idx,
 				engine->desc_max);
+#else
+	unsigned int desc_max = cb->pages_nr;
+
+	if(desc_max > XDMA_ENGINE_XFER_MAX_DESC /* 0x800 => 2048 */ ){
+		printk("%s ERROR: Max Descriptor Over Error\n", __func__);
+		return -EIO;
+	}
+#endif
+
 	int i = 0;
 	int last = 0;
 	u32 control;
@@ -2943,6 +2958,120 @@ static int transfer_init(struct xdma_engine *engine,
 
 	dbg_sg("xfer= %p transfer->desc_bus = 0x%llx.\n",
 		xfer, (u64)xfer->desc_bus);
+
+#if 0 // 20231006 PAKJI
+	transfer_build(engine, req, xfer, desc_max);
+#else
+	u64 temp_ep_addr = ep_addr;
+	dma_addr_t temp_bus = xfer->res_bus;
+
+	for (i=0; i<desc_max; i++){
+		dma_addr_t temp_rc_bus_addr = 0;
+		int temp_len = 0;
+
+		temp_rc_bus_addr = (dma_addr_t)cb->pages[i]->dma_addr;                  // low bits
+		temp_rc_bus_addr |= (dma_addr_t)(cb->pages[i]->dma_addr_upper) << 32;   // high bits
+
+		// FIXME
+		temp_len = io->bd[i].len;
+
+		xdma_desc_set(xfer->desc_virt + i, temp_rc_bus_addr, temp_ep_addr,
+						temp_len, xfer->dir);
+
+		if(!engine->non_incr_addr)
+			temp_ep_addr += temp_len;
+			
+		if (engine->streaming && engine->dir == DMA_FROM_DEVICE) {
+			memset(xfer->res_virt + i, 0, sizeof(struct xdma_result));
+
+			xfer->desc_virt[i].src_addr_lo = cpu_to_le32(PCI_DMA_L(temp_bus));
+			xfer->desc_virt[i].src_addr_hi = cpu_to_le32(PCI_DMA_H(temp_bus));
+			temp_bus += sizeof(struct xdma_result);
+		}
+
+		xfer->len += temp_len;
+	}
+#endif
+
+	xfer->desc_adjacent = desc_max;
+
+	/* terminate last descriptor */
+	last = desc_max - 1;
+	/* stop engine, EOP for AXI ST, req IRQ on last descriptor */
+	control = XDMA_DESC_STOPPED;
+	control |= XDMA_DESC_EOP;
+	control |= XDMA_DESC_COMPLETED;
+	xdma_desc_control_set(xfer->desc_virt + last, control);
+
+	xfer->desc_cmpl_th = desc_max;
+    if(engine->dir == DMA_TO_DEVICE) {
+        for (i = 0; i < last; i++) {
+            xdma_desc_control_set(xfer->desc_virt + i,
+                        XDMA_DESC_EOP);
+        }
+    }
+
+	xfer->desc_num = desc_max;
+	engine->desc_idx = (engine->desc_idx + desc_max) % engine->desc_max;
+	engine->desc_used += desc_max;
+
+	/* fill in adjacent numbers */
+	for (i = 0; i < xfer->desc_num; i++) {
+		u32 next_adj = xdma_get_next_adj(xfer->desc_num - i - 1,
+						(xfer->desc_virt + i)->next_lo);
+
+		dbg_desc("set next adj at index %d to %u\n", i, next_adj);
+		xdma_desc_adjacent(xfer->desc_virt + i, next_adj);
+	}
+
+	spin_unlock_irqrestore(&engine->lock, flags);
+	return 0;
+}
+#endif
+
+static int transfer_init(struct xdma_engine *engine,
+			struct xdma_request_cb *req, struct xdma_transfer *xfer)
+{
+	unsigned int desc_max = min_t(unsigned int,
+				req->sw_desc_cnt - req->sw_desc_idx,
+				engine->desc_max);
+
+	int i = 0;
+	int last = 0;
+	u32 control;
+	unsigned long flags;
+
+	memset(xfer, 0, sizeof(*xfer));
+
+	/* lock the engine state */
+	spin_lock_irqsave(&engine->lock, flags);
+	/* initialize wait queue */
+#if HAS_SWAKE_UP
+	init_swait_queue_head(&xfer->wq);
+#else
+	init_waitqueue_head(&xfer->wq);
+#endif
+
+	/* remember direction of transfer */
+	xfer->dir = engine->dir;
+	xfer->desc_virt = engine->desc + engine->desc_idx;
+	xfer->res_virt = engine->cyclic_result + engine->desc_idx;
+	xfer->desc_bus = engine->desc_bus +
+			(sizeof(struct xdma_desc) * engine->desc_idx);
+	xfer->res_bus = engine->cyclic_result_bus +
+			(sizeof(struct xdma_result) * engine->desc_idx);
+	xfer->desc_index = engine->desc_idx;
+
+	/* Need to handle desc_used >= engine->desc_max */
+
+	if ((engine->desc_idx + desc_max) >= engine->desc_max)
+		desc_max = engine->desc_max - engine->desc_idx;
+
+	transfer_desc_init(xfer, desc_max);
+
+	dbg_sg("xfer= %p transfer->desc_bus = 0x%llx.\n",
+		xfer, (u64)xfer->desc_bus);
+
 	transfer_build(engine, req, xfer, desc_max);
 
 	xfer->desc_adjacent = desc_max;
@@ -3619,13 +3748,20 @@ unmap_sgl:
 	return done ? done : rv;
 }
 
+#if 0 // 20231016 PAKJI
 ssize_t xdma_multi_buffer_xfer_submit(struct xdma_engine *engine, int channel, bool write, u64 ep_addr,
 			 struct sg_table *sgt, bool dma_mapped, int timeout_ms, struct xdma_multi_read_write_ioctl *io)
+#else
+ssize_t xdma_multi_buffer_xfer_submit(struct xdma_engine *engine, int channel, bool write, u64 ep_addr,
+			 struct xdma_io_cb *cb, bool dma_mapped, int timeout_ms, struct xdma_multi_read_write_ioctl *io)
+#endif
 {
 	struct xdma_dev *xdev;
 	int rv = 0, tfer_idx = 0, i;
 	ssize_t done = 0;
+#if 0 // 20231016 PAKJI
 	struct scatterlist *sg = sgt->sgl;
+#endif
 	int nents;
 	enum dma_data_direction dir = write ? DMA_TO_DEVICE : DMA_FROM_DEVICE;
 	struct xdma_request_cb *req = NULL;
@@ -3636,13 +3772,28 @@ ssize_t xdma_multi_buffer_xfer_submit(struct xdma_engine *engine, int channel, b
 		return -EBUSY;
 	}
 
+#if 0 // 20231006 PAKJI
 	nents = pci_map_sg(xdev->pdev, sg, sgt->orig_nents, dir);
 	if (!nents) {
 		pr_info("map sgl failed, sgt 0x%p.\n", sgt);
 		return -EIO;
 	}
 	sgt->nents = nents;
+#else
+    for(i=0; i<cb->pages_nr; i++){
+    	flush_dcache_page(cb->pages[i]);
+        dma_addr_t temp_dma_map_addr = pci_map_page(xdev->pdev, 
+                                                    cb->pages[i],
+                                                    offset_in_page((void __user *)io->bd[i].buffer),
+                                                    io->bd[i].len,
+                                                    dir);
 
+        cb->pages[i]->dma_addr = (unsigned long)temp_dma_map_addr;             // low bits
+        cb->pages[i]->dma_addr_upper = (unsigned long)temp_dma_map_addr >> 32; // high bits
+    }
+#endif
+
+#if 0 // 20231006 PAKJI
 	req = xdma_init_request(sgt, ep_addr);
 	if (!req) {
 		rv = -ENOMEM;
@@ -3654,12 +3805,21 @@ ssize_t xdma_multi_buffer_xfer_submit(struct xdma_engine *engine, int channel, b
 
 	sg = sgt->sgl;
 	nents = req->sw_desc_cnt;
+#else
+    nents = cb->pages_nr;
+
+	if(nents > XDMA_ENGINE_XFER_MAX_DESC /* 0x800 => 2048 */){
+		printk("%s ERROR: Max Descriptor Over Error\n", __func__);
+		return -EIO;
+	}
+#endif
 	mutex_lock(&engine->desc_lock);
 
-	while (nents) {
+	while ((int)nents > 0) { // Fix the underflow error of nents
 		unsigned long flags;
 		struct xdma_transfer *xfer;
 
+#if 0 // 20231006 PAKJI
 		/* build transfer */
 		rv = transfer_init(engine, req, &req->tfer[0]);
 		if (rv < 0) {
@@ -3667,6 +3827,15 @@ ssize_t xdma_multi_buffer_xfer_submit(struct xdma_engine *engine, int channel, b
 			goto unmap_sgl;
 		}
 		xfer = &req->tfer[0];
+#else
+		xfer = kzalloc(sizeof(struct xdma_transfer), GFP_KERNEL);
+
+		rv = multi_buffer_transfer_init(engine, cb, xfer, ep_addr, io /* FIXME */);
+		if (rv < 0) {
+			mutex_unlock(&engine->desc_lock);
+			goto unmap_sgl;
+		}
+#endif
 
 		if (!dma_mapped)
 			xfer->flags = XFER_FLAG_NEED_UNMAP;
@@ -3675,7 +3844,9 @@ ssize_t xdma_multi_buffer_xfer_submit(struct xdma_engine *engine, int channel, b
 		nents -= xfer->desc_num;
 		if (!nents) {
 			xfer->last_in_request = 1;
+#if 0 // 20231006 PAKJI
 			xfer->sgt = sgt;
+#endif
 		}
 
 		dbg_tfr("xfer, %u, ep 0x%llx, done %lu, sg %u/%u.\n", xfer->len,
@@ -3779,6 +3950,10 @@ ssize_t xdma_multi_buffer_xfer_submit(struct xdma_engine *engine, int channel, b
 		engine->desc_used -= xfer->desc_num;
 		transfer_destroy(xdev, xfer);
 
+#if 1 // 20231011 PAKJI
+		kfree(xfer);
+#endif
+
 		/* use multiple transfers per request if we could not fit
 		 * all data within single descriptor chain.
 		 */
@@ -3792,10 +3967,12 @@ ssize_t xdma_multi_buffer_xfer_submit(struct xdma_engine *engine, int channel, b
 	mutex_unlock(&engine->desc_lock);
 
 unmap_sgl:
-	if (!dma_mapped && sgt->nents) {
+#if 0 // 20231006 PAKJI
+    if (!dma_mapped && sgt->nents) {
 		pci_unmap_sg(xdev->pdev, sgt->sgl, sgt->orig_nents, dir);
 		sgt->nents = 0;
 	}
+#endif
 
 	if (req)
 		xdma_request_free(req);
