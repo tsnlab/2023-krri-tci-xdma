@@ -192,7 +192,9 @@ int tsn_app(int mode, int DataSize, char *InputFileName) {
 int process_main_runCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_txCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_showCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+int process_main_getCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_setCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+int process_main_ipcCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 
 
 menu_command_t  mainCommand_tbl[] = {
@@ -211,9 +213,19 @@ menu_command_t  mainCommand_tbl[] = {
     {"show",  EXECUTION_ATTR, process_main_showCmd, \
         "   show register [gen, rx, tx]\n", \
         "   Show XDMA resource"},
+    {"get",   EXECUTION_ATTR, process_main_getCmd, \
+        "   get register <addr(Hex)>\n", \
+        "   get XDMA resource"},
     {"set",   EXECUTION_ATTR, process_main_setCmd, \
         "   set register <addr(Hex)> <data(Hex)>\n", \
         "   set XDMA resource"},
+    {"ipc",   EXECUTION_ATTR, process_main_ipcCmd, \
+        "   ipc -m <mode> -o <offset> -c <count> -d <value> \n", \
+        "          <mode> default value: 0 (0: rd, 1: wr)\n"
+        "        <offset> default value: 0 (0 ~ 4092, 4 byte aligned value)\n"
+        "         <count> default value: 1 (1 ~ 1024)\n"
+        "         <value> default value: 0x95302342(4 byte value, Multiple entries possible, Valid only when writing)\n"
+        "   Query or manipulate ipc dpram contents"},
     { 0,           EXECUTION_ATTR,   NULL, " ", " "}
 };
 
@@ -381,6 +393,12 @@ argument_list_t  showArgument_tbl[] = {
         {0,          NULL}
     };
 
+int fn_get_registerArgument(int argc, const char *argv[]);
+argument_list_t  getArgument_tbl[] = {
+        {"register", fn_get_registerArgument},
+        {0,          NULL}
+    };
+
 int fn_set_registerArgument(int argc, const char *argv[]);
 argument_list_t  setArgument_tbl[] = {
         {"register", fn_set_registerArgument},
@@ -508,6 +526,29 @@ int32_t str_to_hex(char *str, int32_t *n) {
     return 0;
 }
 
+int fn_get_registerArgument(int argc, const char *argv[]) {
+
+    int32_t addr = 0x0010; // Scratch Register
+    int32_t value;
+
+    if(argc > 0) {
+        if (str_to_hex((char *)argv[0], &addr) != 0) {
+            printf("Invalid parameter: %s\r\n", argv[0]);
+            return ERR_INVALID_PARAMETER;
+        }
+    }
+
+    if(addr % 4) {
+        printf("The address value(0x%08x) does not align with 4-byte alignment.\r\n", addr);
+        return ERR_INVALID_PARAMETER;
+    }
+
+    value = get_register(addr);
+    printf("address(%08x): %08x\n", addr, value);
+
+    return 0;
+}
+
 int fn_set_registerArgument(int argc, const char *argv[]) {
 
     int32_t addr = 0x0010; // Scratch Register
@@ -555,6 +596,24 @@ int process_main_showCmd(int argc, const char *argv[],
     return ERR_INVALID_PARAMETER;
 }
 
+int process_main_getCmd(int argc, const char *argv[], 
+                             menu_command_t *menu_tbl) {
+
+    if(argc <= 2) {
+        print_argumentWarningMessage(argc, argv, menu_tbl, NO_ECHO);
+        return ERR_PARAMETER_MISSED;
+    }
+    argv++, argc--;
+    for (int index = 0; getArgument_tbl[index].name; index++)
+        if (!strcmp(argv[0], getArgument_tbl[index].name)) {
+            argv++, argc--;
+            getArgument_tbl[index].fP(argc, argv);
+            return 0;
+        }
+
+    return ERR_INVALID_PARAMETER;
+}
+
 int process_main_setCmd(int argc, const char *argv[], 
                              menu_command_t *menu_tbl) {
 
@@ -571,6 +630,125 @@ int process_main_setCmd(int argc, const char *argv[],
         }
 
     return ERR_INVALID_PARAMETER;
+}
+
+int read_ipc_data(int offset, int count, uint32_t ipc_data[]) {
+
+    return xdma_api_rd_ipc_data(XDMA_REGISTER_DEV, offset, count, ipc_data);
+}
+
+int write_ipc_data(int offset, int count, uint32_t ipc_data[]) {
+
+    return xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, offset, count, ipc_data);
+}
+
+int ipc_app(int mode, int offset, int count, uint32_t ipc_data[]) {
+
+    switch(mode) {
+    case 0: // read
+        return read_ipc_data(offset, count, ipc_data);
+    break;
+    case 1: // write
+        return write_ipc_data(offset, count, ipc_data);
+    break;
+    }
+
+    return 0;
+}
+
+#define MAIN_IPC_OPTION_STRING  "m:o:c:d:hv"
+int process_main_ipcCmd(int argc, const char *argv[],
+                            menu_command_t *menu_tbl) {
+    int mode   = 0; // 0: read, 1: write
+    int count  = 1;
+    int offset = 0;
+    unsigned int value = 0;
+    uint32_t ipc_data[1024];
+    int index = 0;
+    int argflag;
+    int result;
+    int idx;
+
+    while ((argflag = getopt(argc, (char **)argv,
+                             MAIN_IPC_OPTION_STRING)) != -1) {
+        switch (argflag) {
+        case 'm':
+            if (str2int(optarg, &mode) != 0) {
+                printf("Invalid parameter given or out of range for '-m'.");
+                return -1;
+            }
+            if ((mode < 0) || (mode > 1)) {
+                printf("mode %d is out of range.", mode);
+                return -1;
+            }
+            break;
+        case 'o':
+            if (str2int(optarg, &offset) != 0) {
+                printf("Invalid parameter given or out of range for '-o'.");
+                return -1;
+            }
+            if ((offset < 0) || (offset > 4092)) {
+                printf("offset %d is out of range.", offset);
+                return -1;
+            }
+            if(offset % 4) {
+                printf("The offset value(%d) is not aligned by 4 bytes.", offset);
+                return -1;
+            }
+            break;
+        case 'c':
+            if (str2int(optarg, &count) != 0) {
+                printf("Invalid parameter given or out of range for '-c'.");
+                return -1;
+            }
+            if ((count < 1) || (count > 1024)) {
+                printf("count %d is out of range.", count);
+                return -1;
+            }
+            break;
+        case 'd':
+            if (str2uint(optarg, &value) != 0) {
+                printf("Invalid parameter given or out of range for '-d'.");
+                return -1;
+            }
+            ipc_data[index++] = value;
+            index %= 1024;
+            break;
+        case 'v':
+            log_level_set(++verbose);
+            if (verbose == 2) {
+                /* add version info to debug output */
+                lprintf(LOG_DEBUG, "%s\n", VERSION_STRING);
+            }
+            break;
+
+        case 'h':
+            process_manCmd(argc, argv, menu_tbl, ECHO);
+            return 0;
+        }
+    }
+
+    if(mode == 1) { // write
+        for(idx = index; idx < count; idx++) {
+            ipc_data[idx] = 0x95302342;
+        }
+    }
+    result = ipc_app(mode, offset, count, ipc_data);
+	if(result) {
+		printf("Failt to ipc_app, result: %d\n", result);
+	} else {
+		if(mode == 0) { // read
+			for(idx = 0; idx < count; idx++) {
+				if(((idx) % 8) == 0) {
+					printf("\n");
+				}
+				printf(" %08x", ipc_data[idx]);
+			}
+			printf("\n");
+		}
+	}
+
+    return result;
 }
 
 int command_parser(int argc, char ** argv) {
