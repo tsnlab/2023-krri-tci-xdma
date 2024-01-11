@@ -3,7 +3,6 @@
  *
  * Copyright (c) 2016-present,  Xilinx, Inc.
  * All rights reserved.
- *
  * This source code is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
@@ -31,6 +30,7 @@
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/workqueue.h>
+#include <linux/netdevice.h>
 
 /* Add compatibility checking for RHEL versions */
 #if defined(RHEL_RELEASE_CODE)
@@ -589,6 +589,7 @@ struct xdma_dev {
 
 	unsigned long magic;		/* structure ID for sanity checks */
 	struct pci_dev *pdev;	/* pci device struct from probe() */
+        struct net_device *ndev; /* net device struct from probe() */
 	int idx;		/* dev index */
 
 	const char *mod_name;		/* name of module owning the dev */
@@ -697,4 +698,9 @@ int engine_service_poll(struct xdma_engine *engine, u32 expected_desc_count);
 ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 			unsigned int aperture, struct sg_table *sgt,
 			bool dma_mapped, int timeout_ms);
+ssize_t xdma_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
+			 struct sg_table *sgt, bool dma_mapped, int timeout_ms);
+
+int xdma_temp(struct net_device *netdev);
+
 #endif /* XDMA_LIB_H */

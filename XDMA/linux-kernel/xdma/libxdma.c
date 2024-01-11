@@ -20,7 +20,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ":%s: " fmt, __func__
 
 #include <linux/module.h>
-#include <linux/kernel.h>
+#include <linux/kernel.h> 
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/errno.h>
@@ -31,10 +31,11 @@
 #include "libxdma_api.h"
 #include "cdev_sgdma.h"
 #include "xdma_thread.h"
+#include "xdma_netdev.h"
 
 
 /* Module Parameters */
-static unsigned int poll_mode = 1;
+static unsigned int poll_mode;
 module_param(poll_mode, uint, 0644);
 MODULE_PARM_DESC(poll_mode, "Set 1 for hw polling, default is 0 (interrupts)");
 
@@ -2096,7 +2097,7 @@ static int irq_msi_setup(struct xdma_dev *xdev, struct pci_dev *pdev)
 	rv = request_irq(pdev->irq, xdma_isr, 0, xdev->mod_name, xdev);
 	if (rv)
 		dbg_init("Couldn't use IRQ#%d, %d\n", pdev->irq, rv);
-	else
+	else 
 		dbg_init("Using IRQ#%d with 0x%p\n", pdev->irq, xdev);
 
 	return rv;
@@ -3404,7 +3405,12 @@ ssize_t xdma_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
 	int nents;
 	enum dma_data_direction dir = write ? DMA_TO_DEVICE : DMA_FROM_DEVICE;
 	struct xdma_request_cb *req = NULL;
+        struct net_device *ndev;
+        struct xdma_private *priv;
+        struct sk_buff *skb;
 
+        ndev = (struct net_device *)xdev->ndev;
+        priv = netdev_priv(ndev);
 	if (!dev_hndl)
 		return -EINVAL;
 
@@ -3530,6 +3536,28 @@ ssize_t xdma_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
 
 		switch (xfer->state) {
 		case TRANSFER_STATE_COMPLETED:
+                        if (write == 0) {
+                                struct xdma_result *result = xfer->res_virt;
+                                int skb_len = result[0].length;
+                                skb = dev_alloc_skb(skb_len + 2);
+	                        if (!skb) {
+                                        pr_err("dev_alloc_skb failed\n");
+                                        goto unmap_sgl;
+	                        }
+	                        skb_reserve(skb, 2);
+                                /* Copy data from rx_buffer + 16 to skb */
+                                /* First 16 bytes are for the Rx metadata */
+	                        memcpy(skb_put(skb, skb_len), 
+                                                priv->rx_buffer + 16,
+                                                skb_len - 16);
+
+	                        skb->dev = ndev;
+	                        skb->protocol = eth_type_trans(skb, ndev);
+	                        skb->ip_summed = CHECKSUM_UNNECESSARY;
+
+                                /* Transfer the skb to the network stack */
+	                        netif_rx(skb);
+                        }
 			spin_unlock_irqrestore(&engine->lock, flags);
 
 			rv = 0;
@@ -3541,7 +3569,6 @@ ssize_t xdma_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
 			if (engine->streaming &&
 			    engine->dir == DMA_FROM_DEVICE) {
 				struct xdma_result *result = xfer->res_virt;
-
 				for (i = 0; i < xfer->desc_cmpl; i++)
 					done += result[i].length;
 

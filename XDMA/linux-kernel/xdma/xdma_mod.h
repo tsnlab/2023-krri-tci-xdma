@@ -54,6 +54,9 @@
 #define MAGIC_CHAR	0xCCCCCCCCUL
 #define MAGIC_BITSTREAM 0xBBBBBBBBUL
 
+/* Packet buffer size */
+#define XDMA_BUFFER_SIZE (1560)
+
 extern unsigned int desc_blen_max;
 extern unsigned int h2c_timeout;
 extern unsigned int c2h_timeout;
@@ -77,6 +80,7 @@ struct xdma_pci_dev {
 	unsigned long magic;		/* structure ID for sanity checks */
 	struct pci_dev *pdev;	/* pci device struct from probe() */
 	struct xdma_dev *xdev;
+        struct net_device *ndev;
 	int major;		/* major number */
 	int instance;		/* instance number */
 	int user_max;

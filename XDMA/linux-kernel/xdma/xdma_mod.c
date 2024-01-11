@@ -1,9 +1,6 @@
 /*
  * This file is part of the Xilinx DMA IP Core driver for Linux
- *
- * Copyright (c) 2016-present,  Xilinx, Inc.
- * All rights reserved.
- *
+ * Copyright (c) 2016-present,  Xilinx, Inc. All rights reserved.
  * This source code is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
@@ -29,10 +26,10 @@
 #include "xdma_mod.h"
 #include "xdma_cdev.h"
 #include "version.h"
+#include "xdma_netdev.h"
 
 #define DRV_MODULE_NAME		"xdma"
 #define DRV_MODULE_DESC		"Xilinx XDMA Reference Driver"
-
 static char version[] =
 	DRV_MODULE_DESC " " DRV_MODULE_NAME " v" DRV_MODULE_VERSION "\n";
 
@@ -148,12 +145,53 @@ static struct xdma_pci_dev *xpdev_alloc(struct pci_dev *pdev)
 	return xpdev;
 }
 
+/* TODO: Add tc function */
+static const struct net_device_ops xdma_netdev_ops = {
+        .ndo_open = xdma_netdev_open,
+        .ndo_stop = xdma_netdev_close,
+        .ndo_start_xmit = xdma_netdev_start_xmit,
+};
+
+static void tx_work_handler(struct work_struct *work)
+{
+        struct xdma_private *priv;
+
+        priv = container_of(work, struct xdma_private, tx_work);
+        xdma_tx_handler(priv->ndev);
+        return ;
+}
+
+static void rx_work_handler(struct work_struct *work)
+{
+        struct xdma_private *priv;
+
+        priv = container_of(work, struct xdma_private, rx_work);
+        xdma_rx_handler(priv->ndev);
+        return ;
+}
+
+static int rx_thread(void *data)
+{
+        struct xdma_private *priv = data;
+
+        while (kthread_should_stop() == 0) {
+                /* TODO: Check if the board got packets */
+                schedule_work(&priv->rx_work);
+                msleep(100);
+        }
+        return 0;
+}
+
+static struct task_struct *task;
+
 static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	int rv = 0;
 	struct xdma_pci_dev *xpdev = NULL;
 	struct xdma_dev *xdev;
 	void *hndl;
+        struct net_device *ndev;
+        struct xdma_private *priv;
 
 	xpdev = xpdev_alloc(pdev);
 	if (!xpdev)
@@ -194,7 +232,7 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		if (rv)
 			goto err_out;
 	}
-
+        
 	/* make sure no duplicate */
 	xdev = xdev_find_by_pdev(pdev);
 	if (!xdev) {
@@ -219,9 +257,80 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	rv = xpdev_create_interfaces(xpdev);
 	if (rv)
 		goto err_out;
-
 	dev_set_drvdata(&pdev->dev, xpdev);
 
+        /* TODO: Set the TSN register to 0x1 */
+
+        /* Allocate the network device */
+        ndev = alloc_etherdev(sizeof(struct xdma_private));
+        if (!ndev) {
+                pr_err("alloc_etherdev failed\n");
+                rv = -ENOMEM;
+                goto err_out;
+        }
+
+        xdev->ndev = ndev;
+        xpdev->ndev = ndev;
+
+        /* Set up the network interface */
+        ndev->netdev_ops = &xdma_netdev_ops;
+        SET_NETDEV_DEV(ndev, &pdev->dev);
+        priv = netdev_priv(ndev);
+        memset(priv, 0, sizeof(struct xdma_private));
+        priv->pdev = pdev;
+        priv->ndev = ndev;
+        priv->xdev = xpdev->xdev;
+        priv->rx_engine = &xdev->engine_c2h[0];
+        priv->tx_engine = &xdev->engine_h2c[0];
+        
+        //mutex_init(&priv->lock);
+        //spin_lock_init(&priv->skb_lock);
+
+        memcpy(ndev->dev_addr, "\xca\x11\x22\x3a\x44\x55", ETH_ALEN);
+
+        INIT_WORK(&priv->tx_work, tx_work_handler);
+        INIT_WORK(&priv->rx_work, rx_work_handler);
+
+        priv->tx_buffer = kmalloc(XDMA_BUFFER_SIZE, GFP_KERNEL);
+        if (!priv->tx_buffer) {
+                pr_err("kmalloc failed\n");
+                free_netdev(ndev);
+                rv = -ENOMEM;
+                goto err_out;
+        }
+
+        priv->rx_buffer = kmalloc(XDMA_BUFFER_SIZE, GFP_KERNEL);
+        if (!priv->rx_buffer) {
+                pr_err("kmalloc failed\n");
+                kfree(priv->tx_buffer);
+                free_netdev(ndev);
+                rv = -ENOMEM;
+                goto err_out;
+        }
+
+        rv = register_netdev(ndev);
+        if (rv < 0) {
+                free_netdev(ndev);
+                kfree(priv->tx_buffer);
+                kfree(priv->rx_buffer);
+                pr_err("register_netdev failed\n");
+                goto err_out;
+        }
+
+        /* Polling thread */
+        task = kthread_run(rx_thread, priv, "rx_thread");
+        if (IS_ERR(task)) {
+                pr_err("kthread_run failed\n");
+                unregister_netdev(ndev);
+                free_netdev(ndev);
+                kfree(priv->tx_buffer);
+                kfree(priv->rx_buffer);
+                rv = -ENOMEM;
+                goto err_out;
+        }
+
+        netif_carrier_off(ndev);
+        netif_stop_queue(ndev);
 	return 0;
 
 err_out:
@@ -233,6 +342,8 @@ err_out:
 static void remove_one(struct pci_dev *pdev)
 {
 	struct xdma_pci_dev *xpdev;
+        struct net_device *ndev;
+        struct xdma_private *priv;
 
 	if (!pdev)
 		return;
@@ -243,8 +354,24 @@ static void remove_one(struct pci_dev *pdev)
 
 	pr_info("pdev 0x%p, xdev 0x%p, 0x%p.\n",
 		pdev, xpdev, xpdev->xdev);
-	xpdev_free(xpdev);
 
+        /* Wait for the thread to stop */
+        kthread_stop(task);
+
+        ndev = xpdev->ndev;
+        priv = netdev_priv(ndev);
+
+        /* Wait for the work to stop */
+        cancel_work_sync(&priv->tx_work);
+        cancel_work_sync(&priv->rx_work);
+
+        /* Free the network device */
+        kfree(priv->tx_buffer);
+        kfree(priv->rx_buffer);
+        unregister_netdev(ndev);
+        free_netdev(ndev);
+
+	xpdev_free(xpdev);
 	dev_set_drvdata(&pdev->dev, NULL);
 }
 
@@ -289,8 +416,7 @@ static pci_ers_result_t xdma_slot_reset(struct pci_dev *pdev)
 }
 
 static void xdma_error_resume(struct pci_dev *pdev)
-{
-	struct xdma_pci_dev *xpdev = dev_get_drvdata(&pdev->dev);
+{ struct xdma_pci_dev *xpdev = dev_get_drvdata(&pdev->dev);
 
 	pr_info("dev 0x%p,0x%p.\n", pdev, xpdev);
 #if PCI_AER_NAMECHANGE
@@ -355,8 +481,7 @@ static struct pci_driver pci_driver = {
 static int xdma_mod_init(void)
 {
 	int rv;
-
-	pr_info("%s", version);
+        pr_info("%s", version);
 
 	if (desc_blen_max > XDMA_DESC_BLEN_MAX)
 		desc_blen_max = XDMA_DESC_BLEN_MAX;
