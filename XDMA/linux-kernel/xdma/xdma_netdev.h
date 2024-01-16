@@ -10,6 +10,9 @@
 
 #include "xdma_mod.h"
 
+#define RX_METADATA_SIZE 16
+#define TX_METADATA_SIZE 8
+
 struct xdma_private {
         struct pci_dev *pdev;
         struct net_device *ndev;
