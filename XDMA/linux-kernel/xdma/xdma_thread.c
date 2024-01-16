@@ -300,9 +300,8 @@ int xdma_threads_create(unsigned int num_threads)
 		thp->fproc = xdma_thread_cmpl_status_proc;
 		thp->fpending = xdma_thread_cmpl_status_pend;
 		rv = xdma_kthread_start(thp, "cmpl_status_th", thread_cnt);
-		if (rv < 0) 
+		if (rv < 0)
 			goto cleanup_threads;
-                
 
 		thread_cnt++;
 		if (thread_cnt == num_threads)
