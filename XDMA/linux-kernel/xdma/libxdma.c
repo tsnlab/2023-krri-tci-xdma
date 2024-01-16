@@ -2097,7 +2097,7 @@ static int irq_msi_setup(struct xdma_dev *xdev, struct pci_dev *pdev)
 	rv = request_irq(pdev->irq, xdma_isr, 0, xdev->mod_name, xdev);
 	if (rv)
 		dbg_init("Couldn't use IRQ#%d, %d\n", pdev->irq, rv);
-	else 
+	else
 		dbg_init("Using IRQ#%d with 0x%p\n", pdev->irq, xdev);
 
 	return rv;
@@ -3208,7 +3208,6 @@ ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 		sg = req->sg;
 		ep_addr = req->ep_addr + (req->offset & (aperture - 1));
 		i = req->sg_idx;
-		
 		for (sg = req->sg; i < sg_max && desc_idx < desc_max;
 			i++, sg = sg_next(sg)) {
 			dma_addr_t addr = sg_dma_address(sg);
@@ -3241,7 +3240,6 @@ ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 				ep_addr += len;
 				addr += len;
 				tlen -= len;
-				
 				desc_idx++;
 				desc_cnt++;
 				if (desc_idx == desc_max)
@@ -3253,7 +3251,6 @@ ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 			else
 				break;
 		}
-		
 		req->sg_offset = sg_offset;
 		req->sg_idx = i;
 
