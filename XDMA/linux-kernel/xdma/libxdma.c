@@ -3548,7 +3548,7 @@ ssize_t xdma_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
 				/* First 16 bytes are Rx metadata */
 				memcpy(skb_put(skb, skb_len),
 						priv->rx_buffer + RX_METADATA_SIZE,
-						skb_len - 16);
+						skb_len - RX_METADATA_SIZE);
 
 				skb->dev = ndev;
 				skb->protocol = eth_type_trans(skb, ndev);

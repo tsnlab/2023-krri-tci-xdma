@@ -4,7 +4,7 @@
 #include "libxdma.h"
 
 #ifdef XDMA_DEBUG
-static void packet_dump(unsigned char *buf, int len)
+static void dump_packet(unsigned char *buf, int len)
 {
         int i;
         for (i = 0; i < len; i++) {
@@ -69,13 +69,15 @@ static void char_sgdma_unmap_kernel_buf(struct xdma_io_cb *cb, bool write)
         int i;
 
         sg_free_table(&cb->sgt);
-        if (!cb->pages || !cb->pages_nr)
+        if (!cb->pages || !cb->pages_nr) {
                 return;
+        }
 
         for (i = 0; i < cb->pages_nr; i++) {
                 if (cb->pages[i]) {
-                        if (!write)
+                        if (!write) {
                                 set_page_dirty_lock(cb->pages[i]);
+                        }
                         put_page(cb->pages[i]);
                 } else
                         break;
@@ -94,9 +96,10 @@ static int char_sgdma_map_kernel_buf_to_sgl(struct xdma_io_cb *cb, bool write)
         unsigned long len = cb->len;
         void __kernel *buf = cb->buf;
         struct scatterlist *sg;
-        unsigned int pages_nr = (((unsigned long)buf + len + PAGE_SIZE - 1) -
-                                 ((unsigned long)buf & PAGE_MASK))
-                                >> PAGE_SHIFT;
+        unsigned int pages_nr = (
+            ((unsigned long)buf + len + PAGE_SIZE - 1)
+            - ((unsigned long)buf & PAGE_MASK)
+        ) >> PAGE_SHIFT;
         int i;
         int rv;
         struct kvec kv;
@@ -195,6 +198,10 @@ int xdma_rx_handler(struct net_device *ndev)
         memset(priv->rx_buffer, 0, XDMA_BUFFER_SIZE);
 
         cb.buf = priv->rx_buffer;
+	/*
+	 * FIXME: Currently driver doesn't know size of packets in H/W
+	 * so we set cb.len to XDMA_BUFFER_SIZE and this should be changed
+	 */
         cb.len = XDMA_BUFFER_SIZE;
         cb.ep_addr = 0;
         cb.write = 0;
@@ -257,13 +264,13 @@ int xdma_tx_handler(struct net_device *ndev)
          * The board send the packet to peer
          */
         ret = xdma_xfer_submit(
-                        xdev,
-                        engine->channel,
-                        1,
-                        0,
-                        &cb.sgt,
-                        0,
-                        1000);
+                xdev,
+                engine->channel,
+                1,
+                0,
+                &cb.sgt,
+                0,
+                1000);
         char_sgdma_unmap_kernel_buf(&cb, 1);
         dev_kfree_skb(priv->skb);
         netif_wake_queue(ndev);
