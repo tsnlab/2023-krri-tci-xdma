@@ -2498,8 +2498,6 @@ static void engine_alignments(struct xdma_engine *engine)
 		engine->addr_bits = address_bits;
 	} else {
 		/* Some default values if alignments are unspecified */
-		pr_info("engine %s alignments unspecified, using defaults\n",
-			engine->name);
 		engine->addr_align = 1;
 		engine->len_granularity = 1;
 		engine->addr_bits = 64;
