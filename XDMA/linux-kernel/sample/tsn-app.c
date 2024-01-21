@@ -221,7 +221,7 @@ menu_command_t  mainCommand_tbl[] = {
         "   set XDMA resource"},
     {"ipc",   EXECUTION_ATTR, process_main_ipcCmd, \
         "   ipc -m <mode> -o <offset> -c <count> -d <value> \n", \
-        "          <mode> default value: 0 (0: rd, 1: wr)\n"
+        "          <mode> default value: 0 (0: rd, 1: wr, 2: test)\n"
         "        <offset> default value: 0 (0 ~ 4092, 4 byte aligned value)\n"
         "         <count> default value: 1 (1 ~ 1024)\n"
         "         <value> default value: 0x95302342(4 byte value, Multiple entries possible, Valid only when writing)\n"
@@ -642,6 +642,25 @@ int write_ipc_data(int offset, int count, uint32_t ipc_data[]) {
     return xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, offset, count, ipc_data);
 }
 
+int test_ipc_data(int offset, int count, uint32_t ipc_data[]) {
+
+    int result;
+    int index;
+    uint32_t ipc_rd_data[1024];
+
+    result = xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, offset, count, ipc_data);
+    result = xdma_api_rd_ipc_data(XDMA_REGISTER_DEV, offset, count, ipc_rd_data);
+
+    for(index = 0; index < count; index++) {
+        if(ipc_data[index] != ipc_rd_data[index]) {
+            printf("wr_ipc_data[%4d]: 0x%08x, rd_ipc_data[%4d]: 0x%08x\n", 
+                    index, ipc_data[index], index, ipc_rd_data[index]);
+        }
+    }
+
+    return result;
+}
+
 int ipc_app(int mode, int offset, int count, uint32_t ipc_data[]) {
 
     switch(mode) {
@@ -650,6 +669,9 @@ int ipc_app(int mode, int offset, int count, uint32_t ipc_data[]) {
     break;
     case 1: // write
         return write_ipc_data(offset, count, ipc_data);
+    break;
+    case 2: // test
+        return test_ipc_data(offset, count, ipc_data);
     break;
     }
 
@@ -677,7 +699,7 @@ int process_main_ipcCmd(int argc, const char *argv[],
                 printf("Invalid parameter given or out of range for '-m'.");
                 return -1;
             }
-            if ((mode < 0) || (mode > 1)) {
+            if ((mode < 0) || (mode > 2)) {
                 printf("mode %d is out of range.", mode);
                 return -1;
             }
@@ -733,20 +755,25 @@ int process_main_ipcCmd(int argc, const char *argv[],
             ipc_data[idx] = 0x95302342;
         }
     }
+    if(mode == 2) { // test
+        for(idx = 0; idx < count; idx++) {
+            ipc_data[idx] = idx;
+        }
+    }
     result = ipc_app(mode, offset, count, ipc_data);
-	if(result) {
-		printf("Failt to ipc_app, result: %d\n", result);
-	} else {
-		if(mode == 0) { // read
-			for(idx = 0; idx < count; idx++) {
-				if(((idx) % 8) == 0) {
-					printf("\n");
-				}
-				printf(" %08x", ipc_data[idx]);
-			}
-			printf("\n");
-		}
-	}
+    if(result) {
+        printf("Failt to ipc_app, result: %d\n", result);
+    } else {
+        if(mode == 0) { // read
+            for(idx = 0; idx < count; idx++) {
+                if(((idx) % 8) == 0) {
+                    printf("\n");
+                }
+                printf(" %08x", ipc_data[idx]);
+            }
+            printf("\n");
+        }
+    }
 
     return result;
 }
