@@ -40,6 +40,12 @@ typedef uintptr_t UINTPTR;
 #define REG_TSN_CONFIG                              0x0004
 #define REG_TSN_CONTROL                             0x0008
 #define REG_SCRATCH                                 0x0010
+#define REG_ONE_SECOND_CNT                          0x0020 
+#define REG_GPTP_SLAVE_PPS_OFFSET                   0x0024
+#define REG_QBV_SLOT_STATUS                         0x0028
+
+#define REG_TASB_MIN_STARTING_DATA_CNT              0x0610
+#define REG_TPPB_MIN_STARTING_DATA_CNT              0x0620
 
 #define REG_RX_PACKETS                              0x0100
 #define REG_RX_BYTES_HIGH                           0x0110

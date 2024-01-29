@@ -35,6 +35,11 @@ struct reginfo reg_general[] = {
     {"TSN Control", REG_TSN_CONTROL},
     {"@sys count", REG_SYS_COUNT_HIGH},
     {"TEMAC status", REG_TEMAC_STATUS},
+    {"One Second Count", REG_ONE_SECOND_CNT},
+    {"gPTP Slave PPS Offset", REG_GPTP_SLAVE_PPS_OFFSET},
+    {"Qbv Slot Status", REG_QBV_SLOT_STATUS},
+    {"TASB Minimum starting data count", REG_TASB_MIN_STARTING_DATA_CNT},
+    {"TPPB Minimum starting data count", REG_TPPB_MIN_STARTING_DATA_CNT},
     {"", -1}
 };
 
@@ -649,7 +654,13 @@ int test_ipc_data(int offset, int count, uint32_t ipc_data[]) {
     uint32_t ipc_rd_data[1024];
 
     result = xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, offset, count, ipc_data);
+    if(result) {
+        printf("%s - error, xdma_api_wr_ipc_data\n", __func__);
+    }
     result = xdma_api_rd_ipc_data(XDMA_REGISTER_DEV, offset, count, ipc_rd_data);
+    if(result) {
+        printf("%s - error, xdma_api_rd_ipc_data\n", __func__);
+    }
 
     for(index = 0; index < count; index++) {
         if(ipc_data[index] != ipc_rd_data[index]) {
