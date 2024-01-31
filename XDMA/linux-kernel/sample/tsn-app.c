@@ -131,6 +131,10 @@ int tsn_app(int mode, int DataSize, char *InputFileName) {
 
     register_signal_handler();
 
+    set_register(REG_TASB_MIN_STARTING_DATA_CNT, 0x800F0000);
+    //set_register(REG_TASB_MIN_STARTING_DATA_CNT, 0x80010000);
+    set_register(REG_TPPB_MIN_STARTING_DATA_CNT, 0x10);
+
     memset(&rx_arg, 0, sizeof(rx_thread_arg_t));
     memcpy(rx_arg.devname, DEF_RX_DEVICE_NAME, sizeof(DEF_RX_DEVICE_NAME));
     memcpy(rx_arg.fn, InputFileName, MAX_INPUT_FILE_NAME_SIZE);
@@ -226,7 +230,7 @@ menu_command_t  mainCommand_tbl[] = {
         "   set XDMA resource"},
     {"ipc",   EXECUTION_ATTR, process_main_ipcCmd, \
         "   ipc -m <mode> -o <offset> -c <count> -d <value> \n", \
-        "          <mode> default value: 0 (0: rd, 1: wr, 2: test)\n"
+        "          <mode> default value: 0 (0: rd, 1: wr, 2: test, 3: auto)\n"
         "        <offset> default value: 0 (0 ~ 4092, 4 byte aligned value)\n"
         "         <count> default value: 1 (1 ~ 1024)\n"
         "         <value> default value: 0x95302342(4 byte value, Multiple entries possible, Valid only when writing)\n"
@@ -672,6 +676,77 @@ int test_ipc_data(int offset, int count, uint32_t ipc_data[]) {
     return result;
 }
 
+#define IPC_STATE_READY      0x1
+#define IPC_STATE_TRIGER     0x2
+#define IPC_STATE_PROCESSING 0x3
+
+int auto_ipc_data(int offset, int count, uint32_t ipc_data[]) {
+
+    int result;
+    uint32_t ipc_rd_data[1024];
+    uint32_t msg0 = 0x0;
+    uint32_t msg1 = 0x100;
+
+    ipc_rd_data[0] = IPC_STATE_READY;
+    result = xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, 0x40, 1, ipc_rd_data);
+    if(result) {
+        printf("%s - error, xdma_api_wr_ipc_data(offset: 0x40)\n", __func__);
+        return -1;
+    }
+
+    for(int idx = 0 ; idx < count; idx++) {
+        // #define IPC_MB_2_XDMA_MSG_OFFSET                    0x0800
+        result = xdma_api_rd_ipc_data(XDMA_REGISTER_DEV, 0, 3, ipc_rd_data);
+        if(result) {
+            printf("%s - error, xdma_api_rd_ipc_data(offset: 0), idx: %d\n", __func__, idx);
+            return -1;
+        }
+
+        if(ipc_rd_data[0] == IPC_STATE_TRIGER) {
+            ipc_rd_data[0] = IPC_STATE_PROCESSING;
+            result = xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, 0, 1, ipc_rd_data);
+            if(result) {
+                printf("%s - error, xdma_api_wr_ipc_data(offset: 0), idx: %d\n", __func__, idx);
+                return -1;
+            }
+            printf("    Received IPC msg. : 0x%08x 0x%08x\n", ipc_rd_data[1], ipc_rd_data[2]);
+            ipc_rd_data[0] = IPC_STATE_READY;
+            result = xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, 0, 1, ipc_rd_data);
+            if(result) {
+                printf("%s - error, xdma_api_wr_ipc_data(offset: 0), idx: %d\n", __func__, idx);
+                return -1;
+            }
+        }
+
+        result = xdma_api_rd_ipc_data(XDMA_REGISTER_DEV, 0x40, 1, ipc_rd_data);
+        if(result) {
+            printf("%s - error, xdma_api_rd_ipc_data(offset: 0x40), idx: %d\n", __func__, idx);
+            return -1;
+        }
+        if(ipc_rd_data[0] == IPC_STATE_READY) {
+            ipc_rd_data[0] = msg0;
+            ipc_rd_data[1] = msg1;
+            msg0++;
+            msg1++;
+            result = xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, 0x44, 2, ipc_rd_data);
+            if(result) {
+                printf("%s - error, xdma_api_wr_ipc_data(offset: 44), idx: %d\n", __func__, idx);
+                return -1;
+            }
+            ipc_rd_data[0] = IPC_STATE_TRIGER;
+            result = xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, 0x40, 1, ipc_rd_data);
+            if(result) {
+                printf("%s - error, xdma_api_wr_ipc_data(offset: 40), idx: %d\n", __func__, idx);
+                return -1;
+            }
+        }
+
+        sleep(1);
+    }
+
+    return 0;
+}
+
 int ipc_app(int mode, int offset, int count, uint32_t ipc_data[]) {
 
     switch(mode) {
@@ -683,6 +758,9 @@ int ipc_app(int mode, int offset, int count, uint32_t ipc_data[]) {
     break;
     case 2: // test
         return test_ipc_data(offset, count, ipc_data);
+    break;
+    case 3: // auto
+        return auto_ipc_data(offset, count, ipc_data);
     break;
     }
 
@@ -710,7 +788,7 @@ int process_main_ipcCmd(int argc, const char *argv[],
                 printf("Invalid parameter given or out of range for '-m'.");
                 return -1;
             }
-            if ((mode < 0) || (mode > 2)) {
+            if ((mode < 0) || (mode > 3)) {
                 printf("mode %d is out of range.", mode);
                 return -1;
             }
