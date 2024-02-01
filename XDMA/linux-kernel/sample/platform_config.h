@@ -131,12 +131,25 @@ typedef uintptr_t UINTPTR;
 #define C2H_CHANNEL_PERFORMANCE_DATA_COUNT_L        (0x10CC)
 #define C2H_CHANNEL_PERFORMANCE_DATA_COUNT_H        (0x10D0)
 
+#define CONFIG_BLOCK_IDENTIFIER                     (0x3000)
+#define CONFIG_BLOCK_BUSDEV                         (0x3004)
+#define CONFIG_BLOCK_PCIE_MAX_PAYLOAD_SIZE          (0x3008)
+#define CONFIG_BLOCK_PCIE_MAX_READ_REQUEST_SIZE     (0x300C)
+#define CONFIG_BLOCK_SYSTEM_ID                      (0x3010)
+#define CONFIG_BLOCK_MSI_ENABLE                     (0x3014)
+#define CONFIG_BLOCK_PCIE_DATA_WIDTH                (0x3018)
+#define CONFIG_PCIE_CONTROL                         (0x301C)
+#define CONFIG_AXI_USER_MAX_PAYLOAD_SIZE            (0x3040)
+#define CONFIG_AXI_USER_MAX_READ_REQUEST_SIZE       (0x3044)
+#define CONFIG_WRITE_FLUSH_TIMEOUT                  (0x3060)
+
 #define DUMPREG_GENERAL 0x1
 #define DUMPREG_RX      0x2
 #define DUMPREG_TX      0x4
 #define DUMPREG_H2C     0x8
 #define DUMPREG_C2H     0x10
-#define DUMPREG_ALL     0x1F
+#define DUMPREG_CONFIG  0x20
+#define DUMPREG_ALL     0x3F
 
 struct rx_metadata {
     uint64_t timestamp;

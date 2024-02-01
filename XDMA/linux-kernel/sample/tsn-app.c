@@ -122,6 +122,21 @@ struct reginfo chan_c2h[] = {
     {"", -1}
 };
 
+struct reginfo chan_config[] = {
+    {"Config Block Identifier", CONFIG_BLOCK_IDENTIFIER},
+    {"Config Block BusDev", CONFIG_BLOCK_BUSDEV},
+    {"Config Block PCIE Max Payload Size", CONFIG_BLOCK_PCIE_MAX_PAYLOAD_SIZE},
+    {"Config Block PCIE Max Read Request Size", CONFIG_BLOCK_PCIE_MAX_READ_REQUEST_SIZE},
+    {"Config Block System ID", CONFIG_BLOCK_SYSTEM_ID},
+    {"Config Block MSI Enable", CONFIG_BLOCK_MSI_ENABLE},
+    {"Config Block PCIE Data Width", CONFIG_BLOCK_PCIE_DATA_WIDTH},
+    {"Config PCIE Control", CONFIG_PCIE_CONTROL},
+    {"Config AXI User Max Payload Size", CONFIG_AXI_USER_MAX_PAYLOAD_SIZE},
+    {"Config AXI User Max Read Request Size", CONFIG_AXI_USER_MAX_READ_REQUEST_SIZE},
+    {"Config Write Flush Timeout", CONFIG_WRITE_FLUSH_TIMEOUT},
+    {"", -1}
+};
+
 /*****************************************************************************/
 
 void xdma_signal_handler(int sig) {
@@ -265,7 +280,7 @@ menu_command_t  mainCommand_tbl[] = {
         "            <size> default value: 1508 (64 ~ 4096)"},
     {"show",  EXECUTION_ATTR, process_main_showCmd, \
         "   show register [gen, rx, tx]\n" 
-        "   show channel [h2c, c2h]\n", \
+        "   show channel [h2c, c2h, config]\n", \
         "   Show XDMA resource"},
     {"get",   EXECUTION_ATTR, process_main_getCmd, \
         "   get register <addr(Hex)>\n", \
@@ -443,9 +458,11 @@ argument_list_t  showRegisterArgument_tbl[] = {
 
 int32_t fn_show_channel_h2cArgument(int32_t argc, const char *argv[]);
 int32_t fn_show_channel_c2hArgument(int32_t argc, const char *argv[]);
+int32_t fn_show_channel_configArgument(int32_t argc, const char *argv[]);
 argument_list_t  showChannelArgument_tbl[] = {
         {"h2c", fn_show_channel_h2cArgument},
         {"c2h", fn_show_channel_c2hArgument},
+        {"config", fn_show_channel_configArgument},
         {0,     NULL}
     };
 
@@ -526,6 +543,7 @@ void dump_registers(int dumpflag, int on) {
     if (dumpflag & DUMPREG_TX) dump_reginfo(reg_tx);
     if (dumpflag & DUMPREG_H2C) dump_chaninfo(chan_h2c);
     if (dumpflag & DUMPREG_C2H) dump_chaninfo(chan_c2h);
+    if (dumpflag & DUMPREG_CONFIG) dump_chaninfo(chan_config);
     printf("==== Register Dump[%d] End ====\n", on);
 }
 
@@ -594,6 +612,12 @@ int32_t fn_show_channel_h2cArgument(int32_t argc, const char *argv[]) {
 int32_t fn_show_channel_c2hArgument(int32_t argc, const char *argv[]) {
 
     dump_registers(DUMPREG_C2H, 1);
+    return 0;
+}
+
+int32_t fn_show_channel_configArgument(int32_t argc, const char *argv[]) {
+
+    dump_registers(DUMPREG_CONFIG, 1);
     return 0;
 }
 
