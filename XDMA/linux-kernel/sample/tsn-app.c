@@ -286,7 +286,8 @@ menu_command_t  mainCommand_tbl[] = {
         "   get register <addr(Hex)>\n", \
         "   get XDMA resource"},
     {"set",   EXECUTION_ATTR, process_main_setCmd, \
-        "   set register <addr(Hex)> <data(Hex)>\n", \
+        "   set register <addr(Hex)> <data(Hex)>\n" \
+        "   set channel <addr(Hex)> <data(Hex)>\n", \
         "   set XDMA resource"},
     {"ipc",   EXECUTION_ATTR, process_main_ipcCmd, \
         "   ipc -m <mode> -o <offset> -c <count> -d <value> \n", \
@@ -481,8 +482,10 @@ argument_list_t  getArgument_tbl[] = {
     };
 
 int fn_set_registerArgument(int argc, const char *argv[]);
+int fn_set_channelArgument(int argc, const char *argv[]);
 argument_list_t  setArgument_tbl[] = {
         {"register", fn_set_registerArgument},
+        {"channel",  fn_set_channelArgument},
         {0,          NULL}
     };
 
@@ -500,6 +503,11 @@ uint32_t get_register(int offset) {
     xdma_api_rd_register(XDMA_REGISTER_DEV, offset, 'w', &read_val);
 
     return read_val;
+}
+
+int set_channel(int offset, uint32_t val) {
+
+    return xdma_api_wr_register(XDMA_CHANNEL_DEV, offset, 'w', val);
 }
 
 uint32_t get_channel(int offset) {
@@ -715,6 +723,35 @@ int fn_set_registerArgument(int argc, const char *argv[]) {
 
     set_register(addr, value);
     printf("address(%08x): %08x\n", addr, get_register(addr));
+
+    return 0;
+}
+
+int fn_set_channelArgument(int argc, const char *argv[]) {
+
+    int32_t addr = 0x00c0; // Scratch Register
+    int32_t value = 0x3;
+
+    if(argc > 0) {
+        if (str_to_hex((char *)argv[0], &addr) != 0) {
+            printf("Invalid parameter: %s\r\n", argv[0]);
+            return ERR_INVALID_PARAMETER;
+        }
+        if(argc > 1) {
+            if (str_to_hex((char *)argv[1], &value) != 0) {
+                printf("Invalid parameter: %s\r\n", argv[1]);
+                return ERR_INVALID_PARAMETER;
+            }
+        }
+    }
+
+    if(addr % 4) {
+        printf("The address value(0x%08x) does not align with 4-byte alignment.\r\n", addr);
+        return ERR_INVALID_PARAMETER;
+    }
+
+    set_channel(addr, value);
+    printf("address(%08x): %08x\n", addr, get_channel(addr));
 
     return 0;
 }
