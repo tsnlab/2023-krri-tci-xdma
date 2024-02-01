@@ -93,10 +93,50 @@ typedef uintptr_t UINTPTR;
 
 #define TSCB_ADDRESS                            (0x44C00000)
 
+#define H2C_CHANNEL_IDENTIFIER                      (0x0000)
+#define H2C_CHANNEL_CONTROL1                        (0x0004)
+#define H2C_CHANNEL_CONTROL2                        (0x0008)
+#define H2C_CHANNEL_CONTROL3                        (0x000C)
+#define H2C_CHANNEL_STATUS1                         (0x0040)
+#define H2C_CHANNEL_STATUS2                         (0x0044)
+#define H2C_CHANNEL_COMPLETED_DESCRIPTOR_COUNT      (0x0048)
+#define H2C_CHANNEL_ALIGNMENTS                      (0x004C)
+#define H2C_POLL_MODE_LOW_WRITE_BACK_ADDRESS        (0x0088)
+#define H2C_POLL_MODE_HIGH_WRITE_BACK_ADDRESS       (0x008C)
+#define H2C_CHANNEL_INTERRUPT_ENABLE_MASK1          (0x0090)
+#define H2C_CHANNEL_INTERRUPT_ENABLE_MASK2          (0x0094)
+#define H2C_CHANNEL_INTERRUPT_ENABLE_MASK3          (0x0098)
+#define H2C_CHANNEL_PERFORMANCE_MONITOR_CONTROL     (0x00C0)
+#define H2C_CHANNEL_PERFORMANCE_CYCLE_COUNT_L       (0x00C4)
+#define H2C_CHANNEL_PERFORMANCE_CYCLE_COUNT_H       (0x00C8)
+#define H2C_CHANNEL_PERFORMANCE_DATA_COUNT_L        (0x00CC)
+#define H2C_CHANNEL_PERFORMANCE_DATA_COUNT_H        (0x00D0)
+
+#define C2H_CHANNEL_IDENTIFIER                      (0x1000)
+#define C2H_CHANNEL_CONTROL1                        (0x1004)
+#define C2H_CHANNEL_CONTROL2                        (0x1008)
+#define C2H_CHANNEL_CONTROL3                        (0x100C)
+#define C2H_CHANNEL_STATUS1                         (0x1040)
+#define C2H_CHANNEL_STATUS2                         (0x1044)
+#define C2H_CHANNEL_COMPLETED_DESCRIPTOR_COUNT      (0x1048)
+#define C2H_CHANNEL_ALIGNMENTS                      (0x104C)
+#define C2H_POLL_MODE_LOW_WRITE_BACK_ADDRESS        (0x1088)
+#define C2H_POLL_MODE_HIGH_WRITE_BACK_ADDRESS       (0x108C)
+#define C2H_CHANNEL_INTERRUPT_ENABLE_MASK1          (0x1090)
+#define C2H_CHANNEL_INTERRUPT_ENABLE_MASK2          (0x1094)
+#define C2H_CHANNEL_INTERRUPT_ENABLE_MASK3          (0x1098)
+#define C2H_CHANNEL_PERFORMANCE_MONITOR_CONTROL     (0x10C0)
+#define C2H_CHANNEL_PERFORMANCE_CYCLE_COUNT_L       (0x10C4)
+#define C2H_CHANNEL_PERFORMANCE_CYCLE_COUNT_H       (0x10C8)
+#define C2H_CHANNEL_PERFORMANCE_DATA_COUNT_L        (0x10CC)
+#define C2H_CHANNEL_PERFORMANCE_DATA_COUNT_H        (0x10D0)
+
 #define DUMPREG_GENERAL 0x1
 #define DUMPREG_RX      0x2
 #define DUMPREG_TX      0x4
-#define DUMPREG_ALL     0x7
+#define DUMPREG_H2C     0x8
+#define DUMPREG_C2H     0x10
+#define DUMPREG_ALL     0x1F
 
 struct rx_metadata {
     uint64_t timestamp;

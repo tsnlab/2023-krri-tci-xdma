@@ -78,6 +78,50 @@ struct reginfo reg_tx[] = {
     {"", -1}
 };
 
+struct reginfo chan_h2c[] = {
+    {"H2C Channel Identifier", H2C_CHANNEL_IDENTIFIER},
+    {"H2C Channel Control 1", H2C_CHANNEL_CONTROL1},
+    {"H2C Channel Control 2", H2C_CHANNEL_CONTROL2},
+    {"H2C Channel Control 3", H2C_CHANNEL_CONTROL3},
+    {"H2C Channel Status 1", H2C_CHANNEL_STATUS1},
+    {"H2C Channel Status 2", H2C_CHANNEL_STATUS2},
+    {"H2C Channel Completed Descriptor Count", H2C_CHANNEL_COMPLETED_DESCRIPTOR_COUNT},
+    {"H2C Channel Alignments", H2C_CHANNEL_ALIGNMENTS},
+    {"H2C Poll Mode Low Write Back Address", H2C_POLL_MODE_LOW_WRITE_BACK_ADDRESS},
+    {"H2C Poll Mode High Write Back Address", H2C_POLL_MODE_HIGH_WRITE_BACK_ADDRESS},
+    {"H2C Channel Interrupt Enable Mask 1", H2C_CHANNEL_INTERRUPT_ENABLE_MASK1},
+    {"H2C Channel Interrupt Enable Mask 2", H2C_CHANNEL_INTERRUPT_ENABLE_MASK2},
+    {"H2C Channel Interrupt Enable Mask 3", H2C_CHANNEL_INTERRUPT_ENABLE_MASK3},
+    {"H2C Channel Performance Monitor Control", H2C_CHANNEL_PERFORMANCE_MONITOR_CONTROL},
+    {"H2C Channel Performance Cycle Count Low", H2C_CHANNEL_PERFORMANCE_CYCLE_COUNT_L},
+    {"H2C Channel Performance Cycle Count High", H2C_CHANNEL_PERFORMANCE_CYCLE_COUNT_H},
+    {"H2C Channel Performance Data Count Low", H2C_CHANNEL_PERFORMANCE_DATA_COUNT_L},
+    {"H2C Channel Performance Data Count High", H2C_CHANNEL_PERFORMANCE_DATA_COUNT_H},
+    {"", -1}
+};
+
+struct reginfo chan_c2h[] = {
+    {"C2H Channel Identifier", C2H_CHANNEL_IDENTIFIER},
+    {"C2H Channel Control 1", C2H_CHANNEL_CONTROL1},
+    {"C2H Channel Control 2", C2H_CHANNEL_CONTROL2},
+    {"C2H Channel Control 3", C2H_CHANNEL_CONTROL3},
+    {"C2H Channel Status 1", C2H_CHANNEL_STATUS1},
+    {"C2H Channel Status 2", C2H_CHANNEL_STATUS2},
+    {"C2H Channel Completed Descriptor Count", C2H_CHANNEL_COMPLETED_DESCRIPTOR_COUNT},
+    {"C2H Channel Alignments", C2H_CHANNEL_ALIGNMENTS},
+    {"C2H Poll Mode Low Write Back Address", C2H_POLL_MODE_LOW_WRITE_BACK_ADDRESS},
+    {"C2H Poll Mode High Write Back Address", C2H_POLL_MODE_HIGH_WRITE_BACK_ADDRESS},
+    {"C2H Channel Interrupt Enable Mask 1", C2H_CHANNEL_INTERRUPT_ENABLE_MASK1},
+    {"C2H Channel Interrupt Enable Mask 2", C2H_CHANNEL_INTERRUPT_ENABLE_MASK2},
+    {"C2H Channel Interrupt Enable Mask 3", C2H_CHANNEL_INTERRUPT_ENABLE_MASK3},
+    {"C2H Channel Performance Monitor Control", C2H_CHANNEL_PERFORMANCE_MONITOR_CONTROL},
+    {"C2H Channel Performance Cycle Count Low", C2H_CHANNEL_PERFORMANCE_CYCLE_COUNT_L},
+    {"C2H Channel Performance Cycle Count High", C2H_CHANNEL_PERFORMANCE_CYCLE_COUNT_H},
+    {"C2H Channel Performance Data Count Low", C2H_CHANNEL_PERFORMANCE_DATA_COUNT_L},
+    {"C2H Channel Performance Data Count High", C2H_CHANNEL_PERFORMANCE_DATA_COUNT_H},
+    {"", -1}
+};
+
 /*****************************************************************************/
 
 void xdma_signal_handler(int sig) {
@@ -220,7 +264,8 @@ menu_command_t  mainCommand_tbl[] = {
         "       <file name> default value: ./sample/pint-udp-response-packet.dat(Binary file for test)\n"
         "            <size> default value: 1508 (64 ~ 4096)"},
     {"show",  EXECUTION_ATTR, process_main_showCmd, \
-        "   show register [gen, rx, tx]\n", \
+        "   show register [gen, rx, tx]\n" 
+        "   show channel [h2c, c2h]\n", \
         "   Show XDMA resource"},
     {"get",   EXECUTION_ATTR, process_main_getCmd, \
         "   get register <addr(Hex)>\n", \
@@ -396,9 +441,19 @@ argument_list_t  showRegisterArgument_tbl[] = {
         {0,     NULL}
     };
 
+int32_t fn_show_channel_h2cArgument(int32_t argc, const char *argv[]);
+int32_t fn_show_channel_c2hArgument(int32_t argc, const char *argv[]);
+argument_list_t  showChannelArgument_tbl[] = {
+        {"h2c", fn_show_channel_h2cArgument},
+        {"c2h", fn_show_channel_c2hArgument},
+        {0,     NULL}
+    };
+
 int fn_show_registerArgument(int argc, const char *argv[]);
+int fn_show_channelArgument(int argc, const char *argv[]);
 argument_list_t  showArgument_tbl[] = {
         {"register", fn_show_registerArgument},
+        {"channel", fn_show_channelArgument},
         {0,          NULL}
     };
 
@@ -415,6 +470,7 @@ argument_list_t  setArgument_tbl[] = {
     };
 
 #define XDMA_REGISTER_DEV    "/dev/xdma0_user"
+#define XDMA_CHANNEL_DEV     "/dev/xdma0_control"
 
 int set_register(int offset, uint32_t val) {
 
@@ -425,6 +481,14 @@ uint32_t get_register(int offset) {
 
     uint32_t read_val = 0;
     xdma_api_rd_register(XDMA_REGISTER_DEV, offset, 'w', &read_val);
+
+    return read_val;
+}
+
+uint32_t get_channel(int offset) {
+
+    uint32_t read_val = 0;
+    xdma_api_rd_register(XDMA_CHANNEL_DEV, offset, 'w', &read_val);
 
     return read_val;
 }
@@ -442,11 +506,26 @@ void dump_reginfo(struct reginfo* reginfo) {
     }
 }
 
+void dump_chaninfo(struct reginfo* reginfo) {
+
+    for (int i = 0; reginfo[i].offset >= 0; i++) {
+        if (reginfo[i].name[0] == '@') {
+            uint64_t ll = get_channel(reginfo[i].offset);
+            ll = (ll << 32) | get_channel(reginfo[i].offset + 4);
+            printf("%s : 0x%lx\n", &(reginfo[i].name[1]), ll);
+        } else {
+            printf("%s : 0x%x\n", reginfo[i].name, (unsigned int)get_channel(reginfo[i].offset));
+        }
+    }
+}
+
 void dump_registers(int dumpflag, int on) {
     printf("==== Register Dump[%d] Start ====\n", on);
     if (dumpflag & DUMPREG_GENERAL) dump_reginfo(reg_general);
     if (dumpflag & DUMPREG_RX) dump_reginfo(reg_rx);
     if (dumpflag & DUMPREG_TX) dump_reginfo(reg_tx);
+    if (dumpflag & DUMPREG_H2C) dump_chaninfo(chan_h2c);
+    if (dumpflag & DUMPREG_C2H) dump_chaninfo(chan_c2h);
     printf("==== Register Dump[%d] End ====\n", on);
 }
 
@@ -499,6 +578,35 @@ int fn_show_registerArgument(int argc, const char *argv[]) {
     for (int index = 0; showRegisterArgument_tbl[index].name; index++) {
         if (!strcmp(argv[0], showRegisterArgument_tbl[index].name)) {
             showRegisterArgument_tbl[index].fP(argc, argv);
+            return 0;
+        }
+    }
+
+    return ERR_INVALID_PARAMETER;
+}
+
+int32_t fn_show_channel_h2cArgument(int32_t argc, const char *argv[]) {
+
+    dump_registers(DUMPREG_H2C, 1);
+    return 0;
+}
+
+int32_t fn_show_channel_c2hArgument(int32_t argc, const char *argv[]) {
+
+    dump_registers(DUMPREG_C2H, 1);
+    return 0;
+}
+
+int fn_show_channelArgument(int argc, const char *argv[]) {
+
+    if(argc <= 0) {
+        printf("%s needs a parameter\r\n", __func__);
+        return ERR_PARAMETER_MISSED;
+    }
+
+    for (int index = 0; showChannelArgument_tbl[index].name; index++) {
+        if (!strcmp(argv[0], showChannelArgument_tbl[index].name)) {
+            showChannelArgument_tbl[index].fP(argc, argv);
             return 0;
         }
     }
