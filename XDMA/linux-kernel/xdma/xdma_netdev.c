@@ -291,32 +291,89 @@ int xdma_netdev_close(struct net_device *ndev)
         return 0;
 }
 
+static void desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len)
+{
+        u32 control_field;
+        u32 control;
+
+        desc->control = cpu_to_le32(DESC_MAGIC);
+        control_field = XDMA_DESC_STOPPED;
+        control_field |= XDMA_DESC_EOP; 
+        control_field |= XDMA_DESC_COMPLETED;
+        control = le32_to_cpu(desc->control & ~(LS_BYTE_MASK));
+        control |= control_field;
+        desc->control = cpu_to_le32(control);
+
+        desc->src_addr_lo = cpu_to_le32(PCI_DMA_L(addr));
+        desc->src_addr_hi = cpu_to_le32(PCI_DMA_H(addr));
+        desc->bytes = cpu_to_le32(len);
+}
+
 netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                 struct net_device *ndev)
 {
         struct xdma_private *priv = netdev_priv(ndev);
+        struct pci_dev *pdev = priv->pdev;
+        struct xdma_dev *xdev = priv->xdev;
         int padding = 0;
+        int flag;
+        int index;
+        u32 control;
+        u32 w;
+        dma_addr_t dma_addr;
 
         /* Stop the queue */
         netif_stop_queue(ndev);
-
-        /* Pad the packet to 60 bytes */
         padding = (skb->len < ETH_ZLEN) ? (ETH_ZLEN - skb->len) : 0;
         skb->len += padding;
         if (skb_padto(skb, skb->len)) {
-                return NETDEV_TX_BUSY;
+                pr_err("skb_padto failed\n");
+                return NETDEV_TX_OK;
         }
 
         /* Jumbo frames not supported */
         if (skb->len > XDMA_BUFFER_SIZE) {
                 pr_err("Jumbo frames not supported\n");
-                netif_wake_queue(ndev);
+                dev_kfree_skb(skb);
+                return NETDEV_TX_OK;
+        }
+
+        if (pskb_expand_head(skb, TX_METADATA_SIZE, 0, GFP_ATOMIC) != 0) {
+                pr_err("pskb_expand_head failed\n");
+                dev_kfree_skb(skb);
+                return NETDEV_TX_OK;
+        }
+        skb_push(skb, TX_METADATA_SIZE);
+        memset(skb->data, 0, TX_METADATA_SIZE);
+
+
+        dma_addr = dma_map_single(&xdev->pdev->dev, skb->data, skb->len, DMA_TO_DEVICE);
+        if (unlikely(dma_mapping_error(&xdev->pdev->dev, dma_addr))) {
+                pr_err("dma_map_single failed\n");
                 return NETDEV_TX_BUSY;
         }
 
+        priv->dma_addr = dma_addr;
         priv->skb = skb;
-        /* Sk_buff will be freed in the tx handler */
-        /* Network queue will be started in the tx handler */
-        schedule_work(&priv->tx_work);
+
+        desc_set(priv->desc, dma_addr, skb->len);
+        
+        /* Write bus address of descriptor to register */
+        w = cpu_to_le32(PCI_DMA_L(priv->bus_addr));
+        iowrite32(w, xdev->bar[1] + DESC_REG_LO);
+
+        w = cpu_to_le32(PCI_DMA_H(priv->bus_addr));
+        iowrite32(w, xdev->bar[1] + DESC_REG_HI);
+        iowrite32(0, xdev->bar[1] + DESC_REG_HI + 4);
+
+        w = (u32)XDMA_CTRL_RUN_STOP;
+	w |= (u32)XDMA_CTRL_IE_READ_ERROR;
+	w |= (u32)XDMA_CTRL_IE_DESC_ERROR;
+	w |= (u32)XDMA_CTRL_IE_DESC_ALIGN_MISMATCH;
+	w |= (u32)XDMA_CTRL_IE_MAGIC_STOPPED;
+	w |= (u32)XDMA_CTRL_IE_DESC_STOPPED;
+	w |= (u32)XDMA_CTRL_IE_DESC_COMPLETED;
+
+        iowrite32(w, &priv->tx_engine->regs->control);
         return NETDEV_TX_OK;
 }

@@ -13,16 +13,22 @@
 #define RX_METADATA_SIZE 16
 #define TX_METADATA_SIZE 8
 
+#define DESC_REG_LO SGDMA_OFFSET_FROM_CHANNEL + 0x80
+#define DESC_REG_HI SGDMA_OFFSET_FROM_CHANNEL + 0x84
+
 struct xdma_private {
         struct pci_dev *pdev;
         struct net_device *ndev;
         struct xdma_dev *xdev;
         struct xdma_engine *tx_engine;
         struct xdma_engine *rx_engine;
+        struct xdma_desc *desc;
         struct sk_buff *skb;
         struct work_struct tx_work;
         struct work_struct rx_work;
         struct mutex lock;
+        dma_addr_t dma_addr;
+        dma_addr_t bus_addr;
         u8 *tx_buffer;
         u8 *rx_buffer;
         spinlock_t skb_lock;

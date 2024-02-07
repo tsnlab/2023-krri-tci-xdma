@@ -257,7 +257,8 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_out;
 	dev_set_drvdata(&pdev->dev, xpdev);
 
-	/* TODO: Set the TSN register to 0x1 */
+	/* Set the TSN register to 0x1 */
+        iowrite32(0x1, xdev->bar[0] + 0x0008);
 
 	/* Allocate the network device */
 	ndev = alloc_etherdev(sizeof(struct xdma_private));
@@ -280,6 +281,8 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	priv->xdev = xpdev->xdev;
 	priv->rx_engine = &xdev->engine_c2h[0];
 	priv->tx_engine = &xdev->engine_h2c[0];
+        priv->desc = dma_alloc_coherent(&pdev->dev, sizeof(struct xdma_desc),
+                                        &priv->bus_addr, GFP_KERNEL);
 	
 	//mutex_init(&priv->lock);
 	//spin_lock_init(&priv->skb_lock);
@@ -364,6 +367,7 @@ static void remove_one(struct pci_dev *pdev)
 	cancel_work_sync(&priv->rx_work);
 
 	/* Free the network device */
+        dma_free_coherent(&pdev->dev, sizeof(struct xdma_desc), priv->desc, priv->bus_addr);
 	kfree(priv->tx_buffer);
 	kfree(priv->rx_buffer);
 	unregister_netdev(ndev);

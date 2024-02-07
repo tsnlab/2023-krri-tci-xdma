@@ -1395,8 +1395,41 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 
 	mask = ch_irq & xdev->mask_irq_h2c;
 	if (mask) {
+                struct net_device *ndev = xdev->ndev;
+                struct xdma_private *priv = netdev_priv(ndev);
 		int channel = 0;
 		int max = xdev->h2c_channel_max;
+                struct xdma_engine *engine = &xdev->engine_h2c[0];
+                struct xdma_desc *desc;
+                u32 control;
+                u32 w;
+
+                engine_status_read(engine, 1, 0);
+
+                w = 0;
+	        w |= (u32)XDMA_CTRL_IE_DESC_ALIGN_MISMATCH;
+	        w |= (u32)XDMA_CTRL_IE_MAGIC_STOPPED;
+	        w |= (u32)XDMA_CTRL_IE_READ_ERROR;
+	        w |= (u32)XDMA_CTRL_IE_DESC_ERROR;
+
+	        if (poll_mode) {
+		        w |= (u32)XDMA_CTRL_POLL_MODE_WB;
+	        } else {
+		        w |= (u32)XDMA_CTRL_IE_DESC_STOPPED;
+		        w |= (u32)XDMA_CTRL_IE_DESC_COMPLETED;
+	        }
+
+                /* Free last resource */
+                dma_unmap_single(&xdev->pdev->dev, priv->dma_addr, priv->skb->len, DMA_TO_DEVICE);
+                dev_kfree_skb_any(priv->skb);
+                priv->skb = NULL;
+                write_register(w, &engine->regs->control,
+	        		(unsigned long)(&engine->regs->control) -
+	        			(unsigned long)(&engine->regs));
+                netif_wake_queue(ndev);
+		channel_interrupts_enable(engine->xdev, engine->irq_bitmask);
+                return IRQ_HANDLED;
+
 
 		/* iterate over H2C (PCIe read) */
 		for (channel = 0; channel < max && mask; channel++) {
