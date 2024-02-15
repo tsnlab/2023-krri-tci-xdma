@@ -259,6 +259,10 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	/* Set the TSN register to 0x1 */
         iowrite32(0x1, xdev->bar[0] + 0x0008);
+        iowrite32(0x800f0000, xdev->bar[0] + 0x610);
+        iowrite32(0x10, xdev->bar[0] + 0x620);
+
+
 
 	/* Allocate the network device */
 	ndev = alloc_etherdev(sizeof(struct xdma_private));
