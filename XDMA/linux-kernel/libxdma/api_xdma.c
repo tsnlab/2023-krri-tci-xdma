@@ -225,6 +225,108 @@ close:
     return err;
 }
 
+int xdma_api_rd_ipc_data(char *devname, unsigned long int address, 
+                         int count, uint32_t ipc_data[]) {
+
+    int fd;
+    int err = 0;
+    void *map;
+    off_t target = (off_t)(address + 0x800);
+    off_t pgsz, target_aligned, offset;
+    uint32_t read_result;
+
+    /* check for target page alignment */
+    pgsz = sysconf(_SC_PAGESIZE);
+    offset = target & (pgsz - 1);
+    target_aligned = target & (~(pgsz - 1));
+
+    if ((fd = open(devname, O_RDWR | O_SYNC)) == -1) {
+        debug_printf("character device %s opened failed: %s.\n",
+            devname, strerror(errno));
+        return -errno;
+    }
+
+    debug_printf("character device %s opened.\n", devname);
+
+    map = mmap(NULL, offset + (4 * count), PROT_READ | PROT_WRITE, MAP_SHARED, fd, target_aligned);
+    if (map == (void *)-1) {
+        debug_printf("Memory 0x%lx mapped failed: %s.\n", target, strerror(errno));
+        err = 1;
+        goto close;
+    }
+    debug_printf("Memory 0x%lx mapped at address %p.\n", target_aligned, map);
+
+    map += offset;
+    for(int idx = 0; idx < count; idx++) {
+        read_result = *((uint32_t *) (map + 4 * idx));
+        /* swap 32-bit endianess if host is not little-endian */
+        read_result = ltohl(read_result);
+        debug_printf("Read 32-bit value at address 0x%lx (%p): 0x%08x\n",
+                 target, (map + 4 * idx), (unsigned int)read_result);
+        ipc_data[idx] = read_result;
+    }
+
+    map -= offset;
+    if (munmap(map, offset + (4 * count)) == -1) {
+        debug_printf("Memory 0x%lx mapped failed: %s.\n", target, strerror(errno));
+    }
+close:
+    close(fd);
+
+    return err;
+}
+
+int xdma_api_wr_ipc_data(char *devname, unsigned long int address, 
+                         int count, uint32_t ipc_data[]) {
+
+    int fd;
+    int err = 0;
+    void *map;
+    off_t target = (off_t)(address + 0x800);
+    off_t pgsz, target_aligned, offset;
+    uint32_t writeval;
+
+    /* check for target page alignment */
+    pgsz = sysconf(_SC_PAGESIZE);
+    offset = target & (pgsz - 1);
+    target_aligned = target & (~(pgsz - 1));
+
+    if ((fd = open(devname, O_RDWR | O_SYNC)) == -1) {
+        debug_printf("character device %s opened failed: %s.\n",
+            devname, strerror(errno));
+        return -errno;
+    }
+
+    debug_printf("character device %s opened.\n", devname);
+
+    map = mmap(NULL, offset + (4 * count), PROT_READ | PROT_WRITE, MAP_SHARED, fd, target_aligned);
+    if (map == (void *)-1) {
+        debug_printf("Memory 0x%lx mapped failed: %s.\n", target, strerror(errno));
+        err = 1;
+        goto close;
+    }
+    debug_printf("Memory 0x%lx mapped at address %p.\n", target_aligned, map);
+
+    map += offset;
+    for(int idx = 0; idx < count; idx++) {
+        writeval = ipc_data[idx];
+        debug_printf("Write 32-bits value 0x%08x to 0x%lx (0x%p)\n",
+               (unsigned int)writeval, target, map + (idx * 4));
+        /* swap 32-bit endianess if host is not little-endian */
+        writeval = htoll(writeval);
+        *((uint32_t *) (map + 4 * idx)) = writeval;
+    }
+
+    map -= offset;
+    if (munmap(map, offset + (4 * count)) == -1) {
+        debug_printf("Memory 0x%lx mapped failed: %s.\n", target, strerror(errno));
+    }
+close:
+    close(fd);
+
+    return err;
+}
+
 struct xdma_performance_ioctl perf;
 
 int xdma_api_ioctl_perf_start(char *devname, int size) {

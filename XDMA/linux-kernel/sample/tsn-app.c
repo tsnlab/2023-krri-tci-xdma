@@ -35,6 +35,11 @@ struct reginfo reg_general[] = {
     {"TSN Control", REG_TSN_CONTROL},
     {"@sys count", REG_SYS_COUNT_HIGH},
     {"TEMAC status", REG_TEMAC_STATUS},
+    {"One Second Count", REG_ONE_SECOND_CNT},
+    {"gPTP Slave PPS Offset", REG_GPTP_SLAVE_PPS_OFFSET},
+    {"Qbv Slot Status", REG_QBV_SLOT_STATUS},
+    {"TASB Minimum starting data count", REG_TASB_MIN_STARTING_DATA_CNT},
+    {"TPPB Minimum starting data count", REG_TPPB_MIN_STARTING_DATA_CNT},
     {"", -1}
 };
 
@@ -70,6 +75,65 @@ struct reginfo reg_tx[] = {
     {"TPPB FIFO status", REG_TPPB_FIFO_STATUS},
     {"MTIB debug", REG_MTIB_DEBUG},
     {"TEMAC tx statistics", REG_TEMAC_TX_STAT},
+    {"", -1}
+};
+
+struct reginfo chan_h2c[] = {
+    {"H2C Channel Identifier", H2C_CHANNEL_IDENTIFIER},
+    {"H2C Channel Control 1", H2C_CHANNEL_CONTROL1},
+    {"H2C Channel Control 2", H2C_CHANNEL_CONTROL2},
+    {"H2C Channel Control 3", H2C_CHANNEL_CONTROL3},
+    {"H2C Channel Status 1", H2C_CHANNEL_STATUS1},
+    {"H2C Channel Status 2", H2C_CHANNEL_STATUS2},
+    {"H2C Channel Completed Descriptor Count", H2C_CHANNEL_COMPLETED_DESCRIPTOR_COUNT},
+    {"H2C Channel Alignments", H2C_CHANNEL_ALIGNMENTS},
+    {"H2C Poll Mode Low Write Back Address", H2C_POLL_MODE_LOW_WRITE_BACK_ADDRESS},
+    {"H2C Poll Mode High Write Back Address", H2C_POLL_MODE_HIGH_WRITE_BACK_ADDRESS},
+    {"H2C Channel Interrupt Enable Mask 1", H2C_CHANNEL_INTERRUPT_ENABLE_MASK1},
+    {"H2C Channel Interrupt Enable Mask 2", H2C_CHANNEL_INTERRUPT_ENABLE_MASK2},
+    {"H2C Channel Interrupt Enable Mask 3", H2C_CHANNEL_INTERRUPT_ENABLE_MASK3},
+    {"H2C Channel Performance Monitor Control", H2C_CHANNEL_PERFORMANCE_MONITOR_CONTROL},
+    {"H2C Channel Performance Cycle Count Low", H2C_CHANNEL_PERFORMANCE_CYCLE_COUNT_L},
+    {"H2C Channel Performance Cycle Count High", H2C_CHANNEL_PERFORMANCE_CYCLE_COUNT_H},
+    {"H2C Channel Performance Data Count Low", H2C_CHANNEL_PERFORMANCE_DATA_COUNT_L},
+    {"H2C Channel Performance Data Count High", H2C_CHANNEL_PERFORMANCE_DATA_COUNT_H},
+    {"", -1}
+};
+
+struct reginfo chan_c2h[] = {
+    {"C2H Channel Identifier", C2H_CHANNEL_IDENTIFIER},
+    {"C2H Channel Control 1", C2H_CHANNEL_CONTROL1},
+    {"C2H Channel Control 2", C2H_CHANNEL_CONTROL2},
+    {"C2H Channel Control 3", C2H_CHANNEL_CONTROL3},
+    {"C2H Channel Status 1", C2H_CHANNEL_STATUS1},
+    {"C2H Channel Status 2", C2H_CHANNEL_STATUS2},
+    {"C2H Channel Completed Descriptor Count", C2H_CHANNEL_COMPLETED_DESCRIPTOR_COUNT},
+    {"C2H Channel Alignments", C2H_CHANNEL_ALIGNMENTS},
+    {"C2H Poll Mode Low Write Back Address", C2H_POLL_MODE_LOW_WRITE_BACK_ADDRESS},
+    {"C2H Poll Mode High Write Back Address", C2H_POLL_MODE_HIGH_WRITE_BACK_ADDRESS},
+    {"C2H Channel Interrupt Enable Mask 1", C2H_CHANNEL_INTERRUPT_ENABLE_MASK1},
+    {"C2H Channel Interrupt Enable Mask 2", C2H_CHANNEL_INTERRUPT_ENABLE_MASK2},
+    {"C2H Channel Interrupt Enable Mask 3", C2H_CHANNEL_INTERRUPT_ENABLE_MASK3},
+    {"C2H Channel Performance Monitor Control", C2H_CHANNEL_PERFORMANCE_MONITOR_CONTROL},
+    {"C2H Channel Performance Cycle Count Low", C2H_CHANNEL_PERFORMANCE_CYCLE_COUNT_L},
+    {"C2H Channel Performance Cycle Count High", C2H_CHANNEL_PERFORMANCE_CYCLE_COUNT_H},
+    {"C2H Channel Performance Data Count Low", C2H_CHANNEL_PERFORMANCE_DATA_COUNT_L},
+    {"C2H Channel Performance Data Count High", C2H_CHANNEL_PERFORMANCE_DATA_COUNT_H},
+    {"", -1}
+};
+
+struct reginfo chan_config[] = {
+    {"Config Block Identifier", CONFIG_BLOCK_IDENTIFIER},
+    {"Config Block BusDev", CONFIG_BLOCK_BUSDEV},
+    {"Config Block PCIE Max Payload Size", CONFIG_BLOCK_PCIE_MAX_PAYLOAD_SIZE},
+    {"Config Block PCIE Max Read Request Size", CONFIG_BLOCK_PCIE_MAX_READ_REQUEST_SIZE},
+    {"Config Block System ID", CONFIG_BLOCK_SYSTEM_ID},
+    {"Config Block MSI Enable", CONFIG_BLOCK_MSI_ENABLE},
+    {"Config Block PCIE Data Width", CONFIG_BLOCK_PCIE_DATA_WIDTH},
+    {"Config PCIE Control", CONFIG_PCIE_CONTROL},
+    {"Config AXI User Max Payload Size", CONFIG_AXI_USER_MAX_PAYLOAD_SIZE},
+    {"Config AXI User Max Read Request Size", CONFIG_AXI_USER_MAX_READ_REQUEST_SIZE},
+    {"Config Write Flush Timeout", CONFIG_WRITE_FLUSH_TIMEOUT},
     {"", -1}
 };
 
@@ -125,6 +189,10 @@ int tsn_app(int mode, int DataSize, char *InputFileName) {
     }
 
     register_signal_handler();
+
+    set_register(REG_TASB_MIN_STARTING_DATA_CNT, 0x800F0000);
+    //set_register(REG_TASB_MIN_STARTING_DATA_CNT, 0x80010000);
+    set_register(REG_TPPB_MIN_STARTING_DATA_CNT, 0x10);
 
     memset(&rx_arg, 0, sizeof(rx_thread_arg_t));
     memcpy(rx_arg.devname, DEF_RX_DEVICE_NAME, sizeof(DEF_RX_DEVICE_NAME));
@@ -192,7 +260,9 @@ int tsn_app(int mode, int DataSize, char *InputFileName) {
 int process_main_runCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_txCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_showCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+int process_main_getCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_setCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+int process_main_ipcCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 
 
 menu_command_t  mainCommand_tbl[] = {
@@ -209,11 +279,23 @@ menu_command_t  mainCommand_tbl[] = {
         "       <file name> default value: ./sample/pint-udp-response-packet.dat(Binary file for test)\n"
         "            <size> default value: 1508 (64 ~ 4096)"},
     {"show",  EXECUTION_ATTR, process_main_showCmd, \
-        "   show register [gen, rx, tx]\n", \
+        "   show register [gen, rx, tx]\n" 
+        "   show channel [h2c, c2h, config]\n", \
         "   Show XDMA resource"},
+    {"get",   EXECUTION_ATTR, process_main_getCmd, \
+        "   get register <addr(Hex)>\n", \
+        "   get XDMA resource"},
     {"set",   EXECUTION_ATTR, process_main_setCmd, \
-        "   set register <addr(Hex)> <data(Hex)>\n", \
+        "   set register <addr(Hex)> <data(Hex)>\n" \
+        "   set channel <addr(Hex)> <data(Hex)>\n", \
         "   set XDMA resource"},
+    {"ipc",   EXECUTION_ATTR, process_main_ipcCmd, \
+        "   ipc -m <mode> -o <offset> -c <count> -d <value> \n", \
+        "          <mode> default value: 0 (0: rd, 1: wr, 2: test, 3: auto)\n"
+        "        <offset> default value: 0 (0 ~ 4092, 4 byte aligned value)\n"
+        "         <count> default value: 1 (1 ~ 1024)\n"
+        "         <value> default value: 0x95302342(4 byte value, Multiple entries possible, Valid only when writing)\n"
+        "   Query or manipulate ipc dpram contents"},
     { 0,           EXECUTION_ATTR,   NULL, " ", " "}
 };
 
@@ -375,19 +457,40 @@ argument_list_t  showRegisterArgument_tbl[] = {
         {0,     NULL}
     };
 
+int32_t fn_show_channel_h2cArgument(int32_t argc, const char *argv[]);
+int32_t fn_show_channel_c2hArgument(int32_t argc, const char *argv[]);
+int32_t fn_show_channel_configArgument(int32_t argc, const char *argv[]);
+argument_list_t  showChannelArgument_tbl[] = {
+        {"h2c", fn_show_channel_h2cArgument},
+        {"c2h", fn_show_channel_c2hArgument},
+        {"config", fn_show_channel_configArgument},
+        {0,     NULL}
+    };
+
 int fn_show_registerArgument(int argc, const char *argv[]);
+int fn_show_channelArgument(int argc, const char *argv[]);
 argument_list_t  showArgument_tbl[] = {
         {"register", fn_show_registerArgument},
+        {"channel", fn_show_channelArgument},
+        {0,          NULL}
+    };
+
+int fn_get_registerArgument(int argc, const char *argv[]);
+argument_list_t  getArgument_tbl[] = {
+        {"register", fn_get_registerArgument},
         {0,          NULL}
     };
 
 int fn_set_registerArgument(int argc, const char *argv[]);
+int fn_set_channelArgument(int argc, const char *argv[]);
 argument_list_t  setArgument_tbl[] = {
         {"register", fn_set_registerArgument},
+        {"channel",  fn_set_channelArgument},
         {0,          NULL}
     };
 
 #define XDMA_REGISTER_DEV    "/dev/xdma0_user"
+#define XDMA_CHANNEL_DEV     "/dev/xdma0_control"
 
 int set_register(int offset, uint32_t val) {
 
@@ -398,6 +501,19 @@ uint32_t get_register(int offset) {
 
     uint32_t read_val = 0;
     xdma_api_rd_register(XDMA_REGISTER_DEV, offset, 'w', &read_val);
+
+    return read_val;
+}
+
+int set_channel(int offset, uint32_t val) {
+
+    return xdma_api_wr_register(XDMA_CHANNEL_DEV, offset, 'w', val);
+}
+
+uint32_t get_channel(int offset) {
+
+    uint32_t read_val = 0;
+    xdma_api_rd_register(XDMA_CHANNEL_DEV, offset, 'w', &read_val);
 
     return read_val;
 }
@@ -415,11 +531,27 @@ void dump_reginfo(struct reginfo* reginfo) {
     }
 }
 
+void dump_chaninfo(struct reginfo* reginfo) {
+
+    for (int i = 0; reginfo[i].offset >= 0; i++) {
+        if (reginfo[i].name[0] == '@') {
+            uint64_t ll = get_channel(reginfo[i].offset);
+            ll = (ll << 32) | get_channel(reginfo[i].offset + 4);
+            printf("%s : 0x%lx\n", &(reginfo[i].name[1]), ll);
+        } else {
+            printf("%s : 0x%x\n", reginfo[i].name, (unsigned int)get_channel(reginfo[i].offset));
+        }
+    }
+}
+
 void dump_registers(int dumpflag, int on) {
     printf("==== Register Dump[%d] Start ====\n", on);
     if (dumpflag & DUMPREG_GENERAL) dump_reginfo(reg_general);
     if (dumpflag & DUMPREG_RX) dump_reginfo(reg_rx);
     if (dumpflag & DUMPREG_TX) dump_reginfo(reg_tx);
+    if (dumpflag & DUMPREG_H2C) dump_chaninfo(chan_h2c);
+    if (dumpflag & DUMPREG_C2H) dump_chaninfo(chan_c2h);
+    if (dumpflag & DUMPREG_CONFIG) dump_chaninfo(chan_config);
     printf("==== Register Dump[%d] End ====\n", on);
 }
 
@@ -479,6 +611,41 @@ int fn_show_registerArgument(int argc, const char *argv[]) {
     return ERR_INVALID_PARAMETER;
 }
 
+int32_t fn_show_channel_h2cArgument(int32_t argc, const char *argv[]) {
+
+    dump_registers(DUMPREG_H2C, 1);
+    return 0;
+}
+
+int32_t fn_show_channel_c2hArgument(int32_t argc, const char *argv[]) {
+
+    dump_registers(DUMPREG_C2H, 1);
+    return 0;
+}
+
+int32_t fn_show_channel_configArgument(int32_t argc, const char *argv[]) {
+
+    dump_registers(DUMPREG_CONFIG, 1);
+    return 0;
+}
+
+int fn_show_channelArgument(int argc, const char *argv[]) {
+
+    if(argc <= 0) {
+        printf("%s needs a parameter\r\n", __func__);
+        return ERR_PARAMETER_MISSED;
+    }
+
+    for (int index = 0; showChannelArgument_tbl[index].name; index++) {
+        if (!strcmp(argv[0], showChannelArgument_tbl[index].name)) {
+            showChannelArgument_tbl[index].fP(argc, argv);
+            return 0;
+        }
+    }
+
+    return ERR_INVALID_PARAMETER;
+}
+
 int32_t char_to_hex(char c) {
     if ((c >= '0') && (c <= '9')) {
         return (c - 48);
@@ -505,6 +672,29 @@ int32_t str_to_hex(char *str, int32_t *n) {
     }
 
     *n = v;
+    return 0;
+}
+
+int fn_get_registerArgument(int argc, const char *argv[]) {
+
+    int32_t addr = 0x0010; // Scratch Register
+    int32_t value;
+
+    if(argc > 0) {
+        if (str_to_hex((char *)argv[0], &addr) != 0) {
+            printf("Invalid parameter: %s\r\n", argv[0]);
+            return ERR_INVALID_PARAMETER;
+        }
+    }
+
+    if(addr % 4) {
+        printf("The address value(0x%08x) does not align with 4-byte alignment.\r\n", addr);
+        return ERR_INVALID_PARAMETER;
+    }
+
+    value = get_register(addr);
+    printf("address(%08x): %08x\n", addr, value);
+
     return 0;
 }
 
@@ -537,6 +727,35 @@ int fn_set_registerArgument(int argc, const char *argv[]) {
     return 0;
 }
 
+int fn_set_channelArgument(int argc, const char *argv[]) {
+
+    int32_t addr = 0x00c0; // Scratch Register
+    int32_t value = 0x3;
+
+    if(argc > 0) {
+        if (str_to_hex((char *)argv[0], &addr) != 0) {
+            printf("Invalid parameter: %s\r\n", argv[0]);
+            return ERR_INVALID_PARAMETER;
+        }
+        if(argc > 1) {
+            if (str_to_hex((char *)argv[1], &value) != 0) {
+                printf("Invalid parameter: %s\r\n", argv[1]);
+                return ERR_INVALID_PARAMETER;
+            }
+        }
+    }
+
+    if(addr % 4) {
+        printf("The address value(0x%08x) does not align with 4-byte alignment.\r\n", addr);
+        return ERR_INVALID_PARAMETER;
+    }
+
+    set_channel(addr, value);
+    printf("address(%08x): %08x\n", addr, get_channel(addr));
+
+    return 0;
+}
+
 int process_main_showCmd(int argc, const char *argv[], 
                              menu_command_t *menu_tbl) {
 
@@ -549,6 +768,24 @@ int process_main_showCmd(int argc, const char *argv[],
         if (!strcmp(argv[0], showArgument_tbl[index].name)) {
             argv++, argc--;
             showArgument_tbl[index].fP(argc, argv);
+            return 0;
+        }
+
+    return ERR_INVALID_PARAMETER;
+}
+
+int process_main_getCmd(int argc, const char *argv[], 
+                             menu_command_t *menu_tbl) {
+
+    if(argc <= 2) {
+        print_argumentWarningMessage(argc, argv, menu_tbl, NO_ECHO);
+        return ERR_PARAMETER_MISSED;
+    }
+    argv++, argc--;
+    for (int index = 0; getArgument_tbl[index].name; index++)
+        if (!strcmp(argv[0], getArgument_tbl[index].name)) {
+            argv++, argc--;
+            getArgument_tbl[index].fP(argc, argv);
             return 0;
         }
 
@@ -571,6 +808,232 @@ int process_main_setCmd(int argc, const char *argv[],
         }
 
     return ERR_INVALID_PARAMETER;
+}
+
+int read_ipc_data(int offset, int count, uint32_t ipc_data[]) {
+
+    return xdma_api_rd_ipc_data(XDMA_REGISTER_DEV, offset, count, ipc_data);
+}
+
+int write_ipc_data(int offset, int count, uint32_t ipc_data[]) {
+
+    return xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, offset, count, ipc_data);
+}
+
+int test_ipc_data(int offset, int count, uint32_t ipc_data[]) {
+
+    int result;
+    int index;
+    uint32_t ipc_rd_data[1024];
+
+    result = xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, offset, count, ipc_data);
+    if(result) {
+        printf("%s - error, xdma_api_wr_ipc_data\n", __func__);
+    }
+    result = xdma_api_rd_ipc_data(XDMA_REGISTER_DEV, offset, count, ipc_rd_data);
+    if(result) {
+        printf("%s - error, xdma_api_rd_ipc_data\n", __func__);
+    }
+
+    for(index = 0; index < count; index++) {
+        if(ipc_data[index] != ipc_rd_data[index]) {
+            printf("wr_ipc_data[%4d]: 0x%08x, rd_ipc_data[%4d]: 0x%08x\n", 
+                    index, ipc_data[index], index, ipc_rd_data[index]);
+        }
+    }
+
+    return result;
+}
+
+#define IPC_STATE_READY      0x1
+#define IPC_STATE_TRIGER     0x2
+#define IPC_STATE_PROCESSING 0x3
+
+int auto_ipc_data(int offset, int count, uint32_t ipc_data[]) {
+
+    int result;
+    uint32_t ipc_rd_data[1024];
+    uint32_t msg0 = 0x0;
+    uint32_t msg1 = 0x100;
+
+    ipc_rd_data[0] = IPC_STATE_READY;
+    result = xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, 0x40, 1, ipc_rd_data);
+    if(result) {
+        printf("%s - error, xdma_api_wr_ipc_data(offset: 0x40)\n", __func__);
+        return -1;
+    }
+
+    for(int idx = 0 ; idx < count; idx++) {
+        // #define IPC_MB_2_XDMA_MSG_OFFSET                    0x0800
+        result = xdma_api_rd_ipc_data(XDMA_REGISTER_DEV, 0, 3, ipc_rd_data);
+        if(result) {
+            printf("%s - error, xdma_api_rd_ipc_data(offset: 0), idx: %d\n", __func__, idx);
+            return -1;
+        }
+
+        if(ipc_rd_data[0] == IPC_STATE_TRIGER) {
+            ipc_rd_data[0] = IPC_STATE_PROCESSING;
+            result = xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, 0, 1, ipc_rd_data);
+            if(result) {
+                printf("%s - error, xdma_api_wr_ipc_data(offset: 0), idx: %d\n", __func__, idx);
+                return -1;
+            }
+            printf("    Received IPC msg. : 0x%08x 0x%08x\n", ipc_rd_data[1], ipc_rd_data[2]);
+            ipc_rd_data[0] = IPC_STATE_READY;
+            result = xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, 0, 1, ipc_rd_data);
+            if(result) {
+                printf("%s - error, xdma_api_wr_ipc_data(offset: 0), idx: %d\n", __func__, idx);
+                return -1;
+            }
+        }
+
+        result = xdma_api_rd_ipc_data(XDMA_REGISTER_DEV, 0x40, 1, ipc_rd_data);
+        if(result) {
+            printf("%s - error, xdma_api_rd_ipc_data(offset: 0x40), idx: %d\n", __func__, idx);
+            return -1;
+        }
+        if(ipc_rd_data[0] == IPC_STATE_READY) {
+            ipc_rd_data[0] = msg0;
+            ipc_rd_data[1] = msg1;
+            msg0++;
+            msg1++;
+            result = xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, 0x44, 2, ipc_rd_data);
+            if(result) {
+                printf("%s - error, xdma_api_wr_ipc_data(offset: 44), idx: %d\n", __func__, idx);
+                return -1;
+            }
+            ipc_rd_data[0] = IPC_STATE_TRIGER;
+            result = xdma_api_wr_ipc_data(XDMA_REGISTER_DEV, 0x40, 1, ipc_rd_data);
+            if(result) {
+                printf("%s - error, xdma_api_wr_ipc_data(offset: 40), idx: %d\n", __func__, idx);
+                return -1;
+            }
+        }
+
+        sleep(1);
+    }
+
+    return 0;
+}
+
+int ipc_app(int mode, int offset, int count, uint32_t ipc_data[]) {
+
+    switch(mode) {
+    case 0: // read
+        return read_ipc_data(offset, count, ipc_data);
+    break;
+    case 1: // write
+        return write_ipc_data(offset, count, ipc_data);
+    break;
+    case 2: // test
+        return test_ipc_data(offset, count, ipc_data);
+    break;
+    case 3: // auto
+        return auto_ipc_data(offset, count, ipc_data);
+    break;
+    }
+
+    return 0;
+}
+
+#define MAIN_IPC_OPTION_STRING  "m:o:c:d:hv"
+int process_main_ipcCmd(int argc, const char *argv[],
+                            menu_command_t *menu_tbl) {
+    int mode   = 0; // 0: read, 1: write
+    int count  = 1;
+    int offset = 0;
+    unsigned int value = 0;
+    uint32_t ipc_data[1024];
+    int index = 0;
+    int argflag;
+    int result;
+    int idx;
+
+    while ((argflag = getopt(argc, (char **)argv,
+                             MAIN_IPC_OPTION_STRING)) != -1) {
+        switch (argflag) {
+        case 'm':
+            if (str2int(optarg, &mode) != 0) {
+                printf("Invalid parameter given or out of range for '-m'.");
+                return -1;
+            }
+            if ((mode < 0) || (mode > 3)) {
+                printf("mode %d is out of range.", mode);
+                return -1;
+            }
+            break;
+        case 'o':
+            if (str2int(optarg, &offset) != 0) {
+                printf("Invalid parameter given or out of range for '-o'.");
+                return -1;
+            }
+            if ((offset < 0) || (offset > 4092)) {
+                printf("offset %d is out of range.", offset);
+                return -1;
+            }
+            if(offset % 4) {
+                printf("The offset value(%d) is not aligned by 4 bytes.", offset);
+                return -1;
+            }
+            break;
+        case 'c':
+            if (str2int(optarg, &count) != 0) {
+                printf("Invalid parameter given or out of range for '-c'.");
+                return -1;
+            }
+            if ((count < 1) || (count > 1024)) {
+                printf("count %d is out of range.", count);
+                return -1;
+            }
+            break;
+        case 'd':
+            if (str2uint(optarg, &value) != 0) {
+                printf("Invalid parameter given or out of range for '-d'.");
+                return -1;
+            }
+            ipc_data[index++] = value;
+            index %= 1024;
+            break;
+        case 'v':
+            log_level_set(++verbose);
+            if (verbose == 2) {
+                /* add version info to debug output */
+                lprintf(LOG_DEBUG, "%s\n", VERSION_STRING);
+            }
+            break;
+
+        case 'h':
+            process_manCmd(argc, argv, menu_tbl, ECHO);
+            return 0;
+        }
+    }
+
+    if(mode == 1) { // write
+        for(idx = index; idx < count; idx++) {
+            ipc_data[idx] = 0x95302342;
+        }
+    }
+    if(mode == 2) { // test
+        for(idx = 0; idx < count; idx++) {
+            ipc_data[idx] = idx;
+        }
+    }
+    result = ipc_app(mode, offset, count, ipc_data);
+    if(result) {
+        printf("Failt to ipc_app, result: %d\n", result);
+    } else {
+        if(mode == 0) { // read
+            for(idx = 0; idx < count; idx++) {
+                if(((idx) % 8) == 0) {
+                    printf("\n");
+                }
+                printf(" %08x", ipc_data[idx]);
+            }
+            printf("\n");
+        }
+    }
+
+    return result;
 }
 
 int command_parser(int argc, char ** argv) {
