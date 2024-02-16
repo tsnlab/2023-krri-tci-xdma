@@ -36,6 +36,11 @@ char * xdma_api_get_buffer(uint64_t size);
 ssize_t read_to_buffer(char *fname, int fd, char *buffer, 
                        uint64_t size, uint64_t base);
 
+int xdma_api_rd_ipc_data(char *devname, unsigned long int address,
+                         int count, uint32_t ipc_data[]);
+
+int xdma_api_wr_ipc_data(char *devname, unsigned long int address,
+                         int count, uint32_t ipc_data[]);
 
 int xdma_api_read_to_multi_buffers_with_fd(char *devname, int fd,  
                       struct xdma_multi_read_write_ioctl *bd, int *bytes_rcv);

@@ -109,7 +109,8 @@ int pbuffer_multi_dequeue(CircularParsedQueue_t *q, struct xdma_multi_read_write
     pthread_mutex_lock(&q->mutex);
 
     int id;
-    for(id=0; id<MAX_BD_NUMBER; id++) {
+    // 20240131 POOKY XDMA Tx engine abnormal state
+    for(id=0; id<1 /* MAX_BD_NUMBER */; id++) {
         if (isParsedQueueEmpty(q)) {
             debug_printf("Parsed Queue is empty. Cannot pbuffer_dequeue.\n");
             bd->bd_num = id;

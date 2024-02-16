@@ -40,6 +40,12 @@ typedef uintptr_t UINTPTR;
 #define REG_TSN_CONFIG                              0x0004
 #define REG_TSN_CONTROL                             0x0008
 #define REG_SCRATCH                                 0x0010
+#define REG_ONE_SECOND_CNT                          0x0020 
+#define REG_GPTP_SLAVE_PPS_OFFSET                   0x0024
+#define REG_QBV_SLOT_STATUS                         0x0028
+
+#define REG_TASB_MIN_STARTING_DATA_CNT              0x0610
+#define REG_TPPB_MIN_STARTING_DATA_CNT              0x0620
 
 #define REG_RX_PACKETS                              0x0100
 #define REG_RX_BYTES_HIGH                           0x0110
@@ -87,10 +93,63 @@ typedef uintptr_t UINTPTR;
 
 #define TSCB_ADDRESS                            (0x44C00000)
 
+#define H2C_CHANNEL_IDENTIFIER                      (0x0000)
+#define H2C_CHANNEL_CONTROL1                        (0x0004)
+#define H2C_CHANNEL_CONTROL2                        (0x0008)
+#define H2C_CHANNEL_CONTROL3                        (0x000C)
+#define H2C_CHANNEL_STATUS1                         (0x0040)
+#define H2C_CHANNEL_STATUS2                         (0x0044)
+#define H2C_CHANNEL_COMPLETED_DESCRIPTOR_COUNT      (0x0048)
+#define H2C_CHANNEL_ALIGNMENTS                      (0x004C)
+#define H2C_POLL_MODE_LOW_WRITE_BACK_ADDRESS        (0x0088)
+#define H2C_POLL_MODE_HIGH_WRITE_BACK_ADDRESS       (0x008C)
+#define H2C_CHANNEL_INTERRUPT_ENABLE_MASK1          (0x0090)
+#define H2C_CHANNEL_INTERRUPT_ENABLE_MASK2          (0x0094)
+#define H2C_CHANNEL_INTERRUPT_ENABLE_MASK3          (0x0098)
+#define H2C_CHANNEL_PERFORMANCE_MONITOR_CONTROL     (0x00C0)
+#define H2C_CHANNEL_PERFORMANCE_CYCLE_COUNT_L       (0x00C4)
+#define H2C_CHANNEL_PERFORMANCE_CYCLE_COUNT_H       (0x00C8)
+#define H2C_CHANNEL_PERFORMANCE_DATA_COUNT_L        (0x00CC)
+#define H2C_CHANNEL_PERFORMANCE_DATA_COUNT_H        (0x00D0)
+
+#define C2H_CHANNEL_IDENTIFIER                      (0x1000)
+#define C2H_CHANNEL_CONTROL1                        (0x1004)
+#define C2H_CHANNEL_CONTROL2                        (0x1008)
+#define C2H_CHANNEL_CONTROL3                        (0x100C)
+#define C2H_CHANNEL_STATUS1                         (0x1040)
+#define C2H_CHANNEL_STATUS2                         (0x1044)
+#define C2H_CHANNEL_COMPLETED_DESCRIPTOR_COUNT      (0x1048)
+#define C2H_CHANNEL_ALIGNMENTS                      (0x104C)
+#define C2H_POLL_MODE_LOW_WRITE_BACK_ADDRESS        (0x1088)
+#define C2H_POLL_MODE_HIGH_WRITE_BACK_ADDRESS       (0x108C)
+#define C2H_CHANNEL_INTERRUPT_ENABLE_MASK1          (0x1090)
+#define C2H_CHANNEL_INTERRUPT_ENABLE_MASK2          (0x1094)
+#define C2H_CHANNEL_INTERRUPT_ENABLE_MASK3          (0x1098)
+#define C2H_CHANNEL_PERFORMANCE_MONITOR_CONTROL     (0x10C0)
+#define C2H_CHANNEL_PERFORMANCE_CYCLE_COUNT_L       (0x10C4)
+#define C2H_CHANNEL_PERFORMANCE_CYCLE_COUNT_H       (0x10C8)
+#define C2H_CHANNEL_PERFORMANCE_DATA_COUNT_L        (0x10CC)
+#define C2H_CHANNEL_PERFORMANCE_DATA_COUNT_H        (0x10D0)
+
+#define CONFIG_BLOCK_IDENTIFIER                     (0x3000)
+#define CONFIG_BLOCK_BUSDEV                         (0x3004)
+#define CONFIG_BLOCK_PCIE_MAX_PAYLOAD_SIZE          (0x3008)
+#define CONFIG_BLOCK_PCIE_MAX_READ_REQUEST_SIZE     (0x300C)
+#define CONFIG_BLOCK_SYSTEM_ID                      (0x3010)
+#define CONFIG_BLOCK_MSI_ENABLE                     (0x3014)
+#define CONFIG_BLOCK_PCIE_DATA_WIDTH                (0x3018)
+#define CONFIG_PCIE_CONTROL                         (0x301C)
+#define CONFIG_AXI_USER_MAX_PAYLOAD_SIZE            (0x3040)
+#define CONFIG_AXI_USER_MAX_READ_REQUEST_SIZE       (0x3044)
+#define CONFIG_WRITE_FLUSH_TIMEOUT                  (0x3060)
+
 #define DUMPREG_GENERAL 0x1
 #define DUMPREG_RX      0x2
 #define DUMPREG_TX      0x4
-#define DUMPREG_ALL     0x7
+#define DUMPREG_H2C     0x8
+#define DUMPREG_C2H     0x10
+#define DUMPREG_CONFIG  0x20
+#define DUMPREG_ALL     0x3F
 
 struct rx_metadata {
     uint64_t timestamp;

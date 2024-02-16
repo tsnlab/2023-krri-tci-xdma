@@ -323,7 +323,7 @@ void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
         xbuffer_enqueue((QueueElement)buffer);
 #endif
     }
-    set_register(REG_TSN_CONTROL, 0);
+//    set_register(REG_TSN_CONTROL, 0);
 }
 
 void receiver_in_loopback_mode(char* devname, int fd, char *fn, uint64_t size) {
@@ -431,7 +431,7 @@ void receiver_in_performance_mode(char* devname, int fd, char *fn, uint64_t size
 
         buffer_pool_free(buffer);
     }
-    set_register(REG_TSN_CONTROL, 0);
+    // set_register(REG_TSN_CONTROL, 0);
 }
 
 void* receiver_thread(void* arg) {
