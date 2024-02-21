@@ -3,7 +3,6 @@
  *
  * Copyright (c) 2016-present,  Xilinx, Inc.
  * All rights reserved.
- *
  * This source code is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
@@ -31,6 +30,7 @@
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/workqueue.h>
+#include <linux/netdevice.h>
 
 /* Add compatibility checking for RHEL versions */
 #if defined(RHEL_RELEASE_CODE)
@@ -98,7 +98,8 @@
 
 /* maximum size of a single DMA transfer descriptor */
 #define XDMA_DESC_BLEN_BITS	28
-#define XDMA_DESC_BLEN_MAX	((1 << (XDMA_DESC_BLEN_BITS)) - 1)
+//#define XDMA_DESC_BLEN_MAX	((1 << (XDMA_DESC_BLEN_BITS)) - 1)
+#define XDMA_DESC_BLEN_MAX	(4096)
 
 /* bits of the SG DMA control register */
 #define XDMA_CTRL_RUN_STOP			(1UL << 0)
@@ -202,7 +203,11 @@
 
 #define WB_COUNT_MASK 0x00ffffffUL
 #define WB_ERR_MASK (1UL << 31)
+#if 1 // 20230925 POOKY
+#define POLL_TIMEOUT_SECONDS 1
+#else
 #define POLL_TIMEOUT_SECONDS 10
+#endif
 
 #define MAX_USER_IRQ 16
 
@@ -214,7 +219,10 @@
 
 #define MAX_NUM_ENGINES (XDMA_CHANNEL_NUM_MAX * 2)
 #define H2C_CHANNEL_OFFSET 0x1000
+
 #define SGDMA_OFFSET_FROM_CHANNEL 0x4000
+#define SGDMA_OFFSET_FROM_CHANNEL_RX 0x5000
+
 #define CHANNEL_SPACING 0x100
 #define TARGET_SPACING 0x1000
 
@@ -584,6 +592,7 @@ struct xdma_dev {
 
 	unsigned long magic;		/* structure ID for sanity checks */
 	struct pci_dev *pdev;	/* pci device struct from probe() */
+        struct net_device *ndev; /* net device struct from probe() */
 	int idx;		/* dev index */
 
 	const char *mod_name;		/* name of module owning the dev */
@@ -692,4 +701,7 @@ int engine_service_poll(struct xdma_engine *engine, u32 expected_desc_count);
 ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 			unsigned int aperture, struct sg_table *sgt,
 			bool dma_mapped, int timeout_ms);
+ssize_t xdma_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
+			 struct sg_table *sgt, bool dma_mapped, int timeout_ms);
+
 #endif /* XDMA_LIB_H */

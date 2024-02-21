@@ -5,7 +5,6 @@
 
 #include "../xdma/cdev_sgdma.h"
 
-
 void debug_printf(const char *fmt, ...);
 
 int xdma_api_dev_open(char *devname, int eop_flush, int *fd);
@@ -37,4 +36,9 @@ char * xdma_api_get_buffer(uint64_t size);
 ssize_t read_to_buffer(char *fname, int fd, char *buffer, 
                        uint64_t size, uint64_t base);
 
+
+int xdma_api_read_to_multi_buffers_with_fd(char *devname, int fd,  
+                      struct xdma_multi_read_write_ioctl *bd, int *bytes_rcv);
+int xdma_api_write_to_multi_buffers_with_fd(char *devname, int fd,  
+                      struct xdma_multi_read_write_ioctl *bd, int *bytes_rcv);
 #endif // __API_XDMA_H__

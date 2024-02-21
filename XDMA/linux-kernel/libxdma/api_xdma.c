@@ -20,6 +20,7 @@
 #include "../xdma/cdev_sgdma.h"
 
 #include "dma_utils.c"
+#include "api_xdma.h"
 
 /* ltoh: little endian to host */
 /* htol: host to little endian */
@@ -366,6 +367,40 @@ int xdma_api_read_to_buffer_with_fd(char *devname, int fd, char *buffer,
     int bytes_done = 0;
 
     bytes_done = (int)read_to_buffer(devname, fd, buffer, size, 0 /*addr*/);
+
+    if (bytes_done < 0) {
+        *bytes_rcv = 0;
+        return -1;
+    }
+
+    *bytes_rcv = (int)bytes_done;
+
+    return 0;
+}
+
+int xdma_api_read_to_multi_buffers_with_fd(char *devname, int fd,  
+                      struct xdma_multi_read_write_ioctl *bd, int *bytes_rcv) {
+
+    int bytes_done = 0;
+
+    bytes_done = (int)ioctl(fd, IOCTL_XDMA_MULTI_READ, bd);
+
+    if (bytes_done < 0) {
+        *bytes_rcv = 0;
+        return -1;
+    }
+
+    *bytes_rcv = (int)bytes_done;
+
+    return 0;
+}
+
+int xdma_api_write_to_multi_buffers_with_fd(char *devname, int fd,  
+                      struct xdma_multi_read_write_ioctl *bd, int *bytes_rcv) {
+
+    int bytes_done = 0;
+
+    bytes_done = (int)ioctl(fd, IOCTL_XDMA_MULTI_WRITE, bd);
 
     if (bytes_done < 0) {
         *bytes_rcv = 0;

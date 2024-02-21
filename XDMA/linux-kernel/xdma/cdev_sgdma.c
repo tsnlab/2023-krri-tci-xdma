@@ -36,11 +36,11 @@
 #include "xdma_thread.h"
 
 /* Module Parameters */
-unsigned int h2c_timeout = 10;
+unsigned int h2c_timeout = 1;
 module_param(h2c_timeout, uint, 0644);
 MODULE_PARM_DESC(h2c_timeout, "H2C sgdma timeout in seconds, default is 10 sec.");
 
-unsigned int c2h_timeout = 10;
+unsigned int c2h_timeout = 1;
 module_param(c2h_timeout, uint, 0644);
 MODULE_PARM_DESC(c2h_timeout, "C2H sgdma timeout in seconds, default is 10 sec.");
 
@@ -152,11 +152,6 @@ static loff_t char_sgdma_llseek(struct file *file, loff_t off, int whence)
 		return -EINVAL;
 	file->f_pos = newpos;
 	dbg_fops("%s: pos=%lld\n", __func__, (signed long long)newpos);
-
-#if 0
-	pr_err("0x%p, off %lld, whence %d -> pos %lld.\n",
-		file, (signed long long)off, whence, (signed long long)off);
-#endif
 
 	return newpos;
 }
@@ -340,6 +335,72 @@ static int char_sgdma_map_user_buf_to_sgl(struct xdma_io_cb *cb, bool write)
 		pr_err("Invalid user buffer length. Cannot map to sgl\n");
 		return -EINVAL;
 	}
+	cb->pages_nr = pages_nr;
+	return 0;
+
+err_out:
+	char_sgdma_unmap_user_buf(cb, write);
+
+	return rv;
+}
+
+static int char_sgdma_multi_map_user_buf_to_sgl(struct xdma_io_cb *cb, bool write, struct xdma_multi_read_write_ioctl *io)
+{
+	struct sg_table *sgt = &cb->sgt;
+	struct scatterlist *sg;
+	unsigned int pages_nr = io->bd_num;
+	int i;
+	int id;
+	int rv;
+
+	if (sg_alloc_table(sgt, pages_nr, GFP_KERNEL)) {
+		pr_err("sgl OOM.\n");
+		return -ENOMEM;
+	}
+
+	cb->pages = kcalloc(pages_nr, sizeof(struct page *), GFP_KERNEL);
+	if (!cb->pages) {
+		pr_err("pages OOM.\n");
+		rv = -ENOMEM;
+		goto err_out;
+	}
+
+    for(id=0; id<pages_nr; id++) {
+		rv = get_user_pages_fast((unsigned long)io->bd[id].buffer, 1, 1/* write */,
+					(struct page **)&cb->pages[id]);
+		/* No pages were pinned */
+		if (rv < 0) {
+			pr_err("unable to pin down %u user pages, %d.\n",
+				id+1, rv);
+			goto err_out;
+		}
+		/* Less pages pinned than wanted */
+		if (rv != 1) {
+			pr_err("unable to pin down all %u user pages, %d.\n",
+				id+1, rv);
+			cb->pages_nr = id+1;
+			rv = -EFAULT;
+			goto err_out;
+		}
+	}
+
+	for (i = 1; i < pages_nr; i++) {
+		if (cb->pages[i - 1] == cb->pages[i]) {
+			pr_err("duplicate pages, %d, %d.\n",
+				i - 1, i);
+			rv = -EFAULT;
+			cb->pages_nr = pages_nr;
+			goto err_out;
+		}
+	}
+
+	sg = sgt->sgl;
+	for (i = 0; i < pages_nr; i++, sg = sg_next(sg)) {
+        unsigned int offset = offset_in_page((void __user *)io->bd[i].buffer);
+		flush_dcache_page(cb->pages[i]);
+		sg_set_page(sg, cb->pages[i], io->bd[i].len, offset);
+	}
+
 	cb->pages_nr = pages_nr;
 	return 0;
 
@@ -731,7 +792,67 @@ static int ioctl_do_align_get(struct xdma_engine *engine, unsigned long arg)
 	return put_user(engine->addr_align, (int __user *)arg);
 }
 
+static int ioctl_do_burst_read_write(struct xdma_engine *engine, 
+                                     unsigned long arg, bool write) 
+{
+	struct xdma_multi_read_write_ioctl io;
+	struct xdma_io_cb cb;
+	ssize_t res;
+	int rv;
+	unsigned long len =0;
 
+	rv = copy_from_user(&io, (struct xdma_multi_read_write_ioctl __user *)arg,
+				sizeof(struct xdma_multi_read_write_ioctl));
+
+	if (rv < 0) {
+		dbg_tfr("%s failed to copy from user space 0x%lx\n",
+			engine->name, arg);
+		return -EINVAL;
+	}
+
+	dbg_tfr("%s, W %d, bd_num %d, done %ld\n", engine->name, write, io.bd_num, io.done);
+	len = io.done;
+
+	if ((write && engine->dir != DMA_TO_DEVICE) ||
+	    (!write && engine->dir != DMA_FROM_DEVICE)) {
+		pr_err("r/w mismatch. W %d, dir %d.\n", write, engine->dir);
+		return -EINVAL;
+	}
+
+	memset(&cb, 0, sizeof(struct xdma_io_cb));
+	cb.buf = (char __user *)io.bd[0].buffer;
+	cb.len = len;
+	cb.ep_addr = 0;
+	cb.write = write;
+	rv = char_sgdma_multi_map_user_buf_to_sgl(&cb, write, &io);
+	if (rv < 0)
+		return rv;
+
+	io.error = 0;
+	io.done = 0;
+
+    res = xdma_multi_buffer_xfer_submit(engine, engine->channel, write, 0, &cb.sgt,
+                0,  write ? h2c_timeout * 1 : c2h_timeout * 1, &io);
+
+	if (res < 0)
+		io.error = res;
+	else
+		io.done = res;
+
+	rv = copy_to_user((struct xdma_multi_read_write_ioctl __user *)arg, &io,
+				sizeof(struct xdma_multi_read_write_ioctl));
+
+	char_sgdma_unmap_user_buf(&cb, write);
+
+	if (rv < 0) {
+		dbg_tfr("%s failed to copy to user space 0x%lx, %ld\n",
+			engine->name, arg, res);
+		return -EINVAL;
+	}
+
+	return res;
+}
+	
 static int ioctl_do_aperture_dma(struct xdma_engine *engine, unsigned long arg,
 				bool write)
 {
@@ -800,16 +921,12 @@ static long char_sgdma_ioctl(struct file *file, unsigned int cmd,
 		unsigned long arg)
 {
 	struct xdma_cdev *xcdev = (struct xdma_cdev *)file->private_data;
-	struct xdma_dev *xdev;
+//	struct xdma_dev *xdev;
 	struct xdma_engine *engine;
 
 	int rv = 0;
 
-	rv = xcdev_check(__func__, xcdev, 1);
-	if (rv < 0)
-		return rv;
-
-	xdev = xcdev->xdev;
+//	xdev = xcdev->xdev;
 	engine = xcdev->engine;
 
 	switch (cmd) {
@@ -836,6 +953,12 @@ static long char_sgdma_ioctl(struct file *file, unsigned int cmd,
 		break;
 	case IOCTL_XDMA_APERTURE_W:
 		rv = ioctl_do_aperture_dma(engine, arg, 1);
+		break;
+	case IOCTL_XDMA_MULTI_READ:
+		rv = ioctl_do_burst_read_write(engine, arg, 0);
+		break;
+	case IOCTL_XDMA_MULTI_WRITE:
+		rv = ioctl_do_burst_read_write(engine, arg, 1);
 		break;
 	default:
 		dbg_perf("Unsupported operation\n");

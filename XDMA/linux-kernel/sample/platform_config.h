@@ -23,6 +23,8 @@ typedef uintptr_t UINTPTR;
 
 #define PLATFORM_DEBUG
 
+//#define __USE_MULTI_CORE__
+
 #define SDK_VERSION                                 (0x2305260C)
 /*
  *     0x23050309 : TSN v1 0.7. First Release

@@ -24,6 +24,7 @@ int watchStop = 1;
 int rx_thread_run = 1;
 int tx_thread_run = 1;
 int stats_thread_run = 1;
+int parse_thread_run = 1;
 
 int verbose = 0;
 
@@ -81,6 +82,7 @@ void xdma_signal_handler(int sig) {
     sleep(1);
     rx_thread_run = 0;
     sleep(1);
+    parse_thread_run = 0;
     stats_thread_run = 0;
     sleep(1);
     exit(0);
@@ -109,12 +111,14 @@ void register_signal_handler() {
 int tsn_app(int mode, int DataSize, char *InputFileName) {
 
     pthread_t tid1, tid2;
-    rx_thread_arg_t    rx_arg;
-    tx_thread_arg_t    tx_arg;
+    rx_thread_arg_t rx_arg;
+    tx_thread_arg_t tx_arg;
 #ifdef PLATFORM_DEBUG
     pthread_t tid3;
     stats_thread_arg_t st_arg;
 #endif
+    pthread_t tid4;
+    parse_thread_arg_t par_arg;
 
     if(initialize_buffer_allocation()) {
         return -1;
@@ -128,10 +132,12 @@ int tsn_app(int mode, int DataSize, char *InputFileName) {
     rx_arg.mode = mode;
     rx_arg.size = DataSize;
     pthread_create(&tid1, NULL, receiver_thread, (void *)&rx_arg);
+#ifdef __USE_MULTI_CORE__
     cpu_set_t cpuset1;
     CPU_ZERO(&cpuset1);
-    CPU_SET(1, &cpuset1);
+    CPU_SET(3, &cpuset1);
     pthread_setaffinity_np(tid1, sizeof(cpu_set_t), &cpuset1);
+#endif
 
     memset(&tx_arg, 0, sizeof(tx_thread_arg_t));
     memcpy(tx_arg.devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
@@ -139,19 +145,36 @@ int tsn_app(int mode, int DataSize, char *InputFileName) {
     tx_arg.mode = mode;
     tx_arg.size = DataSize;
     pthread_create(&tid2, NULL, sender_thread, (void *)&tx_arg);
+#ifdef __USE_MULTI_CORE__
     cpu_set_t cpuset2;
     CPU_ZERO(&cpuset2);
-    CPU_SET(2, &cpuset2);
+    CPU_SET(5, &cpuset2);
     pthread_setaffinity_np(tid2, sizeof(cpu_set_t), &cpuset2);
+#endif
 
 #ifdef PLATFORM_DEBUG
     memset(&st_arg, 0, sizeof(stats_thread_arg_t));
-    st_arg.mode = 1;
+    st_arg.mode = mode;
     pthread_create(&tid3, NULL, stats_thread, (void *)&st_arg);
+#ifdef __USE_MULTI_CORE__
     cpu_set_t cpuset3;
     CPU_ZERO(&cpuset3);
-    CPU_SET(3, &cpuset3);
+    CPU_SET(9, &cpuset3);
     pthread_setaffinity_np(tid3, sizeof(cpu_set_t), &cpuset3);
+#endif
+#endif
+
+    memset(&par_arg, 0, sizeof(parse_thread_arg_t));
+    memcpy(par_arg.devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
+    memcpy(par_arg.fn, InputFileName, MAX_INPUT_FILE_NAME_SIZE);
+    par_arg.mode = mode;
+    par_arg.size = DataSize;
+    pthread_create(&tid4, NULL, parse_thread, (void *)&par_arg);
+#ifdef __USE_MULTI_CORE__
+    cpu_set_t cpuset4;
+    CPU_ZERO(&cpuset4);
+    CPU_SET(7, &cpuset4);
+    pthread_setaffinity_np(tid4, sizeof(cpu_set_t), &cpuset4);
 #endif
 
     pthread_join(tid1, NULL);
@@ -159,6 +182,7 @@ int tsn_app(int mode, int DataSize, char *InputFileName) {
 #ifdef PLATFORM_DEBUG
     pthread_join(tid3, NULL);
 #endif
+    pthread_join(tid4, NULL);
 
     buffer_release();
 
@@ -166,6 +190,7 @@ int tsn_app(int mode, int DataSize, char *InputFileName) {
 }
 
 int process_main_runCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+int process_main_txCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_showCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_setCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 
@@ -177,6 +202,12 @@ menu_command_t  mainCommand_tbl[] = {
         "            <mode> default value: 0 (0: tsn, 1: normal, 2: loopback-integrity check, 3: performance)\n"
         "       <file name> default value: ./tests/data/datafile0_4K.bin(Binary file for test)\n"
         "            <size> default value: 1024 (64 ~ 4096)"},
+    { "tx",   EXECUTION_ATTR,   process_main_txCmd, \
+        "   tx -m <mode> -f <file name> -s <size>", \
+        "   Run tx test application with data szie in mode\n"
+        "            <mode> default value: 0 (0: tsn, 1: normal, 2: loopback-integrity check, 3: performance)\n"
+        "       <file name> default value: ./sample/pint-udp-response-packet.dat(Binary file for test)\n"
+        "            <size> default value: 1508 (64 ~ 4096)"},
     {"show",  EXECUTION_ATTR, process_main_showCmd, \
         "   show register [gen, rx, tx]\n", \
         "   Show XDMA resource"},
@@ -202,7 +233,102 @@ int process_main_runCmd(int argc, const char *argv[],
                 printf("Invalid parameter given or out of range for '-m'.");
                 return -1;
             }
-            if ((mode < 0) || (mode > 2)) {
+            if ((mode < 0) || (mode >= RUN_MODE_CNT)) {
+                printf("mode %d is out of range.", mode);
+                return -1;
+            }
+            break;
+        case 's':
+            if (str2int(optarg, &DataSize) != 0) {
+                printf("Invalid parameter given or out of range for '-s'.");
+                return -1;
+            }
+            if ((DataSize < 64) || (DataSize > MAX_BUFFER_LENGTH)) {
+                printf("DataSize %d is out of range.", DataSize);
+                return -1;
+            }
+            break;
+        case 'f':
+            memset(InputFileName, 0, 256);
+            strcpy(InputFileName, optarg);
+            break;
+        case 'v':
+            log_level_set(++verbose);
+            if (verbose == 2) {
+                /* add version info to debug output */
+                lprintf(LOG_DEBUG, "%s\n", VERSION_STRING);
+            }
+            break;
+        case 'h':
+            process_manCmd(argc, argv, menu_tbl, ECHO);
+            return 0;
+        }
+    }
+
+    return tsn_app(mode, DataSize, InputFileName);
+}
+
+int tx_app(int mode, int DataSize, char *InputFileName) {
+
+    pthread_t tid2;
+    tx_thread_arg_t    tx_arg;
+    pthread_t tid3;
+    stats_thread_arg_t st_arg;
+
+    if(initialize_buffer_allocation()) {
+        return -1;
+    }
+
+    register_signal_handler();
+
+    memset(&tx_arg, 0, sizeof(tx_thread_arg_t));
+    memcpy(tx_arg.devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
+    memcpy(tx_arg.fn, InputFileName, MAX_INPUT_FILE_NAME_SIZE);
+    tx_arg.mode = mode;
+    tx_arg.size = DataSize;
+    pthread_create(&tid2, NULL, tx_thread, (void *)&tx_arg);
+#ifdef __USE_MULTI_CORE__
+    cpu_set_t cpuset2;
+    CPU_ZERO(&cpuset2);
+    CPU_SET(5, &cpuset2);
+    pthread_setaffinity_np(tid2, sizeof(cpu_set_t), &cpuset2);
+#endif
+
+    memset(&st_arg, 0, sizeof(stats_thread_arg_t));
+    st_arg.mode = mode;
+    pthread_create(&tid3, NULL, stats_thread, (void *)&st_arg);
+#ifdef __USE_MULTI_CORE__
+    cpu_set_t cpuset3;
+    CPU_ZERO(&cpuset3);
+    CPU_SET(9, &cpuset3);
+    pthread_setaffinity_np(tid3, sizeof(cpu_set_t), &cpuset3);
+#endif
+
+    pthread_join(tid2, NULL);
+    pthread_join(tid3, NULL);
+
+    buffer_release();
+
+    return 0;
+}
+
+#define MAIN_TX_OPTION_STRING  "m:s:f:hv"
+int process_main_txCmd(int argc, const char *argv[],
+                            menu_command_t *menu_tbl) {
+    int mode  = RUN_MODE_DEBUG;
+    int DataSize = 1508;
+    char InputFileName[256] = "./sample/pint-udp-response-packet.dat"; /*TEST_DATA_FILE_NAME;*/
+    int argflag;
+
+    while ((argflag = getopt(argc, (char **)argv,
+                             MAIN_TX_OPTION_STRING)) != -1) {
+        switch (argflag) {
+        case 'm':
+            if (str2int(optarg, &mode) != 0) {
+                printf("Invalid parameter given or out of range for '-m'.");
+                return -1;
+            }
+            if ((mode < 0) || (mode >= RUN_MODE_CNT)) {
                 printf("mode %d is out of range.", mode);
                 return -1;
             }
@@ -235,7 +361,7 @@ int process_main_runCmd(int argc, const char *argv[],
         }
     }
 
-    return tsn_app(mode, DataSize, InputFileName);
+    return tx_app(mode, DataSize, InputFileName);
 }
 
 int32_t fn_show_register_genArgument(int32_t argc, const char *argv[]);
