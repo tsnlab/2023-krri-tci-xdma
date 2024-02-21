@@ -7,6 +7,7 @@
 #include <linux/skbuff.h>
 #include <linux/workqueue.h>
 #include <linux/mutex.h>
+#include <linux/spinlock.h>
 
 #include "xdma_mod.h"
 
@@ -19,6 +20,8 @@
 #define DESC_REG_LO_RX SGDMA_OFFSET_FROM_CHANNEL_RX + 0x80
 #define DESC_REG_HI_RX SGDMA_OFFSET_FROM_CHANNEL_RX + 0x84
 
+#define DMA_ENGINE_START 16268831
+#define DMA_ENGINE_STOP 16268830
 
 #define DESC_EMPTY 0
 #define DESC_READY 1
@@ -43,7 +46,7 @@ struct xdma_private {
         u8 *rx_buffer;
         spinlock_t tx_lock;
         spinlock_t desc_lock[2];
-        spinlock_t irq_lock;
+        spinlock_t cnt_lock;
         spinlock_t rx_lock;
         int last;
         int count;

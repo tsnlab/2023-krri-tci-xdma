@@ -54,7 +54,7 @@
 #define MAGIC_CHAR	0xCCCCCCCCUL
 #define MAGIC_BITSTREAM 0xBBBBBBBBUL
 
-/* XMDA_BUFFER_SIZE
+/* XDMA BUFFER SIZE
  * Ethernet MTU is 1500 bytes, But our board needs meta data for TX/RX
  * So we need more space for buffer and the buffer size should be changed
  * */

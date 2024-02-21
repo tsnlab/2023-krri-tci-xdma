@@ -704,4 +704,5 @@ ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 ssize_t xdma_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
 			 struct sg_table *sgt, bool dma_mapped, int timeout_ms);
 
+void channel_interrupts_disable(struct xdma_dev *xdev, u32 mask);
 #endif /* XDMA_LIB_H */

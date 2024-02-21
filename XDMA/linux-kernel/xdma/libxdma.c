@@ -266,7 +266,7 @@ static void channel_interrupts_enable(struct xdma_dev *xdev, u32 mask)
 }
 
 /* channel_interrupts_disable -- Disable interrupts we not interested in */
-static void channel_interrupts_disable(struct xdma_dev *xdev, u32 mask)
+void channel_interrupts_disable(struct xdma_dev *xdev, u32 mask)
 {
 	struct interrupt_regs *reg =
 		(struct interrupt_regs *)(xdev->bar[xdev->config_bar_idx] +
@@ -1376,205 +1376,25 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 	if (ch_irq)
 		channel_interrupts_disable(xdev, ch_irq);
 
-	/* read user interrupts - this read also flushes the above write */
-        /*
-	user_irq = read_register(&irq_regs->user_int_request);
-	dbg_irq("user_irq = 0x%08x\n", user_irq);
-
-	if (user_irq) {
-		int user = 0;
-		u32 mask = 1;
-		int max = xdev->user_max;
-
-		for (; user < max && user_irq; user++, mask <<= 1) {
-			if (user_irq & mask) {
-				user_irq &= ~mask;
-				user_irq_service(irq, &xdev->user_irq[user]);
-			}
-		}
-	}
-        */
-
-	mask = ch_irq & xdev->mask_irq_h2c;
-	if (mask) {
-                struct net_device *ndev = xdev->ndev;
-                struct xdma_private *priv = netdev_priv(ndev);
-		int channel = 0;
-		int max = xdev->h2c_channel_max;
-                struct xdma_engine *engine = &xdev->engine_h2c[0];
-                struct xdma_desc *desc;
-                struct sk_buff *skb;
-                int flag;
-                int index;
-                int desc1_status = 0;
-                int desc2_status = 0;
-                u32 control;
-                u32 w;
-                u32 hi;
-                u32 lo;
-                dma_addr_t bus_addr;
-                dma_addr_t dma_addr;
-
-                w = 0;
-	        w |= (u32)XDMA_CTRL_IE_DESC_ALIGN_MISMATCH;
-	        w |= (u32)XDMA_CTRL_IE_MAGIC_STOPPED;
-	        w |= (u32)XDMA_CTRL_IE_READ_ERROR;
-	        w |= (u32)XDMA_CTRL_IE_DESC_ERROR;
-
-	        if (poll_mode) {
-		        w |= (u32)XDMA_CTRL_POLL_MODE_WB;
-	        } else {
-		        w |= (u32)XDMA_CTRL_IE_DESC_STOPPED;
-		        w |= (u32)XDMA_CTRL_IE_DESC_COMPLETED;
-	        }
-
-                /* Read the desc register */
-                engine_status_read(engine, 1, 0);
-                spin_lock_irqsave(&priv->tx_lock, flag);
-                index = priv->last;
-                bus_addr = priv->bus_addr[index];
-                write_register(w, &engine->regs->control,
-	        		(unsigned long)(&engine->regs->control) -
-	        			(unsigned long)(&engine->regs));
-                spin_unlock_irqrestore(&priv->tx_lock, flag);
-		channel_interrupts_enable(engine->xdev, engine->irq_bitmask);
-
-                dma_addr_t desc1_bus_addr = priv->bus_addr[0];
-                dma_addr_t desc2_bus_addr = priv->bus_addr[1];
-
-                desc1_bus_addr = cpu_to_le32(PCI_DMA_L(desc1_bus_addr));
-                desc2_bus_addr = cpu_to_le32(PCI_DMA_L(desc2_bus_addr));
-
-                if (index == 0) {
-                        desc = priv->desc[0];
-                        spin_lock_irqsave(&priv->desc_lock[0], flag);
-                        desc->src_addr_hi = 0;
-                        desc->src_addr_lo = 0;
-                        skb = priv->skb[0];
-                        spin_unlock_irqrestore(&priv->desc_lock[0], flag);
-
-                        desc = priv->desc[1];
-                        spin_lock_irqsave(&priv->desc_lock[1], flag);
-                        if (desc->src_addr_hi != 0 && desc->src_addr_lo != 0) {
-                                desc2_status = DESC_READY;
-                        }
-                        spin_unlock_irqrestore(&priv->desc_lock[1], flag);
-
-                } else if (index == 1) {
-                        desc = priv->desc[1];
-
-                        spin_lock_irqsave(&priv->desc_lock[1], flag);
-                        desc->src_addr_hi = 0;
-                        desc->src_addr_lo = 0;
-                        skb = priv->skb[1];
-                        spin_unlock_irqrestore(&priv->desc_lock[1], flag);
-                        
-                        desc = priv->desc[0];
-                        spin_lock_irqsave(&priv->desc_lock[0], flag);
-                        if (desc->src_addr_hi != 0 && desc->src_addr_lo != 0) {
-                                desc1_status = DESC_READY;
-                        }
-                        spin_unlock_irqrestore(&priv->desc_lock[0], flag);
-                } else {
-                        pr_err("Invalid bus address\n");
-                        return IRQ_HANDLED;
-                }
-                
-                spin_lock_irqsave(&priv->irq_lock, flag);
-                priv->count--;
-                if (priv->count == 0) {
-                        spin_unlock_irqrestore(&priv->irq_lock, flag);
-                        dma_addr = dma_map_single(&xdev->pdev->dev, skb->data, skb->len, DMA_TO_DEVICE);
-                        dma_unmap_single(&xdev->pdev->dev, dma_addr, skb->len, DMA_TO_DEVICE);
-                        dev_kfree_skb_any(skb);
-                        goto rx;
-                        return IRQ_HANDLED;
-                }
-                spin_unlock_irqrestore(&priv->irq_lock, flag);
-
-                if (desc1_status == DESC_READY) {
-                        spin_lock_irqsave(&priv->tx_lock, flag);
-                        bus_addr = priv->bus_addr[0];
-                /* Write bus address of descriptor to register */
-                        w = cpu_to_le32(PCI_DMA_L(bus_addr));
-                        iowrite32(w, xdev->bar[1] + DESC_REG_LO);
-
-                        w = cpu_to_le32(PCI_DMA_H(bus_addr));
-                        iowrite32(w, xdev->bar[1] + DESC_REG_HI);
-                        priv->last = 0;
-                        iowrite32(16268831, &priv->tx_engine->regs->control);
-                        spin_unlock_irqrestore(&priv->tx_lock, flag);
-                } else if (desc2_status == DESC_READY) {
-                         spin_lock_irqsave(&priv->tx_lock, flag);
-                         bus_addr = priv->bus_addr[1];
-                        w = cpu_to_le32(PCI_DMA_L(bus_addr));
-                        iowrite32(w, xdev->bar[1] + DESC_REG_LO);
-
-                        w = cpu_to_le32(PCI_DMA_H(bus_addr));
-                        iowrite32(w, xdev->bar[1] + DESC_REG_HI);
-                        priv->last = 1;
-                        iowrite32(16268831, &priv->tx_engine->regs->control);
-                        spin_unlock_irqrestore(&priv->tx_lock, flag);
-                }
-
-                /* Free last resource */
-                dma_addr = dma_map_single(&xdev->pdev->dev, skb->data, skb->len, DMA_TO_DEVICE);
-                dma_unmap_single(&xdev->pdev->dev, dma_addr, skb->len, DMA_TO_DEVICE);
-                dev_kfree_skb_any(skb);
-                goto rx;
-               return IRQ_HANDLED;
-
-
-		/* iterate over H2C (PCIe read) */
-		for (channel = 0; channel < max && mask; channel++) {
-			struct xdma_engine *engine = &xdev->engine_h2c[channel];
-
-			/* engine present and its interrupt fired? */
-			if ((engine->irq_bitmask & mask) &&
-			    (engine->magic == MAGIC_ENGINE)) {
-				mask &= ~engine->irq_bitmask;
-				dbg_tfr("schedule_work, %s.\n", engine->name);
-				schedule_work(&engine->work);
-			}
-		}
-	}
-rx:
-
-
 	mask = ch_irq & xdev->mask_irq_c2h;
 	if (mask) {
-		int channel = 0;
-		int max = xdev->c2h_channel_max;
-                struct xdma_engine *engine = &xdev->engine_c2h[0];
-                struct net_device *ndev = xdev->ndev;
-                struct xdma_private *priv = netdev_priv(ndev);
-                struct xdma_result *result = engine->cyclic_result + engine->desc_idx;
-                struct sk_buff *skb;
-                pr_info("C2H interrupt\n");
+		struct xdma_engine *engine = &xdev->engine_c2h[0];
+		struct net_device *ndev = xdev->ndev;
+		struct xdma_private *priv = netdev_priv(ndev);
+		struct xdma_result *result = engine->cyclic_result;
+		struct sk_buff *skb;
 
-                engine_status_read(engine, 1, 0);
-                u32 w;
-                w = 0;
-	        w |= (u32)XDMA_CTRL_IE_DESC_ALIGN_MISMATCH;
-	        w |= (u32)XDMA_CTRL_IE_MAGIC_STOPPED;
-	        w |= (u32)XDMA_CTRL_IE_READ_ERROR;
-	        w |= (u32)XDMA_CTRL_IE_DESC_ERROR;
-		
-	        if (poll_mode) {
-		        w |= (u32)XDMA_CTRL_POLL_MODE_WB;
-	        } else {
-		        w |= (u32)XDMA_CTRL_IE_DESC_STOPPED;
-		        w |= (u32)XDMA_CTRL_IE_DESC_COMPLETED;
-	        }
-                int skb_len = 1460;
+		engine_status_read(engine, 1, 0);
+		int skb_len = 1540;
+                pr_info("desc_len = %d\n", priv->rx_desc->bytes);
 		skb = dev_alloc_skb(skb_len + 2);
-                if (!skb) {
-                        pr_err("Failed to allocate skb\n");
-                        return IRQ_HANDLED;
-                }
+		if (!skb) {
+			pr_err("Failed to allocate skb\n");
+			return IRQ_HANDLED;
+		}
 		skb_reserve(skb, 2);
 		memcpy(skb_put(skb, skb_len),
-			        priv->rx_buffer + RX_METADATA_SIZE,
+				priv->rx_buffer + RX_METADATA_SIZE,
 				skb_len - RX_METADATA_SIZE);
 
 		skb->dev = ndev;
@@ -1584,31 +1404,106 @@ rx:
 		/* Transfer the skb to the network stack */
 		netif_rx(skb);
 
-                /* Read the desc register */
-                write_register(w, &engine->regs->control,
-	        		(unsigned long)(&engine->regs->control) -
-	        			(unsigned long)(&engine->regs));
-
+		/* Read the desc register */
+		iowrite32(DMA_ENGINE_STOP, &engine->regs->control);
 		channel_interrupts_enable(engine->xdev, engine->irq_bitmask);
-
-                xdma_rx_handler(ndev);
-                return IRQ_HANDLED;
-
-
-		/* iterate over C2H (PCIe write) */
-		for (channel = 0; channel < max && mask; channel++) {
-			struct xdma_engine *engine = &xdev->engine_c2h[channel];
-
-			/* engine present and its interrupt fired? */
-			if ((engine->irq_bitmask & mask) &&
-			    (engine->magic == MAGIC_ENGINE)) {
-				mask &= ~engine->irq_bitmask;
-				dbg_tfr("schedule_work, %s.\n", engine->name);
-				schedule_work(&engine->work);
-			}
-		}
+		iowrite32(DMA_ENGINE_START, &engine->regs->control);
 	}
 
+	mask = ch_irq & xdev->mask_irq_h2c;
+	if (mask) {
+		struct net_device *ndev = xdev->ndev;
+		struct xdma_private *priv = netdev_priv(ndev);
+		struct xdma_engine *engine = &xdev->engine_h2c[0];
+		struct xdma_desc *desc;
+		struct sk_buff *skb;
+		unsigned long flag;
+		int index;
+		int desc1_status = 0;
+		int desc2_status = 0;
+		dma_addr_t bus_addr;
+		dma_addr_t dma_addr;
+		u32 w;
+
+		/* Read the desc register */
+		engine_status_read(engine, 1, 0);
+		spin_lock_irqsave(&priv->tx_lock, flag);
+		index = priv->last;
+		iowrite32(DMA_ENGINE_STOP, &engine->regs->control);
+		spin_unlock_irqrestore(&priv->tx_lock, flag);
+		channel_interrupts_enable(engine->xdev, engine->irq_bitmask);
+
+		if (index == 0) {
+			/* Initialize last descriptor */
+			spin_lock_irqsave(&priv->desc_lock[0], flag);
+			desc = priv->desc[0];
+			desc->src_addr_hi = 0;
+			desc->src_addr_lo = 0;
+			skb = priv->skb[0];
+			spin_unlock_irqrestore(&priv->desc_lock[0], flag);
+
+			/* Check if the other descriptor is ready */
+			spin_lock_irqsave(&priv->desc_lock[1], flag);
+			desc = priv->desc[1];
+			if (desc->src_addr_hi != 0 && desc->src_addr_lo != 0) {
+				desc2_status = DESC_READY;
+			}
+			spin_unlock_irqrestore(&priv->desc_lock[1], flag);
+			
+		} else if (index == 1) {
+			/* Initialize last descriptor */
+			spin_lock_irqsave(&priv->desc_lock[1], flag);
+			desc = priv->desc[1];
+			desc->src_addr_hi = 0;
+			desc->src_addr_lo = 0;
+			skb = priv->skb[1];
+			spin_unlock_irqrestore(&priv->desc_lock[1], flag);
+			
+			/* Check if the other descriptor is ready */
+			desc = priv->desc[0];
+			spin_lock_irqsave(&priv->desc_lock[0], flag);
+			if (desc->src_addr_hi != 0 && desc->src_addr_lo != 0) {
+				desc1_status = DESC_READY;
+			}
+			spin_unlock_irqrestore(&priv->desc_lock[0], flag);
+		}
+		dev_kfree_skb_any(skb);
+		
+		/* Check if we need to tx other descriptor */
+		spin_lock_irqsave(&priv->cnt_lock, flag);
+		priv->count--;
+		if (priv->count == 0) {
+			spin_unlock_irqrestore(&priv->cnt_lock, flag);
+			xdev->irq_count++;
+			return IRQ_HANDLED;
+		}
+		spin_unlock_irqrestore(&priv->cnt_lock, flag);
+
+		if (desc1_status == DESC_READY) {
+			spin_lock_irqsave(&priv->tx_lock, flag);
+			bus_addr = priv->bus_addr[0];
+			w = cpu_to_le32(PCI_DMA_L(bus_addr));
+			iowrite32(w, xdev->bar[1] + DESC_REG_LO);
+
+			w = cpu_to_le32(PCI_DMA_H(bus_addr));
+			iowrite32(w, xdev->bar[1] + DESC_REG_HI);
+
+			priv->last = 0;
+			iowrite32(DMA_ENGINE_START, &priv->tx_engine->regs->control);
+			spin_unlock_irqrestore(&priv->tx_lock, flag);
+		} else if (desc2_status == DESC_READY) {
+			spin_lock_irqsave(&priv->tx_lock, flag);
+			bus_addr = priv->bus_addr[1];
+			w = cpu_to_le32(PCI_DMA_L(bus_addr));
+			iowrite32(w, xdev->bar[1] + DESC_REG_LO);
+
+			w = cpu_to_le32(PCI_DMA_H(bus_addr));
+			iowrite32(w, xdev->bar[1] + DESC_REG_HI);
+			priv->last = 1;
+			iowrite32(DMA_ENGINE_START, &priv->tx_engine->regs->control);
+			spin_unlock_irqrestore(&priv->tx_lock, flag);
+		}
+	}
 	xdev->irq_count++;
 	return IRQ_HANDLED;
 }
