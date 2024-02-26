@@ -47,6 +47,9 @@ int xdma_netdev_open(struct net_device *ndev)
         netif_carrier_on(ndev);
         netif_start_queue(ndev);
         /* Set the RX descriptor */
+        dma_addr_t dma_addr = dma_map_single(&priv->xdev->pdev->dev, priv->res, sizeof(struct xdma_result), DMA_FROM_DEVICE);
+        priv->rx_desc->src_addr_lo = cpu_to_le32(PCI_DMA_L(dma_addr));
+        priv->rx_desc->src_addr_hi = cpu_to_le32(PCI_DMA_H(dma_addr));
         rx_desc_set(priv->rx_desc, priv->dma_addr, XDMA_BUFFER_SIZE);
         ioread32(&priv->rx_engine->regs->status_rc);
 
@@ -67,7 +70,6 @@ int xdma_netdev_close(struct net_device *ndev)
 
         netif_stop_queue(ndev);
         netif_carrier_off(ndev);
-        ioread32(&priv->rx_engine->regs->status_rc);
         return 0;
 }
 

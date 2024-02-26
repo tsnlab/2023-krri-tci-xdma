@@ -286,6 +286,13 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
                 rv = -ENOMEM;
                 goto err_out;
         }
+        priv->res = kmalloc(sizeof(struct xdma_result), GFP_KERNEL);
+        if (!priv->res) {
+                pr_err("res kmalloc failed\n");
+                free_netdev(ndev);
+                rv = -ENOMEM;
+                goto err_out;
+        }
 
         spin_lock_init(&priv->tx_lock);
         spin_lock_init(&priv->rx_lock);
@@ -319,6 +326,7 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_out;
 	}
 	netif_stop_queue(ndev);
+        channel_interrupts_enable(xdev, ~0);
 	return 0;
 
 err_out:
@@ -350,6 +358,7 @@ static void remove_one(struct pci_dev *pdev)
         xdev = xpdev->xdev;
 	/* Free the network device */
         channel_interrupts_disable(xdev, ~0);
+        iowrite32(DMA_ENGINE_STOP, &priv->rx_engine->regs->control);
 	unregister_netdev(ndev);
         memset(priv->desc[0], 0, sizeof(struct xdma_desc));
         memset(priv->desc[1], 0, sizeof(struct xdma_desc));
@@ -358,6 +367,7 @@ static void remove_one(struct pci_dev *pdev)
         dma_free_coherent(&pdev->dev, sizeof(struct xdma_desc), priv->desc[1], priv->bus_addr[1]);
         dma_free_coherent(&pdev->dev, sizeof(struct xdma_desc), priv->rx_desc, priv->rx_bus_addr);
         kfree(priv->rx_buffer);
+        kfree(priv->res);
         memset(priv, 0, sizeof(struct xdma_private));
 	free_netdev(ndev);
 	xpdev_free(xpdev);

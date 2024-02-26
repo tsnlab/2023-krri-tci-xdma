@@ -256,7 +256,7 @@ static void check_nonzero_interrupt_status(struct xdma_dev *xdev)
 }
 
 /* channel_interrupts_enable -- Enable interrupts we are interested in */
-static void channel_interrupts_enable(struct xdma_dev *xdev, u32 mask)
+void channel_interrupts_enable(struct xdma_dev *xdev, u32 mask)
 {
 	struct interrupt_regs *reg =
 		(struct interrupt_regs *)(xdev->bar[xdev->config_bar_idx] +
@@ -1347,6 +1347,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 	u32 user_irq;
 	u32 mask;
 	struct xdma_dev *xdev;
+	struct net_device *ndev;
 	struct interrupt_regs *irq_regs;
 
 	dbg_irq("(irq=%d, dev 0x%p) <<<< ISR.\n", irq, dev_id);
@@ -1361,6 +1362,13 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		dbg_irq("%s(irq=%d) xdev=%p ??\n", __func__, irq, xdev);
 		return IRQ_NONE;
 	}
+        ndev = xdev->ndev;
+        if (!ndev) {
+                engine_status_read(&xdev->engine_c2h[0], 1, 0);
+                iowrite32(DMA_ENGINE_STOP, &xdev->engine_c2h[0].regs->control);
+                pr_err("Invalid net device\n");
+                return IRQ_NONE;
+        }
 
 	irq_regs = (struct interrupt_regs *)(xdev->bar[xdev->config_bar_idx] +
 					     XDMA_OFS_INT_CTRL);
@@ -1379,14 +1387,17 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 	mask = ch_irq & xdev->mask_irq_c2h;
 	if (mask) {
 		struct xdma_engine *engine = &xdev->engine_c2h[0];
-		struct net_device *ndev = xdev->ndev;
+                if (!ndev) {
+                        pr_err("Invalid net device\n");
+                        channel_interrupts_enable(xdev, ch_irq);
+                        return IRQ_HANDLED;
+                }
 		struct xdma_private *priv = netdev_priv(ndev);
-		struct xdma_result *result = engine->cyclic_result;
+		struct xdma_result *result = priv->res;
 		struct sk_buff *skb;
 
 		engine_status_read(engine, 1, 0);
-		int skb_len = 1540;
-                pr_info("desc_len = %d\n", priv->rx_desc->bytes);
+		int skb_len = result->length;
 		skb = dev_alloc_skb(skb_len + 2);
 		if (!skb) {
 			pr_err("Failed to allocate skb\n");
@@ -1395,7 +1406,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		skb_reserve(skb, 2);
 		memcpy(skb_put(skb, skb_len),
 				priv->rx_buffer + RX_METADATA_SIZE,
-				skb_len - RX_METADATA_SIZE);
+				skb_len - RX_METADATA_SIZE - CRC_LEN);
 
 		skb->dev = ndev;
 		skb->protocol = eth_type_trans(skb, ndev);
@@ -1412,7 +1423,12 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 
 	mask = ch_irq & xdev->mask_irq_h2c;
 	if (mask) {
-		struct net_device *ndev = xdev->ndev;
+//		struct net_device *ndev = xdev->ndev;
+                if (!ndev) {
+                        pr_err("Invalid net device\n");
+                        channel_interrupts_enable(xdev, ch_irq);
+                        return IRQ_HANDLED;
+                }
 		struct xdma_private *priv = netdev_priv(ndev);
 		struct xdma_engine *engine = &xdev->engine_h2c[0];
 		struct xdma_desc *desc;
@@ -4621,6 +4637,7 @@ void *xdma_device_open(const char *mname, struct pci_dev *pdev, int *user_max,
 	xdev->user_max = *user_max;
 	xdev->h2c_channel_max = *h2c_channel_max;
 	xdev->c2h_channel_max = *c2h_channel_max;
+        xdev->ndev = NULL;
 
 	xdma_device_flag_set(xdev, XDEV_FLAG_OFFLINE);
 
@@ -4691,8 +4708,8 @@ void *xdma_device_open(const char *mname, struct pci_dev *pdev, int *user_max,
 	if (rv < 0)
 		goto err_msix;
 
-	if (!poll_mode)
-		channel_interrupts_enable(xdev, ~0);
+//	if (!poll_mode)
+//		channel_interrupts_enable(xdev, ~0);
 
 	/* Flush writes */
 	read_interrupts(xdev);

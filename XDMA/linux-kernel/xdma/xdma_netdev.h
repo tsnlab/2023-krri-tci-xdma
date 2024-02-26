@@ -27,6 +27,8 @@
 #define DESC_READY 1
 #define DESC_BUSY 2
 
+#define CRC_LEN 4
+
 struct xdma_private {
         struct pci_dev *pdev;
         struct net_device *ndev;
@@ -35,8 +37,11 @@ struct xdma_private {
         struct xdma_engine *rx_engine;
         struct xdma_desc *rx_desc;
         struct xdma_desc *desc[2];
+        struct xdma_result *res;
         dma_addr_t bus_addr[2];
         dma_addr_t rx_bus_addr;
+        dma_addr_t res_bus_addr;
+        dma_addr_t res_dma_addr;
         struct sk_buff *rx_skb;
         struct sk_buff *skb[2];
         struct work_struct tx_work;
