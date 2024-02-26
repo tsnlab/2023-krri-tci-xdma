@@ -42,12 +42,17 @@ void rx_desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len)
 int xdma_netdev_open(struct net_device *ndev)
 {
         struct xdma_private *priv = netdev_priv(ndev);
+        dma_addr_t dma_addr;
         u32 w;
 
         netif_carrier_on(ndev);
         netif_start_queue(ndev);
         /* Set the RX descriptor */
-        dma_addr_t dma_addr = dma_map_single(&priv->xdev->pdev->dev, priv->res, sizeof(struct xdma_result), DMA_FROM_DEVICE);
+        dma_addr = dma_map_single(
+                        &priv->xdev->pdev->dev,
+                        priv->res,
+                        sizeof(struct xdma_result),
+                        DMA_FROM_DEVICE);
         priv->rx_desc->src_addr_lo = cpu_to_le32(PCI_DMA_L(dma_addr));
         priv->rx_desc->src_addr_hi = cpu_to_le32(PCI_DMA_H(dma_addr));
         rx_desc_set(priv->rx_desc, priv->dma_addr, XDMA_BUFFER_SIZE);
@@ -60,14 +65,11 @@ int xdma_netdev_open(struct net_device *ndev)
         w = cpu_to_le32(PCI_DMA_H(priv->rx_bus_addr));
         iowrite32(w, &priv->rx_engine->sgdma_regs->first_desc_hi);
         iowrite32(DMA_ENGINE_START, &priv->rx_engine->regs->control);
-        ioread32(&priv->rx_engine->regs->status);
         return 0;
 }
 
 int xdma_netdev_close(struct net_device *ndev)
 {
-        struct xdma_private *priv = netdev_priv(ndev);
-
         netif_stop_queue(ndev);
         netif_carrier_off(ndev);
         return 0;

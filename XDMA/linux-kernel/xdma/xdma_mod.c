@@ -156,6 +156,7 @@ static const struct net_device_ops xdma_netdev_ops = {
 static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	int rv = 0;
+	int i;
 	struct xdma_pci_dev *xpdev = NULL;
 	struct xdma_dev *xdev;
 	void *hndl;
@@ -228,7 +229,7 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	dev_set_drvdata(&pdev->dev, xpdev);
 
 	/* Set the TSN register to 0x1 */
-        iowrite32(0x1, xdev->bar[0] + 0x0008);
+	iowrite32(0x1, xdev->bar[0] + 0x0008);
 
 	/* Allocate the network device */
 	ndev = alloc_etherdev(sizeof(struct xdma_private));
@@ -251,54 +252,53 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	priv->xdev = xpdev->xdev;
 	priv->rx_engine = &xdev->engine_c2h[0];
 	priv->tx_engine = &xdev->engine_h2c[0];
-        
-        int i = 0;
-        for (i = 0; i < 2; i++) {
-                priv->desc[i] = dma_alloc_coherent(
-                                        &pdev->dev,
-                                        sizeof(struct xdma_desc),
-                                        &priv->bus_addr[i],
-                                        GFP_KERNEL);
-                if (!priv->desc[i]) {
-                        if (i == 1) {
-                                dma_free_coherent(
-                                        &pdev->dev,
-                                        sizeof(struct xdma_desc),
-                                        priv->desc[0],
-                                        priv->bus_addr[0]);
-                        }
-                        pr_err("dma_alloc_coherent failed\n");
-                        free_netdev(ndev);
-                        rv = -ENOMEM;
-                        goto err_out;
-                }
-                memset(priv->desc[i], 0, sizeof(struct xdma_desc));
-                spin_lock_init(&priv->desc_lock[i]);
-        }
-        priv->rx_desc = dma_alloc_coherent(
-                                &pdev->dev,
-                                sizeof(struct xdma_desc),
-                                &priv->rx_bus_addr,
-                                GFP_KERNEL);
-        if (!priv->rx_desc) {
-                pr_err("dma_alloc_coherent failed\n");
-                free_netdev(ndev);
-                rv = -ENOMEM;
-                goto err_out;
-        }
-        priv->res = kmalloc(sizeof(struct xdma_result), GFP_KERNEL);
-        if (!priv->res) {
-                pr_err("res kmalloc failed\n");
-                free_netdev(ndev);
-                rv = -ENOMEM;
-                goto err_out;
-        }
+	
+	for (i = 0; i < 2; i++) {
+		priv->desc[i] = dma_alloc_coherent(
+					&pdev->dev,
+					sizeof(struct xdma_desc),
+					&priv->bus_addr[i],
+					GFP_KERNEL);
+		if (!priv->desc[i]) {
+			if (i == 1) {
+				dma_free_coherent(
+					&pdev->dev,
+					sizeof(struct xdma_desc),
+					priv->desc[0],
+					priv->bus_addr[0]);
+			}
+			pr_err("dma_alloc_coherent failed\n");
+			free_netdev(ndev);
+			rv = -ENOMEM;
+			goto err_out;
+		}
+		memset(priv->desc[i], 0, sizeof(struct xdma_desc));
+		spin_lock_init(&priv->desc_lock[i]);
+	}
+	priv->rx_desc = dma_alloc_coherent(
+				&pdev->dev,
+				sizeof(struct xdma_desc),
+				&priv->rx_bus_addr,
+				GFP_KERNEL);
+	if (!priv->rx_desc) {
+		pr_err("dma_alloc_coherent failed\n");
+		free_netdev(ndev);
+		rv = -ENOMEM;
+		goto err_out;
+	}
+	priv->res = kmalloc(sizeof(struct xdma_result), GFP_KERNEL);
+	if (!priv->res) {
+		pr_err("res kmalloc failed\n");
+		free_netdev(ndev);
+		rv = -ENOMEM;
+		goto err_out;
+	}
 
-        spin_lock_init(&priv->tx_lock);
-        spin_lock_init(&priv->rx_lock);
-        spin_lock_init(&priv->cnt_lock);
+	spin_lock_init(&priv->tx_lock);
+	spin_lock_init(&priv->rx_lock);
+	spin_lock_init(&priv->cnt_lock);
 
-        /* Set the MAC address */
+	/* Set the MAC address */
 	memcpy(ndev->dev_addr, "\xca\x11\x22\x3a\x44\x55", ETH_ALEN);
 
 	priv->rx_buffer = kmalloc(XDMA_BUFFER_SIZE, GFP_KERNEL);
@@ -309,14 +309,14 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_out;
 	}
 
-        priv->dma_addr = dma_map_single(&pdev->dev, priv->rx_buffer, XDMA_BUFFER_SIZE, DMA_FROM_DEVICE);
-        if (unlikely(dma_mapping_error(&pdev->dev, priv->dma_addr))) {
-                pr_err("dma_map_single failed\n");
-                kfree(priv->rx_buffer);
-                free_netdev(ndev);
-                rv = -ENOMEM;
-                goto err_out;
-        }
+	priv->dma_addr = dma_map_single(&pdev->dev, priv->rx_buffer, XDMA_BUFFER_SIZE, DMA_FROM_DEVICE);
+	if (unlikely(dma_mapping_error(&pdev->dev, priv->dma_addr))) {
+		pr_err("dma_map_single failed\n");
+		kfree(priv->rx_buffer);
+		free_netdev(ndev);
+		rv = -ENOMEM;
+		goto err_out;
+	}
 
 	rv = register_netdev(ndev);
 	if (rv < 0) {
@@ -326,7 +326,7 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_out;
 	}
 	netif_stop_queue(ndev);
-        channel_interrupts_enable(xdev, ~0);
+	channel_interrupts_enable(xdev, ~0);
 	return 0;
 
 err_out:
@@ -338,7 +338,7 @@ err_out:
 static void remove_one(struct pci_dev *pdev)
 {
 	struct xdma_pci_dev *xpdev;
-        struct xdma_dev *xdev;
+	struct xdma_dev *xdev;
 	struct net_device *ndev;
 	struct xdma_private *priv;
 
@@ -355,23 +355,17 @@ static void remove_one(struct pci_dev *pdev)
 	ndev = xpdev->ndev;
 	priv = netdev_priv(ndev);
 
-        xdev = xpdev->xdev;
-	/* Free the network device */
-        channel_interrupts_disable(xdev, ~0);
-        iowrite32(DMA_ENGINE_STOP, &priv->rx_engine->regs->control);
+	xdev = xpdev->xdev;
+	channel_interrupts_disable(xdev, ~0);
+	iowrite32(DMA_ENGINE_STOP, &priv->rx_engine->regs->control);
 	unregister_netdev(ndev);
-        memset(priv->desc[0], 0, sizeof(struct xdma_desc));
-        memset(priv->desc[1], 0, sizeof(struct xdma_desc));
-        memset(priv->rx_desc, 0, sizeof(struct xdma_desc));
-        dma_free_coherent(&pdev->dev, sizeof(struct xdma_desc), priv->desc[0], priv->bus_addr[0]);
-        dma_free_coherent(&pdev->dev, sizeof(struct xdma_desc), priv->desc[1], priv->bus_addr[1]);
-        dma_free_coherent(&pdev->dev, sizeof(struct xdma_desc), priv->rx_desc, priv->rx_bus_addr);
-        kfree(priv->rx_buffer);
-        kfree(priv->res);
-        memset(priv, 0, sizeof(struct xdma_private));
+	dma_free_coherent(&pdev->dev, sizeof(struct xdma_desc), priv->desc[0], priv->bus_addr[0]);
+	dma_free_coherent(&pdev->dev, sizeof(struct xdma_desc), priv->desc[1], priv->bus_addr[1]);
+	dma_free_coherent(&pdev->dev, sizeof(struct xdma_desc), priv->rx_desc, priv->rx_bus_addr);
+	kfree(priv->rx_buffer);
+	kfree(priv->res);
 	free_netdev(ndev);
 	xpdev_free(xpdev);
-
 	dev_set_drvdata(&pdev->dev, NULL);
 }
 
