@@ -3480,12 +3480,7 @@ ssize_t xdma_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
 	int nents;
 	enum dma_data_direction dir = write ? DMA_TO_DEVICE : DMA_FROM_DEVICE;
 	struct xdma_request_cb *req = NULL;
-	struct net_device *ndev;
-	struct xdma_private *priv;
-	struct sk_buff *skb;
 
-	ndev = (struct net_device *)xdev->ndev;
-	priv = netdev_priv(ndev);
 	if (!dev_hndl)
 		return -EINVAL;
 
@@ -3611,30 +3606,6 @@ ssize_t xdma_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
 
 		switch (xfer->state) {
 		case TRANSFER_STATE_COMPLETED:
-			if (!write) {
-				struct xdma_result *result = xfer->res_virt;
-				int skb_len = result[0].length;
-
-				skb = dev_alloc_skb(skb_len + 2);
-				if (!skb) {
-					pr_err("dev_alloc_skb failed\n");
-					goto unmap_sgl;
-				}
-
-				skb_reserve(skb, 2);
-				/* Copy data from rx_buffer + 16 to skb */
-				/* First 16 bytes are Rx metadata */
-				memcpy(skb_put(skb, skb_len),
-						priv->rx_buffer + RX_METADATA_SIZE,
-						skb_len - RX_METADATA_SIZE);
-
-				skb->dev = ndev;
-				skb->protocol = eth_type_trans(skb, ndev);
-				skb->ip_summed = CHECKSUM_UNNECESSARY;
-
-				/* Transfer the skb to the network stack */
-				netif_rx(skb);
-			}
 			spin_unlock_irqrestore(&engine->lock, flags);
 
 			rv = 0;
@@ -4696,9 +4667,6 @@ void *xdma_device_open(const char *mname, struct pci_dev *pdev, int *user_max,
 	rv = irq_setup(xdev, pdev);
 	if (rv < 0)
 		goto err_msix;
-
-//	if (!poll_mode)
-//		channel_interrupts_enable(xdev, ~0);
 
 	/* Flush writes */
 	read_interrupts(xdev);
