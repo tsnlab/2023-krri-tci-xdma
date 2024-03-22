@@ -27,6 +27,8 @@
 #include "xdma_cdev.h"
 #include "version.h"
 #include "xdma_netdev.h"
+#include "example_ptp.h"
+#include "example_sys.h"
 
 #define DRV_MODULE_NAME		"xdma"
 #define DRV_MODULE_DESC		"Xilinx XDMA Reference Driver"
@@ -162,6 +164,8 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	void *hndl;
 	struct net_device *ndev;
 	struct xdma_private *priv;
+        struct ptp_device_data *ptp_data;
+        
 
 	xpdev = xpdev_alloc(pdev);
 	if (!xpdev)
@@ -318,15 +322,25 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_out;
 	}
 
-	rv = register_netdev(ndev);
+        ptp_data = ptp_device_init(&pdev->dev, xdev);
+        if (!ptp_data) {
+                pr_err("ptp_device_init failed\n");
+                free_netdev(ndev);
+                rv = -ENOMEM;
+                goto err_out;
+        }
+        ptp_data->xdev = xpdev->xdev;
+        xpdev->ptp = ptp_data;
+
+	//rv = register_netdev(ndev);
 	if (rv < 0) {
 		free_netdev(ndev);
 		kfree(priv->rx_buffer);
 		pr_err("register_netdev failed\n");
 		goto err_out;
 	}
-	netif_stop_queue(ndev);
-	channel_interrupts_enable(xdev, ~0);
+	//netif_stop_queue(ndev);
+	//channel_interrupts_enable(xdev, ~0);
 	return 0;
 
 err_out:
@@ -341,6 +355,7 @@ static void remove_one(struct pci_dev *pdev)
 	struct xdma_dev *xdev;
 	struct net_device *ndev;
 	struct xdma_private *priv;
+        struct ptp_device_data *ptp_data;
 
 	if (!pdev)
 		return;
@@ -356,9 +371,11 @@ static void remove_one(struct pci_dev *pdev)
 	priv = netdev_priv(ndev);
 
 	xdev = xpdev->xdev;
-	channel_interrupts_disable(xdev, ~0);
+        ptp_data = xpdev->ptp;
+	//channel_interrupts_disable(xdev, ~0);
 	iowrite32(DMA_ENGINE_STOP, &priv->rx_engine->regs->control);
-	unregister_netdev(ndev);
+	//unregister_netdev(ndev);
+        ptp_device_destroy(ptp_data);
 	dma_free_coherent(&pdev->dev, sizeof(struct xdma_desc), priv->desc[0], priv->bus_addr[0]);
 	dma_free_coherent(&pdev->dev, sizeof(struct xdma_desc), priv->desc[1], priv->bus_addr[1]);
 	dma_free_coherent(&pdev->dev, sizeof(struct xdma_desc), priv->rx_desc, priv->rx_bus_addr);

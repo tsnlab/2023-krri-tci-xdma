@@ -48,6 +48,7 @@
 
 #include "libxdma.h"
 #include "xdma_thread.h"
+#include "example_ptp.h"
 
 #define MAGIC_ENGINE	0xEEEEEEEEUL
 #define MAGIC_DEVICE	0xDDDDDDDDUL
@@ -85,6 +86,7 @@ struct xdma_pci_dev {
 	struct pci_dev *pdev;	/* pci device struct from probe() */
 	struct xdma_dev *xdev;
 	struct net_device *ndev;
+        struct ptp_device_data *ptp;
 	int major;		/* major number */
 	int instance;		/* instance number */
 	int user_max;

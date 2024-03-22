@@ -1,6 +1,5 @@
 #ifndef XDMA_NETDEV_H
 #define XDMA_NETDEV_H
-#endif
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -93,3 +92,4 @@ int xdma_netdev_close(struct net_device *netdev);
  */
 netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                                    struct net_device *netdev);
+#endif
