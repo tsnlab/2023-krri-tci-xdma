@@ -26,7 +26,6 @@
 
 #define QUIT_CMD_PROCESS 100
 
-struct menu_command *command_tbl;
 typedef int (*cbFn)(int argc, const char *argv[], struct menu_command *menu_tbl);
 typedef int (*argFn)(int32_t argc, const char *argv[]);
 
