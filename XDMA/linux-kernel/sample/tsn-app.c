@@ -35,6 +35,10 @@ struct reginfo reg_general[] = {
     {"TSN Control", REG_TSN_CONTROL},
     {"@sys count", REG_SYS_COUNT_HIGH},
     {"TEMAC status", REG_TEMAC_STATUS},
+    {"Qbv Slot Status Register", REG_QBV_SLOT_STATUS},
+    {"Pulse_at MSB", REG_PULSE_AT_MSB},
+    {"Pulse_at LSB", REG_PULSE_AT_LSB},
+    {"Cycle_1s", REG_CYCLE_1S},
     {"", -1}
 };
 
@@ -48,7 +52,11 @@ struct reginfo reg_rx[] = {
     {"rx buffer full drop packet count", REG_RX_BUFFER_FULL_DROP_PACKET_COUNT},
     {"RPPB FIFO status", REG_RPPB_FIFO_STATUS},
     {"RASB FIFO status", REG_RASB_FIFO_STATUS},
+#ifdef ONE_QUEUE_TSN
+    {"Rx Debug Register", REG_RX_DEBUG},
+#else
     {"MRIB debug", REG_MRIB_DEBUG},
+#endif
     {"TEMAC rx statistics", REG_TEMAC_RX_STAT},
     {"", -1}
 };
@@ -66,10 +74,21 @@ struct reginfo reg_tx[] = {
     {"tx input packet counter", REG_TX_INPUT_PACKET_COUNT},
     {"tx output packet counter", REG_TX_OUTPUT_PACKET_COUNT},
     {"tx buffer full drop packet count", REG_TX_BUFFER_FULL_DROP_PACKET_COUNT},
+#ifdef ONE_QUEUE_TSN
+    {"Tx AXIS FIFO Status Register", REG_TX_AXIS_FIFO_STATUS},
+    {"Tx Debug Register", REG_TX_DEBUG},
+#else
     {"TASB FIFO status", REG_TASB_FIFO_STATUS},
     {"TPPB FIFO status", REG_TPPB_FIFO_STATUS},
     {"MTIB debug", REG_MTIB_DEBUG},
+#endif
     {"TEMAC tx statistics", REG_TEMAC_TX_STAT},
+#ifdef ONE_QUEUE_TSN
+    {"tx_fail_packets", REG_TX_FAIL_PACKETS},
+    {"@tx_fail_bytes", REG_TX_FAIL_BYTES_MSB},
+    {"tx_delay_packets", REG_TX_DELAY_PACKETS},
+    {"@tx_delay_bytes", REG_TX_DELAY_BYTES_MSB},
+#endif
     {"", -1}
 };
 
