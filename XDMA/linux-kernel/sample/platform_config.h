@@ -25,7 +25,7 @@ typedef uintptr_t UINTPTR;
 
 #define ONE_QUEUE_TSN
 
-#define SDK_VERSION                                 (0x2305260C)
+#define SDK_VERSION                                 (0x2309180D)
 /*
  *     0x23050309 : TSN v1 0.7. First Release
  *     0x2305110A : Add RTT(Round Trip Time) test function
@@ -34,6 +34,7 @@ typedef uintptr_t UINTPTR;
  *     0x2305170B : Added an example function(int32_t transmit_arp_paket()) to send
  *                  a packet to the src/tsn/packet_handler.c file
  *     0x2305260C : Added P2P protocol function 
+ *     0x2309180D : PCIe version
  */
 
 #define REG_TSN_VERSION                             0x0000
