@@ -23,6 +23,8 @@ typedef uintptr_t UINTPTR;
 
 //#define PLATFORM_DEBUG
 
+#define ONE_QUEUE_TSN
+
 #define SDK_VERSION                                 (0x2309180D)
 /*
  *     0x23050309 : TSN v1 0.7. First Release
@@ -40,6 +42,11 @@ typedef uintptr_t UINTPTR;
 #define REG_TSN_CONTROL                             0x0008
 #define REG_SCRATCH                                 0x0010
 
+#define REG_QBV_SLOT_STATUS                         0x0028
+#define REG_PULSE_AT_MSB                            0x002c
+#define REG_PULSE_AT_LSB                            0x0030
+#define REG_CYCLE_1S                                0x0034
+
 #define REG_RX_PACKETS                              0x0100
 #define REG_RX_BYTES_HIGH                           0x0110
 #define REG_RX_BYTES_LOW                            0x0114
@@ -53,6 +60,13 @@ typedef uintptr_t UINTPTR;
 #define REG_TX_DROP_PACKETS                         0x0220
 #define REG_TX_DROP_BYTES_HIGH                      0x0230
 #define REG_TX_DROP_BYTES_LOW                       0x0234
+
+#define REG_TX_FAIL_PACKETS                         0x0240
+#define REG_TX_FAIL_BYTES_MSB                       0x0250
+#define REG_TX_FAIL_BYTES_LSB                       0x0254
+#define REG_TX_DELAY_PACKETS                        0x0260
+#define REG_TX_DELAY_BYTES_MSB                      0x0270
+#define REG_TX_DELAY_BYTES_LSB                      0x0274
 
 #define REG_TX_TIMESTAMP_COUNT                      0x0300
 #define REG_TX_TIMESTAMP1_HIGH                      0x0310
@@ -75,10 +89,17 @@ typedef uintptr_t UINTPTR;
 
 #define REG_RPPB_FIFO_STATUS                        0x0470
 #define REG_RASB_FIFO_STATUS                        0x0474
+
+#ifdef ONE_QUEUE_TSN
+#define REG_TX_AXIS_FIFO_STATUS                     0x0484
+#define REG_RX_DEBUG                                0x04A0
+#define REG_TX_DEBUG                                0x04B0
+#else
 #define REG_TASB_FIFO_STATUS                        0x0480
 #define REG_TPPB_FIFO_STATUS                        0x0484
 #define REG_MRIB_DEBUG                              0x04A0
 #define REG_MTIB_DEBUG                              0x04B0
+#endif
 
 #define REG_TEMAC_STATUS                            0x0500
 #define REG_TEMAC_RX_STAT                           0x0510
