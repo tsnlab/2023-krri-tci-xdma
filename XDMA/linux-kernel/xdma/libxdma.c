@@ -2915,6 +2915,17 @@ static int engine_init(struct xdma_engine *engine, struct xdma_dev *xdev,
 	return 0;
 }
 
+#ifdef __OS_DEBIAN__
+#define dma_unmap_sg(d, s, n, r) dma_unmap_sg_attrs(d, s, n, r, 0)
+
+static inline void
+pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg,
+         int nents, int direction)
+{
+    dma_unmap_sg(&hwdev->dev, sg, nents, (enum dma_data_direction)direction);
+}
+#endif
+
 /* transfer_destroy() - free transfer */
 static void transfer_destroy(struct xdma_dev *xdev, struct xdma_transfer *xfer)
 {
@@ -3163,6 +3174,17 @@ static struct xdma_request_cb *xdma_init_request(struct sg_table *sgt,
 #endif
 	return req;
 }
+
+#ifdef __OS_DEBIAN__
+#define dma_map_sg(d, s, n, r) dma_map_sg_attrs(d, s, n, r, 0)
+
+static inline int
+pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg,
+       int nents, int direction)
+{
+    return dma_map_sg(&hwdev->dev, sg, nents, (enum dma_data_direction)direction);
+}
+#endif
 
 ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 			unsigned int aperture, struct sg_table *sgt,
@@ -4198,6 +4220,18 @@ static int request_regions(struct xdma_dev *xdev, struct pci_dev *pdev)
 
 	return rv;
 }
+
+#ifdef __OS_DEBIAN__
+static inline int pci_set_dma_mask(struct pci_dev *dev, u64 mask)
+{
+    return dma_set_mask(&dev->dev, mask);
+}
+
+static inline int pci_set_consistent_dma_mask(struct pci_dev *dev, u64 mask)
+{
+    return dma_set_coherent_mask(&dev->dev, mask);
+}
+#endif
 
 static int set_dma_mask(struct pci_dev *pdev)
 {
