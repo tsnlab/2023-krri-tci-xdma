@@ -177,9 +177,9 @@ int tsn_app(int mode, int DataSize, char *InputFileName) {
 
 
 int process_main_runCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
-int process_main_ioctlCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_showCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_setCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+int process_main_rpiCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 
 
 menu_command_t  mainCommand_tbl[] = {
@@ -195,6 +195,13 @@ menu_command_t  mainCommand_tbl[] = {
     {"set",    EXECUTION_ATTR, process_main_setCmd, \
         "   set register [gen, rx, tx, h2c, c2h, irq, con, h2cs, c2hs, com, msix] <addr(Hex)> <data(Hex)>\n", \
         "   set XDMA resource"},
+    {"rpi",    EXECUTION_ATTR, process_main_rpiCmd, \
+        "   rpi gpio  <gpio_number> <rd/wr> [setting_value] [duration]\n", \
+        "   Command for Raspberry Pi GPIO test\n"
+        "     <gpio_number> default value: 17 (2 ~ 27)\n"
+        "           <rd/wr> default value: wr (0: rd, 1: wr)\n"
+        "   [setting_value] default value: 1 (0, 1)\n"
+        "        [duration] default value: 10 ( 2 ~ 100)"},
     { 0,           EXECUTION_ATTR,   NULL, " ", " "}
 };
 
@@ -311,6 +318,12 @@ argument_list_t  setRegisterArgument_tbl[] = {
 int fn_set_registerArgument(int argc, const char *argv[]);
 argument_list_t  setArgument_tbl[] = {
         {"register", fn_set_registerArgument},
+        {0,          NULL}
+    };
+
+int fn_rpi_gpioArgument(int argc, const char *argv[]);
+argument_list_t  rpiArgument_tbl[] = {
+        {"gpio", fn_rpi_gpioArgument},
         {0,          NULL}
     };
 
@@ -866,6 +879,70 @@ int fn_set_registerArgument(int argc, const char *argv[]) {
     return ERR_INVALID_PARAMETER;
 }
 
+int fn_rpi_gpioArgument(int argc, const char *argv[]) {
+
+    char command[1024] = "";
+    int gpio_num = 17;
+    int operation = 1;
+    int setting_value = 1;
+    int duration = 10;
+
+    if(argc <= 1) {
+        printf("%s needs more parameters\r\n", __func__);
+        return ERR_PARAMETER_MISSED;
+    }
+
+    if (str2int(argv[0], &gpio_num) != 0) {
+        printf( "Invalid parameter for gpio_num, %s\n", argv[0]);
+        return -1;
+    }
+    if((gpio_num < 2) || (gpio_num > 27)) {
+        printf("gpio_num %d is out of range[2..27].\n", gpio_num);
+        return -1;
+    }
+
+    if(strcmp(argv[1], "rd") == 0) {
+        operation = 0;
+    } else if(strcmp(argv[1], "wr") == 0) {
+        operation = 1;
+    } else  {
+        printf( "Invalid parameter for rd/wr, %s\n", argv[1]);
+        return -1;
+    }
+
+    if(operation == 0) {
+        sprintf(command, "python ./sample/gpio_control.py %d rd  ", gpio_num);
+    } else {
+        if(argc <= 3) {
+            printf("%s needs more parameters\r\n", __func__);
+            return ERR_PARAMETER_MISSED;
+        }
+        if (str2int(argv[2], &setting_value) != 0) {
+            printf( "Invalid parameter for setting_value, %s\n", argv[2]);
+            return -1;
+        }
+        if((setting_value < 0) || (setting_value > 1)) {
+            printf("setting_value %d is out of range[0..1].\n", setting_value);
+            return -1;
+        }
+
+        if (str2int(argv[3], &duration) != 0) {
+            printf( "Invalid parameter for duration, %s\n", argv[3]);
+            return -1;
+        }
+        if((duration < 2) || (duration > 100)) {
+            printf("duration %d is out of range[2 ~ 100].\n", duration);
+            return -1;
+        }
+
+        sprintf(command, "python ./sample/gpio_control.py %d wr %d %d ", gpio_num, setting_value, duration);
+    }
+
+    printf("%s\n", command);
+
+    return system(command);
+}
+
 int process_main_showCmd(int argc, const char *argv[], 
                              menu_command_t *menu_tbl) {
 
@@ -896,6 +973,24 @@ int process_main_setCmd(int argc, const char *argv[],
         if (!strcmp(argv[0], setArgument_tbl[index].name)) {
             argv++, argc--;
             setArgument_tbl[index].fP(argc, argv);
+            return 0;
+        }
+
+    return ERR_INVALID_PARAMETER;
+}
+
+int process_main_rpiCmd(int argc, const char *argv[], 
+                             menu_command_t *menu_tbl) {
+
+    if(argc <= 3) {
+        print_argumentWarningMessage(argc, argv, menu_tbl, NO_ECHO);
+        return ERR_PARAMETER_MISSED;
+    }
+    argv++, argc--;
+    for (int index = 0; rpiArgument_tbl[index].name; index++)
+        if (!strcmp(argv[0], rpiArgument_tbl[index].name)) {
+            argv++, argc--;
+            rpiArgument_tbl[index].fP(argc, argv);
             return 0;
         }
 

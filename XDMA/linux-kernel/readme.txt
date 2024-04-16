@@ -164,6 +164,13 @@ Usage:
         modinfo xdma (or)
         modinfo ../xdma/xdma.ko    
 
+  - test Raspberry Pi GPIO 
+        ./sample/tsn-app rpi gpio  <gpio_number> <rd/wr> [setting_value] [duration]
+                 <gpio_number> default value: 17 (2 ~ 27)
+                       <rd/wr> default value: wr (0: rd, 1: wr)
+               [setting_value] default value: 1 (0, 1)
+                    [duration] default value: 10 ( 2 ~ 100)
+
 Updates and Backward Compaitiblity:
   - The following features were added to the PCIe DMA IP and driver in Vivado
     2016.1. These features cannot be used with PCIe DMA IP if the IP was
