@@ -25,6 +25,14 @@ typedef uintptr_t UINTPTR;
 
 #define ONE_QUEUE_TSN
 
+//#define __RASPBERRY_PI_HAT_MODULE__
+
+#ifdef __RASPBERRY_PI_HAT_MODULE__
+#define NUMBER_OF_ETH_PORT  (2)
+#else
+#define NUMBER_OF_ETH_PORT  (1)
+#endif
+
 #define SDK_VERSION                                 (0x2309180D)
 /*
  *     0x23050309 : TSN v1 0.7. First Release

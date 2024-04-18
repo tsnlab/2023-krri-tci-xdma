@@ -136,6 +136,12 @@ int tsn_app(int mode, int DataSize, char *InputFileName) {
     stats_thread_arg_t st_arg;
 #endif
 
+#ifdef __RASPBERRY_PI_HAT_MODULE__
+    pthread_t tid4, tid5;
+    rx_thread_arg_t    rx2_arg;
+    tx_thread_arg_t    tx2_arg;
+#endif
+
     if(initialize_buffer_allocation()) {
         return -1;
     }
@@ -147,16 +153,40 @@ int tsn_app(int mode, int DataSize, char *InputFileName) {
     memcpy(rx_arg.fn, InputFileName, MAX_INPUT_FILE_NAME_SIZE);
     rx_arg.mode = mode;
     rx_arg.size = DataSize;
+    rx_arg.port = 0;
     pthread_create(&tid1, NULL, receiver_thread, (void *)&rx_arg);
     sleep(1);
+
+#ifdef __RASPBERRY_PI_HAT_MODULE__
+    memset(&rx2_arg, 0, sizeof(rx_thread_arg_t));
+    memcpy(rx2_arg.devname, DEF_RX2_DEVICE_NAME, sizeof(DEF_RX2_DEVICE_NAME));
+    memcpy(rx2_arg.fn, InputFileName, MAX_INPUT_FILE_NAME_SIZE);
+    rx2_arg.mode = mode;
+    rx2_arg.size = DataSize;
+    rx2_arg.port = 1;
+    pthread_create(&tid4, NULL, receiver_thread, (void *)&rx2_arg);
+    sleep(1);
+#endif
 
     memset(&tx_arg, 0, sizeof(tx_thread_arg_t));
     memcpy(tx_arg.devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
     memcpy(tx_arg.fn, InputFileName, MAX_INPUT_FILE_NAME_SIZE);
     tx_arg.mode = mode;
     tx_arg.size = DataSize;
+    tx_arg.port = 0;
     pthread_create(&tid2, NULL, sender_thread, (void *)&tx_arg);
     sleep(1);
+
+#ifdef __RASPBERRY_PI_HAT_MODULE__
+    memset(&tx2_arg, 0, sizeof(tx_thread_arg_t));
+    memcpy(tx2_arg.devname, DEF_TX2_DEVICE_NAME, sizeof(DEF_TX2_DEVICE_NAME));
+    memcpy(tx2_arg.fn, InputFileName, MAX_INPUT_FILE_NAME_SIZE);
+    tx2_arg.mode = mode;
+    tx2_arg.size = DataSize;
+    tx2_arg.port = 1;
+    pthread_create(&tid5, NULL, sender_thread, (void *)&tx2_arg);
+    sleep(1);
+#endif
 
 #ifdef PLATFORM_DEBUG
     memset(&st_arg, 0, sizeof(stats_thread_arg_t));
@@ -165,9 +195,15 @@ int tsn_app(int mode, int DataSize, char *InputFileName) {
 #endif
 
     pthread_join(tid1, NULL);
+#ifdef __RASPBERRY_PI_HAT_MODULE__
+    pthread_join(tid4, NULL);
+#endif
     pthread_join(tid2, NULL);
 #ifdef PLATFORM_DEBUG
     pthread_join(tid3, NULL);
+#endif
+#ifdef __RASPBERRY_PI_HAT_MODULE__
+    pthread_join(tid5, NULL);
 #endif
 
     buffer_release();
@@ -175,12 +211,10 @@ int tsn_app(int mode, int DataSize, char *InputFileName) {
     return 0;
 }
 
-
 int process_main_runCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_showCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_setCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_rpiCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
-
 
 menu_command_t  mainCommand_tbl[] = {
     { "run",   EXECUTION_ATTR,   process_main_runCmd, \

@@ -24,15 +24,15 @@
 #include "../libxdma/api_xdma.h"
 #include "../libxdma/ioctl_xdma.h"
 
-static CircularQueue_t g_queue;
-static CircularQueue_t* queue = NULL;
+static CircularQueue_t g_queue[NUMBER_OF_ETH_PORT];
+static CircularQueue_t* queue[NUMBER_OF_ETH_PORT];
 
-stats_t rx_stats;
+stats_t rx_stats[NUMBER_OF_ETH_PORT];
 
 extern int rx_thread_run;
 
-void initialize_queue(CircularQueue_t* p_queue) {
-    queue = p_queue;
+void initialize_queue(int port, CircularQueue_t* p_queue) {
+    queue[port] = p_queue;
 
     p_queue->front = 0;
     p_queue->rear = -1;
@@ -40,48 +40,48 @@ void initialize_queue(CircularQueue_t* p_queue) {
     pthread_mutex_init(&p_queue->mutex, NULL);
 }
 
-static int isQueueEmpty() {
-    return (queue->count == 0);
+static int isQueueEmpty(int port) {
+    return (queue[port]->count == 0);
 }
 
-static int isQueueFull() {
-    return (queue->count == NUMBER_OF_QUEUE);
+static int isQueueFull(int port) {
+    return (queue[port]->count == NUMBER_OF_QUEUE);
 }
 
-int getQueueCount() {
-    return queue->count;
+int getQueueCount(int port) {
+    return queue[port]->count;
 }
 
-static void xbuffer_enqueue(QueueElement element) {
-    pthread_mutex_lock(&queue->mutex);
+static void xbuffer_enqueue(int port, QueueElement element) {
+    pthread_mutex_lock(&queue[port]->mutex);
 
-    if (isQueueFull()) {
+    if (isQueueFull(port)) {
         debug_printf("Queue is full. Cannot xbuffer_enqueue.\n");
-        pthread_mutex_unlock(&queue->mutex);
+        pthread_mutex_unlock(&queue[port]->mutex);
         return;
     }
 
-    queue->rear = (queue->rear + 1) % NUMBER_OF_QUEUE;
-    queue->elements[queue->rear] = element;
-    queue->count++;
+    queue[port]->rear = (queue[port]->rear + 1) % NUMBER_OF_QUEUE;
+    queue[port]->elements[queue[port]->rear] = element;
+    queue[port]->count++;
 
-    pthread_mutex_unlock(&queue->mutex);
+    pthread_mutex_unlock(&queue[port]->mutex);
 }
 
-static QueueElement xbuffer_dequeue() {
-    pthread_mutex_lock(&queue->mutex);
+static QueueElement xbuffer_dequeue(int port) {
+    pthread_mutex_lock(&queue[port]->mutex);
 
-    if (isQueueEmpty()) {
+    if (isQueueEmpty(port)) {
         debug_printf("Queue is empty. Cannot xbuffer_dequeue.\n");
-        pthread_mutex_unlock(&queue->mutex);
+        pthread_mutex_unlock(&queue[port]->mutex);
         return EMPTY_ELEMENT;
     }
 
-    QueueElement dequeuedElement = queue->elements[queue->front];
-    queue->front = (queue->front + 1) % NUMBER_OF_QUEUE;
-    queue->count--;
+    QueueElement dequeuedElement = queue[port]->elements[queue[port]->front];
+    queue[port]->front = (queue[port]->front + 1) % NUMBER_OF_QUEUE;
+    queue[port]->count--;
 
-    pthread_mutex_unlock(&queue->mutex);
+    pthread_mutex_unlock(&queue[port]->mutex);
 
     return dequeuedElement;
 }
@@ -91,6 +91,7 @@ void initialize_statistics(stats_t* p_stats) {
     memset(p_stats, 0, sizeof(stats_t));
 }
 
+#if 0
 #define BUFFER_SIZE 16
 
 void print_hex_ascii(FILE *fp, int addr, const unsigned char *buffer, size_t length) {
@@ -139,183 +140,55 @@ void packet_dump(FILE *fp, BUF_POINTER buffer, int length) {
         address += BUFFER_SIZE;
     }
 }
+#endif
 
-static void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
+static void receiver_in_normal_mode(char* devname, int fd, uint64_t size, int port) {
 
     BUF_POINTER buffer;
     int bytes_rcv;
 
     set_register(REG_TSN_CONTROL, 1);
     while (rx_thread_run) {
-        buffer = buffer_pool_alloc();
+        buffer = buffer_pool_alloc(port);
         if(buffer == NULL) {
             debug_printf("FAILURE: Could not buffer_pool_alloc.\n");
-            rx_stats.rxNoBuffer++;
+            rx_stats[port].rxNoBuffer++;
             continue;
         }
 
         bytes_rcv = 0;
         if(xdma_api_read_to_buffer_with_fd(devname, fd, buffer, 
                                            size, &bytes_rcv)) {
-            if(buffer_pool_free(buffer)) {
+            if(buffer_pool_free(port, buffer)) {
                 debug_printf("FAILURE: Could not buffer_pool_free.\n");
             }
-            rx_stats.rxErrors++;
+            rx_stats[port].rxErrors++;
             continue;
         }
         if(bytes_rcv > MAX_BUFFER_LENGTH) {
-            if(buffer_pool_free(buffer)) {
+            if(buffer_pool_free(port, buffer)) {
                 debug_printf("FAILURE: Could not buffer_pool_free.\n");
             }
-            rx_stats.rxErrors++;
+            rx_stats[port].rxErrors++;
             continue;
         }
-        rx_stats.rxPackets++;
-        rx_stats.rxBytes += bytes_rcv;
+        rx_stats[port].rxPackets++;
+        rx_stats[port].rxBytes += bytes_rcv;
 
-        xbuffer_enqueue((QueueElement)buffer);
+        xbuffer_enqueue(port, (QueueElement)buffer);
     }
     set_register(REG_TSN_CONTROL, 0);
-}
-
-void receiver_in_loopback_mode(char* devname, int fd, char *fn, uint64_t size) {
-
-    BUF_POINTER buffer;
-    BUF_POINTER data;
-    int bytes_rcv;
-    int infile_fd = -1;
-    ssize_t rc;
-    FILE *fp = NULL;
-
-    printf(">>> %s\n", __func__);
-
-    fp = fopen(fn, "rb");
-    if(fp == NULL) {
-        printf("Unable to open input file %s, %d.\n", fn, infile_fd);
-        return;
-    }
-
-    data = (QueueElement)xdma_api_get_buffer(size);
-    if(data == NULL) {
-        close(infile_fd);
-        return;
-    }
-
-    rc = fread(data, sizeof(char), size, fp);
-    fclose(fp);
-    if (rc < 0 || rc < size) {
-        free(data);
-        return;
-    }
-
-    buffer = buffer_pool_alloc();
-    if(buffer == NULL) {
-        printf("FAILURE: Could not buffer_pool_alloc.\n");
-        return;
-    }
-
-    while (rx_thread_run) {
-
-        if(xdma_api_read_to_buffer_with_fd(devname, fd, buffer, 
-                                           size, &bytes_rcv)) {
-            continue;
-        }
-
-        if(size != bytes_rcv) {
-            debug_printf("FAILURE: size(%ld) and bytes_rcv(%ld) are different.\n", 
-                         size, bytes_rcv);
-            rx_stats.rxErrors++;
-            continue;
-        }
-
-        if(memcmp((const void *)data, (const void *)buffer, size)) {
-            debug_printf("FAILURE: data(%p) and buffer(%p) are different.\n", 
-                         data, buffer);
-            rx_stats.rxErrors++;
-            continue;
-        }
-
-        rx_stats.rxPackets++;
-        rx_stats.rxBytes += bytes_rcv;
-
-    }
-    buffer_pool_free(buffer);
-}
-
-void receiver_in_performance_mode(char* devname, int fd, char *fn, uint64_t size) {
-
-    BUF_POINTER buffer;
-    int bytes_rcv;
-
-    set_register(REG_TSN_CONTROL, 1);
-    while (rx_thread_run) {
-        buffer = buffer_pool_alloc();
-        if(buffer == NULL) {
-            debug_printf("FAILURE: Could not buffer_pool_alloc.\n");
-            continue;
-        }
-
-        if(xdma_api_read_to_buffer_with_fd(devname, fd, buffer, 
-                                           size, &bytes_rcv)) {
-            if(buffer_pool_free(buffer)) {
-                debug_printf("FAILURE: Could not buffer_pool_free.\n");
-            }
-            continue;
-        }
-
-        if(size != bytes_rcv) {
-            debug_printf("FAILURE: size(%ld) and bytes_rcv(%ld) are different.\n", 
-                         size, bytes_rcv);
-            if(buffer_pool_free(buffer)) {
-                debug_printf("FAILURE: Could not buffer_pool_free.\n");
-            }
-            rx_stats.rxErrors++;
-            continue;
-        }
-
-        rx_stats.rxPackets++;
-        rx_stats.rxBytes += bytes_rcv;
-
-        buffer_pool_free(buffer);
-    }
-    set_register(REG_TSN_CONTROL, 0);
-}
-
-void receiver_in_debug_mode(char* devname, int fd, char *fn, uint64_t size) {
-
-    BUF_POINTER buffer;
-    int bytes_rcv;
-
-    printf(">>> %s\n", __func__);
-
-    if(posix_memalign((void **)&buffer, BUFFER_ALIGNMENT /*alignment */, MAX_BUFFER_LENGTH)) {
-        fprintf(stderr, "OOM %u.\n", MAX_BUFFER_LENGTH);
-        return;
-    }
-
-    while (rx_thread_run) {
-        if(xdma_api_read_to_buffer_with_fd(devname, fd, buffer, 
-                                           MAX_BUFFER_LENGTH, &bytes_rcv)) {
-            continue;
-        }
-
-        for(int i=0; i<MAX_PACKET_BURST; i++) {
-//            packet_dump(stdout, (BUF_POINTER)&buffer[i*MAX_PACKET_LENGTH], 32);
-        }
-
-        rx_stats.rxPackets++;
-        rx_stats.rxBytes += bytes_rcv;
-    }
 }
 
 void* receiver_thread(void* arg) {
 
     rx_thread_arg_t* p_arg = (rx_thread_arg_t*)arg;
     int fd = 0;
+    int port;
 
-    printf(">>> %s(devname: %s, fn: %s, mode: %d, size: %d)\n", 
+    printf(">>> %s(devname: %s, fn: %s, mode: %d, size: %d, port: %d)\n", 
                 __func__, p_arg->devname, p_arg->fn,
-                p_arg->mode, p_arg->size);
+                p_arg->mode, p_arg->size, p_arg->port);
 
     if(xdma_api_dev_open(p_arg->devname, 1 /* eop_flush */, &fd)) {
         printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", p_arg->devname);
@@ -323,29 +196,21 @@ void* receiver_thread(void* arg) {
         return NULL;
     }
 
-    initialize_queue(&g_queue);
-    initialize_statistics(&rx_stats);
+    port = p_arg->port;
+
+    initialize_queue(port, &g_queue[port]);
+    initialize_statistics(&rx_stats[port]);
 
     switch(p_arg->mode) {
-    case RUN_MODE_TSN:
     case RUN_MODE_NORMAL:
-        receiver_in_normal_mode(p_arg->devname, fd, p_arg->size);
-    break;
-    case RUN_MODE_LOOPBACK:
-        receiver_in_loopback_mode(p_arg->devname, fd, p_arg->fn, p_arg->size);
-    break;
-    case RUN_MODE_PERFORMANCE:
-        receiver_in_performance_mode(p_arg->devname, fd, p_arg->fn, p_arg->size);
-    break;
-    case RUN_MODE_DEBUG:
-        receiver_in_debug_mode(p_arg->devname, fd, p_arg->fn, p_arg->size);
+        receiver_in_normal_mode(p_arg->devname, fd, p_arg->size, p_arg->port);
     break;
     default:
         printf("%s - Unknown mode(%d)\n", __func__, p_arg->mode);
     break;
     }
 
-    pthread_mutex_destroy(&g_queue.mutex);
+    pthread_mutex_destroy(&g_queue[port].mutex);
 
     xdma_api_dev_close(fd);
     printf("<<< %s\n", __func__);

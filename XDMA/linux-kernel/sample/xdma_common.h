@@ -5,7 +5,7 @@
 #define MAX_PACKET_LENGTH (0x800)
 #define MAX_PACKET_BURST  (1)    /* 16 Iterate over the userspace buffer, taking at most 255 * PAGE_SIZE bytes for each DMA transfer. */
 #define MAX_BUFFER_LENGTH (MAX_PACKET_LENGTH * MAX_PACKET_BURST)
-#define NUMBER_OF_BUFFER  (2048)
+#define NUMBER_OF_BUFFER  (1024)
 #define NUMBER_OF_POOL_BUFFER (NUMBER_OF_BUFFER + 1)
 #define NUMBER_OF_RESERVED_BUFFER (4)
 #define ENGINE_NUMBER_OF_BUFFER  (NUMBER_OF_BUFFER/2)
@@ -65,7 +65,7 @@ enum {
     RUN_MODE_CNT,
 };
 
-#define DEFAULT_RUN_MODE RUN_MODE_TSN
+#define DEFAULT_RUN_MODE RUN_MODE_NORMAL
 
 #define MAX_INPUT_FILE_NAME_SIZE 256
 typedef struct rx_thread_arg {
@@ -73,6 +73,7 @@ typedef struct rx_thread_arg {
     char fn[MAX_INPUT_FILE_NAME_SIZE];
     int mode;
     int size;
+    int port;
 } rx_thread_arg_t;
 
 typedef struct tx_thread_arg {
@@ -80,6 +81,7 @@ typedef struct tx_thread_arg {
     char fn[MAX_INPUT_FILE_NAME_SIZE];
     int mode;
     int size;
+    int port;
 } tx_thread_arg_t;
 
 typedef struct stats_thread_arg {
@@ -99,8 +101,16 @@ typedef struct _execTime
     int sec;
 } execTime_t;
 
+#ifdef __RASPBERRY_PI_HAT_MODULE__
+#define DEF_RX_DEVICE_NAME "/dev/xdma0_c2h_0"
+#define DEF_TX_DEVICE_NAME "/dev/xdma0_h2c_1"
+
+#define DEF_RX2_DEVICE_NAME "/dev/xdma0_c2h_1"
+#define DEF_TX2_DEVICE_NAME "/dev/xdma0_h2c_0"
+#else
 #define DEF_RX_DEVICE_NAME "/dev/xdma0_c2h_0"
 #define DEF_TX_DEVICE_NAME "/dev/xdma0_h2c_0"
+#endif
 
 void* receiver_thread(void* arg);
 void* sender_thread(void* arg);

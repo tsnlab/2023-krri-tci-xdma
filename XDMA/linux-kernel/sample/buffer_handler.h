@@ -16,7 +16,7 @@
 
 void relese_buffers(int count);
 
-int buffer_pool_free(BUF_POINTER element);
+int buffer_pool_free(int port, BUF_POINTER element);
 BUF_POINTER buffer_pool_alloc();
 int initialize_buffer_allocation();
 
