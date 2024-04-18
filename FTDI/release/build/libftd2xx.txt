@@ -1,0 +1,5 @@
+Output of 'file' command:
+=========================
+./build/arm-v8/libftd2xx.so.1.4.27: ELF 64-bit LSB shared object, ARM aarch64, version 1 (SYSV), dynamically linked, BuildID[sha1]=06a4688dbd0dd408f0caecd34c37d04d27e48b84, with debug_info, not stripped
+Output of 'readelf -A' command:
+===============================
