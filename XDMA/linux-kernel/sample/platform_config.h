@@ -25,7 +25,7 @@ typedef uintptr_t UINTPTR;
 
 #define ONE_QUEUE_TSN
 
-//#define __RASPBERRY_PI_HAT_MODULE__
+#define __RASPBERRY_PI_HAT_MODULE__
 
 #ifdef __RASPBERRY_PI_HAT_MODULE__
 #define NUMBER_OF_ETH_PORT  (2)
