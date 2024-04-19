@@ -113,9 +113,6 @@ typedef uintptr_t UINTPTR;
 #define REG_TEMAC_RX_STAT                           0x0510
 #define REG_TEMAC_TX_STAT                           0x0514
 
-#define REG_GPIO_LOW                                0x0500
-#define REG_GPIO_HIGH                               0x0504
-
 #define TSCB_ADDRESS                            (0x44C00000)
 
 #define DUMPREG_GENERAL 0x01
