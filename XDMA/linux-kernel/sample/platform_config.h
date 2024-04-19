@@ -113,6 +113,9 @@ typedef uintptr_t UINTPTR;
 #define REG_TEMAC_RX_STAT                           0x0510
 #define REG_TEMAC_TX_STAT                           0x0514
 
+#define REG_GPIO_LOW                                0x0500
+#define REG_GPIO_HIGH                               0x0504
+
 #define TSCB_ADDRESS                            (0x44C00000)
 
 #define DUMPREG_GENERAL 0x01
@@ -126,7 +129,8 @@ typedef uintptr_t UINTPTR;
 #define XDMA_REG_C2HS   0x100
 #define XDMA_REG_SCOM   0x200
 #define XDMA_REG_MSIX   0x400
-#define DUMPREG_ALL     0x7FF
+#define DUMPREG_GPIO    0x800
+#define DUMPREG_ALL     0xFFF
 
 
 struct rx_metadata {

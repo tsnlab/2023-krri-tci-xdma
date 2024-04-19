@@ -92,6 +92,12 @@ struct reginfo reg_tx[] = {
     {"", -1}
 };
 
+struct reginfo reg_gpio[] = {
+    {"Raspberry Pi 5 GPIO[15..0]", REG_GPIO_LOW},
+    {"Raspberry Pi 5 GPIO[27..16]", REG_GPIO_HIGH},
+    {"", -1}
+};
+
 /*****************************************************************************/
 
 void xdma_signal_handler(int sig) {
@@ -224,7 +230,7 @@ menu_command_t  mainCommand_tbl[] = {
         "       <file name> default value: ./tests/data/datafile0_4K.bin(Binary file for test)\n"
         "            <size> default value: 1024 (64 ~ 4096)"},
     {"show",   EXECUTION_ATTR, process_main_showCmd, \
-        "   show register [gen, rx, tx, h2c, c2h, irq, con, h2cs, c2hs, com, msix]\n", \
+        "   show register [gen, rx, tx, gpio, h2c, c2h, irq, con, h2cs, c2hs, com, msix]\n", \
         "   Show XDMA resource"},
     {"set",    EXECUTION_ATTR, process_main_setCmd, \
         "   set register [gen, rx, tx, h2c, c2h, irq, con, h2cs, c2hs, com, msix] <addr(Hex)> <data(Hex)>\n", \
@@ -294,6 +300,7 @@ int process_main_runCmd(int argc, const char *argv[],
 int32_t fn_show_register_genArgument(int32_t argc, const char *argv[]);
 int32_t fn_show_register_rxArgument(int32_t argc, const char *argv[]);
 int32_t fn_show_register_txArgument(int32_t argc, const char *argv[]);
+int32_t fn_show_register_gpioArgument(int32_t argc, const char *argv[]);
 int32_t fn_show_register_h2cArgument(int32_t argc, const char *argv[]);
 int32_t fn_show_register_c2hArgument(int32_t argc, const char *argv[]);
 int32_t fn_show_register_irqArgument(int32_t argc, const char *argv[]);
@@ -307,6 +314,7 @@ argument_list_t  showRegisterArgument_tbl[] = {
         {"gen",  fn_show_register_genArgument},
         {"rx",   fn_show_register_rxArgument},
         {"tx",   fn_show_register_txArgument},
+        {"gpio", fn_show_register_gpioArgument},
         {"h2c",  fn_show_register_h2cArgument},
         {"c2h",  fn_show_register_c2hArgument},
         {"irq",  fn_show_register_irqArgument},
@@ -634,12 +642,12 @@ struct reginfo reg_msix_vector[] = {
     {"", -1}
 };
 
-
 void dump_registers(int dumpflag, int on) {
     printf("==== Register Dump[%d] Start ====\n", on);
     if (dumpflag & DUMPREG_GENERAL) dump_reginfo(reg_general);
     if (dumpflag & DUMPREG_RX) dump_reginfo(reg_rx);
     if (dumpflag & DUMPREG_TX) dump_reginfo(reg_tx);
+    if (dumpflag & DUMPREG_GPIO) dump_reginfo(reg_gpio);
     if (dumpflag & XDMA_REG_H2C) xdma_reginfo(reg_h2c);
     if (dumpflag & XDMA_REG_C2H) xdma_reginfo(reg_c2h);
     if (dumpflag & XDMA_REG_IRQ) xdma_reginfo(reg_irq);
@@ -687,6 +695,12 @@ int32_t fn_show_register_rxArgument(int32_t argc, const char *argv[]) {
 int32_t fn_show_register_txArgument(int32_t argc, const char *argv[]) {
 
     dump_registers(DUMPREG_TX, 1);
+    return 0;
+}
+
+int32_t fn_show_register_gpioArgument(int32_t argc, const char *argv[]) {
+
+    dump_registers(DUMPREG_GPIO, 1);
     return 0;
 }
 
