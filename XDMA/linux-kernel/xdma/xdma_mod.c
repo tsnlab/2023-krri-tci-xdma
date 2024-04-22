@@ -28,7 +28,6 @@
 #include "version.h"
 #include "xdma_netdev.h"
 #include "example_ptp.h"
-#include "example_sys.h"
 
 #define DRV_MODULE_NAME		"xdma"
 #define DRV_MODULE_DESC		"Xilinx XDMA Reference Driver"
@@ -168,12 +167,15 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
         
 
 	xpdev = xpdev_alloc(pdev);
-	if (!xpdev)
+	if (!xpdev) {
+                pr_err("xpdev_alloc failed\n");
 		return -ENOMEM;
+        }
 
 	hndl = xdma_device_open(DRV_MODULE_NAME, pdev, &xpdev->user_max,
 			&xpdev->h2c_channel_max, &xpdev->c2h_channel_max);
 	if (!hndl) {
+                pr_err("xdma_device_open failed\n");
 		rv = -EINVAL;
 		goto err_out;
 	}
@@ -203,13 +205,16 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		u32 mask = (1 << (xpdev->user_max + 1)) - 1;
 
 		rv = xdma_user_isr_enable(hndl, mask);
-		if (rv)
+		if (rv) {
+                        pr_err("xdma_user_isr_enable failed\n");
 			goto err_out;
+                }
 	}
 	/* make sure no duplicate */
 	xdev = xdev_find_by_pdev(pdev);
 	if (!xdev) {
 		pr_warn("NO xdev found!\n");
+                pr_err("xdev_find_by_pdev failed\n");
 		rv =  -EINVAL;
 		goto err_out;
 	}
@@ -228,8 +233,10 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	xpdev->xdev = hndl;
 
 	rv = xpdev_create_interfaces(xpdev);
-	if (rv)
+	if (rv) {
+                pr_err("xpdev_create_interfaces failed\n");
 		goto err_out;
+        }
 	dev_set_drvdata(&pdev->dev, xpdev);
 
 	/* Set the TSN register to 0x1 */
@@ -332,15 +339,15 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
         ptp_data->xdev = xpdev->xdev;
         xpdev->ptp = ptp_data;
 
-	//rv = register_netdev(ndev);
+	rv = register_netdev(ndev);
 	if (rv < 0) {
 		free_netdev(ndev);
 		kfree(priv->rx_buffer);
 		pr_err("register_netdev failed\n");
 		goto err_out;
 	}
-	//netif_stop_queue(ndev);
-	//channel_interrupts_enable(xdev, ~0);
+	netif_stop_queue(ndev);
+	channel_interrupts_enable(xdev, ~0);
 	return 0;
 
 err_out:
@@ -356,6 +363,7 @@ static void remove_one(struct pci_dev *pdev)
 	struct net_device *ndev;
 	struct xdma_private *priv;
         struct ptp_device_data *ptp_data;
+        long flag;
 
 	if (!pdev)
 		return;
@@ -372,9 +380,12 @@ static void remove_one(struct pci_dev *pdev)
 
 	xdev = xpdev->xdev;
         ptp_data = xpdev->ptp;
-	//channel_interrupts_disable(xdev, ~0);
+	channel_interrupts_disable(xdev, ~0);
+        spin_lock_irqsave(&priv->rx_lock, flag);
 	iowrite32(DMA_ENGINE_STOP, &priv->rx_engine->regs->control);
-	//unregister_netdev(ndev);
+        spin_unlock_irqrestore(&priv->rx_lock, flag);
+     //   ptp_device_stop(ptp_data);
+	unregister_netdev(ndev);
         ptp_device_destroy(ptp_data);
 	dma_free_coherent(&pdev->dev, sizeof(struct xdma_desc), priv->desc[0], priv->bus_addr[0]);
 	dma_free_coherent(&pdev->dev, sizeof(struct xdma_desc), priv->desc[1], priv->bus_addr[1]);

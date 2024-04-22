@@ -1389,7 +1389,9 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		struct xdma_result *result = priv->res;
 		struct sk_buff *skb;
 		int skb_len;
+                long flag;
 
+                spin_lock_irqsave(&priv->rx_lock, flag);
 		engine_status_read(engine, 1, 0);
 		skb_len = result->length - RX_METADATA_SIZE - CRC_LEN;
 		skb = dev_alloc_skb(skb_len);
@@ -1414,6 +1416,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		/* Start the engine */
 		channel_interrupts_enable(engine->xdev, engine->irq_bitmask);
 		iowrite32(DMA_ENGINE_START, &engine->regs->control);
+                spin_unlock_irqrestore(&priv->rx_lock, flag);
 	}
 
 	mask = ch_irq & xdev->mask_irq_h2c;
@@ -1592,7 +1595,8 @@ static void unmap_bars(struct xdma_dev *xdev, struct pci_dev *dev)
 		/* is this BAR mapped? */
 		if (xdev->bar[i]) {
 			/* unmap BAR */
-			pci_iounmap(dev, xdev->bar[i]);
+                        iounmap(xdev->bar[i]);
+			//pci_iounmap(dev, xdev->bar[i]);
 			/* mark as unmapped */
 			xdev->bar[i] = NULL;
 		}
@@ -1613,6 +1617,7 @@ static int map_single_bar(struct xdma_dev *xdev, struct pci_dev *dev, int idx)
 
 	/* do not map BARs with length 0. Note that start MAY be 0! */
 	if (!bar_len) {
+                pr_info("BAR #%d has zero length - skipping\n", idx);
 		//pr_info("BAR #%d is not present - skipping\n", idx);
 		return 0;
 	}
@@ -1628,7 +1633,8 @@ static int map_single_bar(struct xdma_dev *xdev, struct pci_dev *dev, int idx)
 	 * address space
 	 */
 	dbg_init("BAR%d: %llu bytes to be mapped.\n", idx, (u64)map_len);
-	xdev->bar[idx] = pci_iomap(dev, idx, map_len);
+	//xdev->bar[idx] = pci_iomap(dev, idx, map_len);
+        xdev->bar[idx] = ioremap(bar_start, map_len);
 
 	if (!xdev->bar[idx]) {
 		pr_info("Could not map BAR %d.\n", idx);
@@ -4591,8 +4597,10 @@ void *xdma_device_open(const char *mname, struct pci_dev *pdev, int *user_max,
 
 	/* allocate zeroed device book keeping structure */
 	xdev = alloc_dev_instance(pdev);
-	if (!xdev)
+	if (!xdev) {
+                pr_err("Failed to allocate device instance\n");
 		return NULL;
+        }
 	xdev->mod_name = mname;
 	xdev->user_max = *user_max;
 	xdev->h2c_channel_max = *h2c_channel_max;

@@ -43,7 +43,8 @@ int xdma_netdev_open(struct net_device *ndev)
 {
         struct xdma_private *priv = netdev_priv(ndev);
         dma_addr_t dma_addr;
-        u32 w;
+        u32 lo, hi;
+        long flag;
 
         netif_carrier_on(ndev);
         netif_start_queue(ndev);
@@ -56,15 +57,17 @@ int xdma_netdev_open(struct net_device *ndev)
         priv->rx_desc->src_addr_lo = cpu_to_le32(PCI_DMA_L(dma_addr));
         priv->rx_desc->src_addr_hi = cpu_to_le32(PCI_DMA_H(dma_addr));
         rx_desc_set(priv->rx_desc, priv->dma_addr, XDMA_BUFFER_SIZE);
+        spin_lock_irqsave(&priv->rx_lock, flag);
         ioread32(&priv->rx_engine->regs->status_rc);
 
         /* RX start */
-        w = cpu_to_le32(PCI_DMA_L(priv->rx_bus_addr));
-        iowrite32(w, &priv->rx_engine->sgdma_regs->first_desc_lo);
+        lo = cpu_to_le32(PCI_DMA_L(priv->rx_bus_addr));
+        iowrite32(lo, &priv->rx_engine->sgdma_regs->first_desc_lo);
 
-        w = cpu_to_le32(PCI_DMA_H(priv->rx_bus_addr));
-        iowrite32(w, &priv->rx_engine->sgdma_regs->first_desc_hi);
+        hi = cpu_to_le32(PCI_DMA_H(priv->rx_bus_addr));
+        iowrite32(hi, &priv->rx_engine->sgdma_regs->first_desc_hi);
         iowrite32(DMA_ENGINE_START, &priv->rx_engine->regs->control);
+        spin_unlock_irqrestore(&priv->rx_lock, flag);
         return 0;
 }
 
@@ -197,8 +200,6 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         iowrite32(w, xdev->bar[1] + DESC_REG_HI);
         
         iowrite32(DMA_ENGINE_START, &priv->tx_engine->regs->control);
-        ioread32(&priv->tx_engine->regs->status);
         spin_unlock_irqrestore(&priv->tx_lock, flag);
-
         return NETDEV_TX_OK;
 }
