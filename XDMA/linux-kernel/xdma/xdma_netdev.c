@@ -48,6 +48,7 @@ int xdma_netdev_open(struct net_device *ndev)
 
         netif_carrier_on(ndev);
         netif_start_queue(ndev);
+
         /* Set the RX descriptor */
         dma_addr = dma_map_single(
                         &priv->xdev->pdev->dev,
@@ -56,7 +57,7 @@ int xdma_netdev_open(struct net_device *ndev)
                         DMA_FROM_DEVICE);
         priv->rx_desc->src_addr_lo = cpu_to_le32(PCI_DMA_L(dma_addr));
         priv->rx_desc->src_addr_hi = cpu_to_le32(PCI_DMA_H(dma_addr));
-        rx_desc_set(priv->rx_desc, priv->dma_addr, XDMA_BUFFER_SIZE);
+        rx_desc_set(priv->rx_desc, priv->rx_dma_addr, XDMA_BUFFER_SIZE);
         spin_lock_irqsave(&priv->rx_lock, flag);
         ioread32(&priv->rx_engine->regs->status_rc);
 
@@ -66,56 +67,20 @@ int xdma_netdev_open(struct net_device *ndev)
 
         hi = cpu_to_le32(PCI_DMA_H(priv->rx_bus_addr));
         iowrite32(hi, &priv->rx_engine->sgdma_regs->first_desc_hi);
+
         iowrite32(DMA_ENGINE_START, &priv->rx_engine->regs->control);
         spin_unlock_irqrestore(&priv->rx_lock, flag);
+
         return 0;
 }
 
 int xdma_netdev_close(struct net_device *ndev)
 {
         netif_stop_queue(ndev);
+        pr_info("xdma_netdev_close\n");
         netif_carrier_off(ndev);
+        pr_info("netif_carrier_off\n");
         return 0;
-}
-
-
-int check_desc1_status(struct xdma_private *priv, int index, dma_addr_t addr, u32 len, struct sk_buff *skb)
-{
-        unsigned long flag;
-        struct xdma_desc *desc = priv->desc[index];
-
-        spin_lock_irqsave(&priv->desc_lock[index], flag);
-        /* Need to check if the descriptor is empty */
-        if (desc->src_addr_lo == 0 && desc->src_addr_hi == 0) {
-                tx_desc_set(desc, addr, len);
-                priv->skb[index] = skb;
-                spin_unlock_irqrestore(&priv->desc_lock[index], flag);
-                return DESC_READY;
-        }
-        spin_unlock_irqrestore(&priv->desc_lock[index], flag);
-        return DESC_BUSY;
-}
-
-int check_desc2_status(struct xdma_private *priv, int index, dma_addr_t addr, u32 len, int desc1_status, struct sk_buff *skb)
-{
-        unsigned long flag;
-        struct xdma_desc *desc = priv->desc[index];
-
-        spin_lock_irqsave(&priv->desc_lock[index], flag);
-
-        /* Need to check if the descriptor is empty */
-        if (desc->src_addr_lo == 0 && desc->src_addr_hi == 0) {
-                if (desc1_status == DESC_READY) {
-                        spin_unlock_irqrestore(&priv->desc_lock[index], flag);
-                        return DESC_EMPTY;
-                }
-                tx_desc_set(desc, addr, len);
-                priv->skb[index] = skb;
-                spin_unlock_irqrestore(&priv->desc_lock[index], flag);
-                return DESC_READY;
-        }
-        spin_unlock_irqrestore(&priv->desc_lock[index], flag);
-        return DESC_BUSY;
 }
 
 netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
@@ -133,13 +98,8 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         dma_addr_t bus_addr;
 
         /* Check desc count */
-        spin_lock_irqsave(&priv->cnt_lock, flag);
-        if (priv->count == 2) {
-                spin_unlock_irqrestore(&priv->cnt_lock, flag);
-                return NETDEV_TX_BUSY;
-        }
-        spin_unlock_irqrestore(&priv->cnt_lock, flag);
-
+        netif_stop_queue(ndev);
+        pr_err("xdma_netdev_start_xmit\n");
         padding = (skb->len < ETH_ZLEN) ? (ETH_ZLEN - skb->len) : 0;
         skb->len += padding;
         if (skb_padto(skb, skb->len)) {
@@ -169,37 +129,17 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                 pr_err("dma_map_single failed\n");
                 return NETDEV_TX_BUSY;
         }
+        priv->tx_dma_addr = dma_addr;
+        priv->tx_skb = skb;
+        tx_desc_set(priv->tx_desc, dma_addr, skb->len);
 
-        desc1_status = check_desc1_status(priv, 0, dma_addr, skb->len, skb);
-        desc2_status = check_desc2_status(priv, 1, dma_addr, skb->len, desc1_status, skb);
-
-        if (desc1_status == DESC_READY) {
-                bus_addr = priv->bus_addr[0];
-                index = 0;
-        } else {
-                bus_addr = priv->bus_addr[1];
-                index = 1;
-        }
-
-        spin_lock_irqsave(&priv->cnt_lock, flag);
-        priv->count++;
-        /* If descs are full HW interrupt handler will send the other packet */
-        if (priv->count == 2) {
-                spin_unlock_irqrestore(&priv->cnt_lock, flag);
-                return NETDEV_TX_OK;
-        }
-        spin_unlock_irqrestore(&priv->cnt_lock, flag);
-
-        spin_lock_irqsave(&priv->tx_lock, flag);
-        priv->last = index;
-
-        w = cpu_to_le32(PCI_DMA_L(bus_addr));
+        w = cpu_to_le32(PCI_DMA_L(priv->tx_bus_addr));
         iowrite32(w, xdev->bar[1] + DESC_REG_LO);
 
-        w = cpu_to_le32(PCI_DMA_H(bus_addr));
+        w = cpu_to_le32(PCI_DMA_H(priv->tx_bus_addr));
         iowrite32(w, xdev->bar[1] + DESC_REG_HI);
-        
+        iowrite32(0, xdev->bar[1] + DESC_REG_HI + 4);
+
         iowrite32(DMA_ENGINE_START, &priv->tx_engine->regs->control);
-        spin_unlock_irqrestore(&priv->tx_lock, flag);
         return NETDEV_TX_OK;
 }

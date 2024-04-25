@@ -13,11 +13,11 @@
 #define RX_METADATA_SIZE 16
 #define TX_METADATA_SIZE 8
 
-#define DESC_REG_LO SGDMA_OFFSET_FROM_CHANNEL + 0x80
-#define DESC_REG_HI SGDMA_OFFSET_FROM_CHANNEL + 0x84
+#define DESC_REG_LO (SGDMA_OFFSET_FROM_CHANNEL + 0x80)
+#define DESC_REG_HI (SGDMA_OFFSET_FROM_CHANNEL + 0x84)
 
-#define DESC_REG_LO_RX SGDMA_OFFSET_FROM_CHANNEL_RX + 0x80
-#define DESC_REG_HI_RX SGDMA_OFFSET_FROM_CHANNEL_RX + 0x84
+#define DESC_REG_LO_RX (SGDMA_OFFSET_FROM_CHANNEL_RX + 0x80)
+#define DESC_REG_HI_RX (SGDMA_OFFSET_FROM_CHANNEL_RX + 0x84)
 
 #define DMA_ENGINE_START 16268831
 #define DMA_ENGINE_STOP 16268830
@@ -32,28 +32,26 @@ struct xdma_private {
         struct pci_dev *pdev;
         struct net_device *ndev;
         struct xdma_dev *xdev;
+
         struct xdma_engine *tx_engine;
         struct xdma_engine *rx_engine;
         struct xdma_desc *rx_desc;
-        struct xdma_desc *desc[2];
+        struct xdma_desc *tx_desc;
+
         struct xdma_result *res;
-        dma_addr_t bus_addr[2];
+        
+        dma_addr_t tx_bus_addr;
+        dma_addr_t tx_dma_addr;
         dma_addr_t rx_bus_addr;
+        dma_addr_t rx_dma_addr;
         dma_addr_t res_bus_addr;
         dma_addr_t res_dma_addr;
+
         struct sk_buff *rx_skb;
-        struct sk_buff *skb[2];
-        struct work_struct tx_work;
-        struct work_struct rx_work;
-        dma_addr_t dma_addr;
-        u8 *tx_buffer;
+        struct sk_buff *tx_skb;
         u8 *rx_buffer;
         spinlock_t tx_lock;
-        spinlock_t desc_lock[2];
-        spinlock_t cnt_lock;
         spinlock_t rx_lock;
-        int last;
-        int count;
         int irq;
         int rx_count;
 };

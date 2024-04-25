@@ -52,9 +52,9 @@ static int example_ptp_gettimex(struct ptp_clock_info *ptp, struct timespec64 *t
 
         spin_lock_irqsave(&ptp_data->lock, flags);
 
-        ptp_read_system_prets(sts);
+        //ptp_read_system_prets(sts);
         clock = get_sys_clock(ptp_data->xdev);
-        ptp_read_system_postts(sts);
+        //ptp_read_system_postts(sts);
 
         timestamp = example_get_timestamp(clock, ptp_data->ticks_scale, ptp_data->offset);
         

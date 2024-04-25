@@ -1362,11 +1362,6 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		return IRQ_NONE;
 	}
 
-	ndev = xdev->ndev;
-	if (!ndev) {
-		pr_err("Invalid net device\n");
-		return IRQ_NONE;
-	}
 
 	irq_regs = (struct interrupt_regs *)(xdev->bar[xdev->config_bar_idx] +
 					     XDMA_OFS_INT_CTRL);
@@ -1382,6 +1377,12 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 	if (ch_irq)
 		channel_interrupts_disable(xdev, ch_irq);
 
+	ndev = xdev->ndev;
+	if (!ndev) {
+		pr_err("Invalid net device\n");
+		return IRQ_NONE;
+	}
+
 	mask = ch_irq & xdev->mask_irq_c2h;
 	if (mask) {
 		struct xdma_engine *engine = &xdev->engine_c2h[0];
@@ -1389,11 +1390,15 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		struct xdma_result *result = priv->res;
 		struct sk_buff *skb;
 		int skb_len;
-                long flag;
+		long flag;
 
-                spin_lock_irqsave(&priv->rx_lock, flag);
+		spin_lock_irqsave(&priv->rx_lock, flag);
 		engine_status_read(engine, 1, 0);
 		skb_len = result->length - RX_METADATA_SIZE - CRC_LEN;
+		if (skb_len < 0) {
+			pr_err("Invalid skb_len\n");
+			return IRQ_NONE;
+		}
 		skb = dev_alloc_skb(skb_len);
 		if (!skb) {
 			pr_err("Failed to allocate skb\n");
@@ -1403,7 +1408,6 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 			skb_put(skb, skb_len),
 			priv->rx_buffer + RX_METADATA_SIZE,
 			skb_len);
-
 		skb->dev = ndev;
 		skb->protocol = eth_type_trans(skb, ndev);
 
@@ -1416,7 +1420,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		/* Start the engine */
 		channel_interrupts_enable(engine->xdev, engine->irq_bitmask);
 		iowrite32(DMA_ENGINE_START, &engine->regs->control);
-                spin_unlock_irqrestore(&priv->rx_lock, flag);
+		spin_unlock_irqrestore(&priv->rx_lock, flag);
 	}
 
 	mask = ch_irq & xdev->mask_irq_h2c;
@@ -1425,92 +1429,19 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		struct xdma_engine *engine = &xdev->engine_h2c[0];
 		struct xdma_desc *desc;
 		struct sk_buff *skb;
-		unsigned long flag;
-		int index;
-		int desc1_status = 0;
-		int desc2_status = 0;
+		long flag;
 		dma_addr_t bus_addr;
-		u32 w;
-
-		/* Read and clear the desc register */
+		
 		engine_status_read(engine, 1, 0);
 
-		/* Check last used descriptor */
-		spin_lock_irqsave(&priv->tx_lock, flag);
-		index = priv->last;
+		/* Free last resource */
+		dma_unmap_single(&xdev->pdev->dev, priv->tx_dma_addr, priv->tx_skb->len, DMA_TO_DEVICE);
+		dev_kfree_skb_any(priv->tx_skb);
+		priv->tx_skb = NULL;
+
 		iowrite32(DMA_ENGINE_STOP, &engine->regs->control);
-		spin_unlock_irqrestore(&priv->tx_lock, flag);
-
+		netif_wake_queue(ndev);
 		channel_interrupts_enable(engine->xdev, engine->irq_bitmask);
-
-		if (index == 0) {
-			/* Initialize last descriptor */
-			spin_lock_irqsave(&priv->desc_lock[0], flag);
-			desc = priv->desc[0];
-			desc->src_addr_hi = 0;
-			desc->src_addr_lo = 0;
-			skb = priv->skb[0];
-			spin_unlock_irqrestore(&priv->desc_lock[0], flag);
-
-			/* Check if the other descriptor is ready */
-			spin_lock_irqsave(&priv->desc_lock[1], flag);
-			desc = priv->desc[1];
-			if (desc->src_addr_hi != 0 && desc->src_addr_lo != 0) {
-				desc2_status = DESC_READY;
-			}
-			spin_unlock_irqrestore(&priv->desc_lock[1], flag);
-		} else if (index == 1) {
-			/* Initialize last descriptor */
-			spin_lock_irqsave(&priv->desc_lock[1], flag);
-			desc = priv->desc[1];
-			desc->src_addr_hi = 0;
-			desc->src_addr_lo = 0;
-			skb = priv->skb[1];
-			spin_unlock_irqrestore(&priv->desc_lock[1], flag);
-			
-			/* Check if the other descriptor is ready */
-			desc = priv->desc[0];
-			spin_lock_irqsave(&priv->desc_lock[0], flag);
-			if (desc->src_addr_hi != 0 && desc->src_addr_lo != 0) {
-				desc1_status = DESC_READY;
-			}
-			spin_unlock_irqrestore(&priv->desc_lock[0], flag);
-		}
-		dev_kfree_skb_any(skb);
-		
-		/* Check if we need to tx other descriptor */
-		spin_lock_irqsave(&priv->cnt_lock, flag);
-		priv->count--;
-		if (priv->count == 0) {
-			spin_unlock_irqrestore(&priv->cnt_lock, flag);
-			xdev->irq_count++;
-			return IRQ_HANDLED;
-		}
-		spin_unlock_irqrestore(&priv->cnt_lock, flag);
-
-		if (desc1_status == DESC_READY) {
-			/* TX descriptor 1 */
-			spin_lock_irqsave(&priv->tx_lock, flag);
-			bus_addr = priv->bus_addr[0];
-			w = cpu_to_le32(PCI_DMA_L(bus_addr));
-			iowrite32(w, xdev->bar[1] + DESC_REG_LO);
-			w = cpu_to_le32(PCI_DMA_H(bus_addr));
-			iowrite32(w, xdev->bar[1] + DESC_REG_HI);
-			priv->last = 0;
-			iowrite32(DMA_ENGINE_START, &priv->tx_engine->regs->control);
-			spin_unlock_irqrestore(&priv->tx_lock, flag);
-		} else if (desc2_status == DESC_READY) {
-			/* TX descriptor 2 */
-			spin_lock_irqsave(&priv->tx_lock, flag);
-			bus_addr = priv->bus_addr[1];
-			w = cpu_to_le32(PCI_DMA_L(bus_addr));
-			iowrite32(w, xdev->bar[1] + DESC_REG_LO);
-			w = cpu_to_le32(PCI_DMA_H(bus_addr));
-			iowrite32(w, xdev->bar[1] + DESC_REG_HI);
-			priv->last = 1;
-			iowrite32(DMA_ENGINE_START, &priv->tx_engine->regs->control);
-			spin_unlock_irqrestore(&priv->tx_lock, flag);
-		}
 	}
 	xdev->irq_count++;
 	return IRQ_HANDLED;
@@ -1595,7 +1526,7 @@ static void unmap_bars(struct xdma_dev *xdev, struct pci_dev *dev)
 		/* is this BAR mapped? */
 		if (xdev->bar[i]) {
 			/* unmap BAR */
-                        iounmap(xdev->bar[i]);
+			iounmap(xdev->bar[i]);
 			//pci_iounmap(dev, xdev->bar[i]);
 			/* mark as unmapped */
 			xdev->bar[i] = NULL;
@@ -1617,7 +1548,7 @@ static int map_single_bar(struct xdma_dev *xdev, struct pci_dev *dev, int idx)
 
 	/* do not map BARs with length 0. Note that start MAY be 0! */
 	if (!bar_len) {
-                pr_info("BAR #%d has zero length - skipping\n", idx);
+		pr_info("BAR #%d has zero length - skipping\n", idx);
 		//pr_info("BAR #%d is not present - skipping\n", idx);
 		return 0;
 	}
@@ -1634,7 +1565,7 @@ static int map_single_bar(struct xdma_dev *xdev, struct pci_dev *dev, int idx)
 	 */
 	dbg_init("BAR%d: %llu bytes to be mapped.\n", idx, (u64)map_len);
 	//xdev->bar[idx] = pci_iomap(dev, idx, map_len);
-        xdev->bar[idx] = ioremap(bar_start, map_len);
+	xdev->bar[idx] = ioremap(bar_start, map_len);
 
 	if (!xdev->bar[idx]) {
 		pr_info("Could not map BAR %d.\n", idx);
@@ -4598,9 +4529,9 @@ void *xdma_device_open(const char *mname, struct pci_dev *pdev, int *user_max,
 	/* allocate zeroed device book keeping structure */
 	xdev = alloc_dev_instance(pdev);
 	if (!xdev) {
-                pr_err("Failed to allocate device instance\n");
+		pr_err("Failed to allocate device instance\n");
 		return NULL;
-        }
+	}
 	xdev->mod_name = mname;
 	xdev->user_max = *user_max;
 	xdev->h2c_channel_max = *h2c_channel_max;
