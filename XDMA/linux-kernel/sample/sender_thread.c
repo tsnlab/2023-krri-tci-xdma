@@ -55,6 +55,10 @@ int tx_fd;
 
 extern int tx_thread_run;
 
+#ifdef ONE_QUEUE_TSN
+char* g_tx_buffer;
+#endif
+
 static struct tsn_tx_buffer* dequeue() {
     timestamp_t now = gptp_get_timestamp(get_sys_count());
     int queue_index = tsn_select_queue(now);
@@ -63,33 +67,6 @@ static struct tsn_tx_buffer* dequeue() {
     }
 
     return tsn_queue_dequeue(queue_index);
-}
-
-static int transmit_tsn_packet(struct tsn_tx_buffer* packet) {
-
-    uint64_t mem_len = sizeof(packet->metadata) + packet->metadata.frame_length;
-    uint64_t bytes_tr;
-    int status = 0;
-
-    if (mem_len >= MAX_BUFFER_LENGTH) {
-        printf("%s - %p length(%ld) is out of range(%d)\r\n", __func__, packet, mem_len, MAX_BUFFER_LENGTH);
-        buffer_pool_free((BUF_POINTER)packet);
-        return XST_FAILURE;
-    }
-
-    status = xdma_api_write_from_buffer_with_fd(tx_devname, tx_fd, (char *)packet,
-                                       mem_len, &bytes_tr);
-
-    if(status != XST_SUCCESS) {
-        tx_stats.txErrors++;
-    } else {
-        tx_stats.txPackets++;
-        tx_stats.txBytes += bytes_tr;
-    }
-
-    buffer_pool_free((BUF_POINTER)packet);
-
-    return status;
 }
 
 static int transmit_tsn_packet_no_free(struct tsn_tx_buffer* packet) {
@@ -116,10 +93,22 @@ static int transmit_tsn_packet_no_free(struct tsn_tx_buffer* packet) {
     return status;
 }
 
+static int transmit_tsn_packet(struct tsn_tx_buffer* packet) {
+
+    int status = 0;
+
+    status = transmit_tsn_packet_no_free(packet);
+
+    buffer_pool_free((BUF_POINTER)packet);
+
+    return status;
+}
+
 int extern_transmit_tsn_packet(struct tsn_tx_buffer* packet) {
     return transmit_tsn_packet(packet);
 }
 
+#ifndef ONE_QUEUE_TSN
 static int enqueue(struct tsn_tx_buffer* tx) {
 #ifndef DISABLE_TSN_QUEUE
     uint16_t prio = tx->metadata.vlan_prio;
@@ -245,9 +234,117 @@ static int process_packet(struct tsn_rx_buffer* rx) {
     }
     return XST_FAILURE;
 }
+#endif
 
+#ifdef ONE_QUEUE_TSN
+char* g_tx_buffer;
+#endif
 static int process_send_packet(struct tsn_rx_buffer* rx) {
 
+#ifdef ONE_QUEUE_TSN
+    int tx_len;
+    struct tsn_tx_buffer* tx = (struct tsn_tx_buffer*)(g_tx_buffer);
+    struct tx_metadata* tx_metadata = &tx->metadata;
+    uint8_t* rx_frame = (uint8_t*)&rx->data;
+    uint8_t* tx_frame = (uint8_t*)&tx->data;
+    struct ethernet_header* rx_eth = (struct ethernet_header*)rx_frame;
+    struct ethernet_header* tx_eth = (struct ethernet_header*)tx_frame;
+
+    // make ethernet frame
+    memcpy(&(tx_eth->dmac), &(rx_eth->smac), 6);
+    memcpy(&(tx_eth->smac), myMAC, 6);
+    tx_eth->type = rx_eth->type;
+
+    tx_len = ETH_HLEN;
+
+    // do arp, udp echo, etc.
+    switch (rx_eth->type) {
+    case ETH_TYPE_ARP: // arp
+        ;
+        struct arp_header* rx_arp = (struct arp_header*)ETH_PAYLOAD(rx_frame);
+        struct arp_header* tx_arp = (struct arp_header*)ETH_PAYLOAD(tx_frame);
+        if (rx_arp->opcode != ARP_OPCODE_ARP_REQUEST) { return XST_FAILURE; }
+
+        // make arp packet
+        tx_arp->hw_type = rx_arp->hw_type;
+        tx_arp->proto_type = rx_arp->proto_type;
+        tx_arp->hw_size = rx_arp->hw_size;
+        tx_arp->proto_size = rx_arp->proto_size;
+        tx_arp->opcode = ARP_OPCODE_ARP_REPLY;
+        memcpy(tx_arp->target_hw, rx_arp->sender_hw, HW_ADDR_LEN);
+        memcpy(tx_arp->sender_hw, myMAC, HW_ADDR_LEN);
+        uint8_t sender_proto[4];
+        memcpy(sender_proto, rx_arp->sender_proto, IP_ADDR_LEN);
+        memcpy(tx_arp->sender_proto, rx_arp->target_proto, IP_ADDR_LEN);
+        memcpy(tx_arp->target_proto, sender_proto, IP_ADDR_LEN);
+
+        tx_len += ARP_HLEN;
+        break;
+    case ETH_TYPE_IPv4: // ip
+        ;
+        struct ipv4_header* rx_ipv4 = (struct ipv4_header*)ETH_PAYLOAD(rx_frame);
+        struct ipv4_header* tx_ipv4 = (struct ipv4_header*)ETH_PAYLOAD(tx_frame);
+
+        uint32_t src;
+
+        // Fill IPv4 header
+        memcpy(tx_ipv4, rx_ipv4, IPv4_HLEN(rx_ipv4));
+        src = rx_ipv4->dst;
+        tx_ipv4->dst = rx_ipv4->src;
+        tx_ipv4->src = src;
+        tx_len += IPv4_HLEN(rx_ipv4);
+
+        if (rx_ipv4->proto == IP_PROTO_ICMP) {
+            struct icmp_header* rx_icmp = (struct icmp_header*)IPv4_PAYLOAD(rx_ipv4);
+
+            if (rx_icmp->type != ICMP_TYPE_ECHO_REQUEST) { return XST_FAILURE; }
+
+            struct icmp_header* tx_icmp = (struct icmp_header*)IPv4_PAYLOAD(tx_ipv4);
+            unsigned long icmp_len = IPv4_BODY_LEN(rx_ipv4);
+
+            // Fill ICMP header and body
+            memcpy(tx_icmp, rx_icmp, icmp_len);
+            tx_icmp->type = ICMP_TYPE_ECHO_REPLY;
+            icmp_checksum(tx_icmp, icmp_len);
+            tx_len += icmp_len;
+
+        } else if (rx_ipv4->proto == IP_PROTO_UDP){
+            struct udp_header* rx_udp = (struct udp_header*)IPv4_PAYLOAD(rx_ipv4);
+            if (rx_udp->dstport != 7) { return XST_FAILURE; }
+
+            struct udp_header* tx_udp = IPv4_PAYLOAD(tx_ipv4);
+
+            // Fill UDP header
+            memcpy(tx_udp, rx_udp, rx_udp->length);
+            uint16_t srcport;
+            srcport = rx_udp->dstport;
+            tx_udp->dstport = rx_udp->srcport;
+            tx_udp->srcport = srcport;
+            tx_udp->checksum = 0;
+            tx_len += rx_udp->length; // UDP.length contains header length
+        } else {
+            return XST_FAILURE;
+        }
+        break;
+    default:
+        printf_debug("Unknown type: %04x\n", rx_eth->type);
+        return XST_FAILURE;
+    }
+
+    // make tx metadata
+    tx_metadata->timestamp_id = 0;
+    tx_metadata->fail_policy = 0;
+    memset(tx_metadata->reserved0, 0, 3);
+    tx_metadata->reserved1 = 0;
+    tx_metadata->reserved2 = 0;
+
+    uint64_t now = get_sys_count();
+    tx_metadata->from_tick = (uint32_t)((now + XDMA_SECTION_TAKEN_TICKS) & 0xFFFFFFFF);
+    tx_metadata->to_tick = (uint32_t)((now + XDMA_SECTION_TAKEN_TICKS + XDMA_SECTION_TICKS_MARGIN) & 0xFFFFFFFF);
+    tx_metadata->delay_from_tick = (uint32_t)((now + DELAY_TICKS) & 0xFFFFFFFF);
+    tx_metadata->delay_to_tick = (uint32_t)((now + DELAY_TICKS + DELAY_TICKS_MARGIN) & 0xFFFFFFFF);
+
+#else
     uint8_t *buffer =(uint8_t *)rx;
     int tx_len;
     // Reuse RX buffer as TX
@@ -351,11 +448,13 @@ static int process_send_packet(struct tsn_rx_buffer* rx) {
         printf_debug("Unknown type: %04x\n", rx_eth->type);
         return XST_FAILURE;
     }
+#endif
     tx_metadata->frame_length = tx_len;
     transmit_tsn_packet_no_free(tx); 
     return XST_SUCCESS;
 }
 
+#ifndef ONE_QUEUE_TSN
 static void periodic_process_ptp()
 {
 #ifdef DISABLE_GPTP
@@ -484,11 +583,21 @@ static void sender_in_tsn_mode(char* devname, int fd, uint64_t size) {
 #endif
     }
 }
+#endif
 
 static void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
 
     QueueElement buffer = NULL;
     int status;
+
+#ifdef ONE_QUEUE_TSN
+    g_tx_buffer = NULL;
+    if(posix_memalign((void **)&g_tx_buffer, BUFFER_ALIGNMENT /*alignment */, MAX_BUFFER_LENGTH + BUFFER_ALIGNMENT)) {
+        fprintf(stderr, "%s - OOM %u.\n", __func__, MAX_BUFFER_LENGTH + BUFFER_ALIGNMENT);
+        return;
+    }
+    memset(g_tx_buffer, 0, MAX_BUFFER_LENGTH);
+#endif
 
     while (tx_thread_run) {
         buffer = NULL;
@@ -504,8 +613,15 @@ static void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
 
         buffer_pool_free((BUF_POINTER)buffer);
     }
+
+#ifdef ONE_QUEUE_TSN
+    if(g_tx_buffer != NULL) {
+        free(g_tx_buffer);
+    }
+#endif
 }
 
+#ifndef ONE_QUEUE_TSN
 static void sender_in_performance_mode(char* devname, int fd, char *fn, uint64_t size) {
 
     QueueElement buffer = NULL;
@@ -597,6 +713,7 @@ static void sender_in_debug_mode(char* devname, int fd, char *fn, uint64_t size)
 
     free(buffer);
 }
+#endif
 
 void* sender_thread(void* arg) {
 
@@ -618,6 +735,11 @@ void* sender_thread(void* arg) {
     initialize_statistics(&tx_stats);
 
     switch(p_arg->mode) {
+#ifdef ONE_QUEUE_TSN
+    case RUN_MODE_NORMAL:
+        sender_in_normal_mode(p_arg->devname, tx_fd, p_arg->size);
+    break;
+#else
     case RUN_MODE_TSN:
         sender_in_tsn_mode(p_arg->devname, tx_fd, p_arg->size);
     break;
@@ -631,6 +753,7 @@ void* sender_thread(void* arg) {
     case RUN_MODE_DEBUG:
         sender_in_debug_mode(p_arg->devname, tx_fd, p_arg->fn, p_arg->size);
     break;
+#endif
     default:
         printf("%s - Unknown mode(%d)\n", __func__, p_arg->mode);
     break;

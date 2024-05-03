@@ -121,8 +121,16 @@ typedef uintptr_t UINTPTR;
 #define DUMPREG_ALL     0x7FF
 
 
+#ifdef ONE_QUEUE_TSN
+#define XDMA_SECTION_TAKEN_TICKS (12500)
+#define XDMA_SECTION_TICKS_MARGIN (5000)
+#define DELAY_TICKS (50000)
+#define DELAY_TICKS_MARGIN (5000)
+#endif
+
 struct rx_metadata {
     uint64_t timestamp;
+#ifndef ONE_QUEUE_TSN
     union {
         uint16_t vlan_tag;
         struct {
@@ -132,10 +140,23 @@ struct rx_metadata {
         };
     };
     uint32_t checksum;
+#endif
     uint16_t frame_length;
 } __attribute__((packed, scalar_storage_order("big-endian")));
 
 struct tx_metadata {
+#ifdef ONE_QUEUE_TSN
+    uint32_t from_tick;
+    uint32_t to_tick;
+    uint32_t delay_from_tick;
+    uint32_t delay_to_tick;
+    uint16_t frame_length;
+    uint16_t timestamp_id;
+    uint8_t fail_policy;
+    uint8_t reserved0[3];
+    uint32_t reserved1;
+    uint32_t reserved2;
+#else
     union {
         uint16_t vlan_tag;
         struct {
@@ -147,6 +168,7 @@ struct tx_metadata {
     uint16_t timestamp_id;
     uint16_t frame_length;
     uint16_t reserved;
+#endif
 } __attribute__((packed, scalar_storage_order("big-endian")));
 
 #define MAX_PACKET_LEN 1536

@@ -90,11 +90,13 @@ static int64_t timestamp_mag_int = TICKS_SCALE;
 static int64_t timestamp_mag_fraction = 0;
 static uint64_t timestamp_offset = 0;
 
+#ifndef ONE_QUEUE_TSN
 static int process_sync(struct tsn_rx_buffer* rx, struct tsn_tx_buffer* tx);
 static int process_followup(struct tsn_rx_buffer* rx, struct tsn_tx_buffer* tx);
 static int process_pdelay_req(struct tsn_rx_buffer* rx, struct tsn_tx_buffer* tx);
 static int process_pdelay_resp(struct tsn_rx_buffer* rx, struct tsn_tx_buffer* tx);
 static int process_pdelay_resp_fup(struct tsn_rx_buffer* rx, struct tsn_tx_buffer* tx);
+#endif
 
 static void set_eth(struct ethernet_header* eth, const char* dmac);
 
@@ -136,6 +138,8 @@ void gptp_init() {
     current_gm.priority2 = myPriority2;
     current_gm.last_sync = now;
 }
+
+#ifndef ONE_QUEUE_TSN
 
 int process_gptp_packet(struct tsn_rx_buffer* rx) {
     struct tsn_tx_buffer* tx;
@@ -386,6 +390,8 @@ static int process_pdelay_resp_fup(struct tsn_rx_buffer* rx, struct tsn_tx_buffe
     calculate_link_delay();
     return 0;
 }
+
+#endif
 
 static void set_eth(struct ethernet_header* eth, const char* ptp_mac) {
     memcpy(eth->dmac, ptp_mac, 6);
