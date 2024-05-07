@@ -202,9 +202,8 @@ menu_command_t  mainCommand_tbl[] = {
         "   set XDMA resource"},
 #ifdef ONE_QUEUE_TSN
     { "send",  EXECUTION_ATTR,   process_main_sendCmd, \
-        "   send -i <ipv4 addr> -f <from_tick> -m <margin>", \
+        "   send -f <from_tick> -m <margin>", \
         "   Send a test packet\n"
-        "       <ipv4 addr> default value: 192.168.100.10\n"
         "       <from_tick> default value: 12500\n"
         "          <margin> default value: 5000"},
 #endif
