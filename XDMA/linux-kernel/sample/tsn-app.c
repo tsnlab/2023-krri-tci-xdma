@@ -15,6 +15,8 @@
 
 #include <error_define.h>
 
+#include <arpa/inet.h>
+
 #include "../libxdma/api_xdma.h"
 #include "../libxdma/ioctl_xdma.h"
 #include "platform_config.h"
@@ -180,6 +182,9 @@ int process_main_runCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_ioctlCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_showCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_setCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+#ifdef ONE_QUEUE_TSN
+int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+#endif
 
 
 menu_command_t  mainCommand_tbl[] = {
@@ -195,6 +200,14 @@ menu_command_t  mainCommand_tbl[] = {
     {"set",    EXECUTION_ATTR, process_main_setCmd, \
         "   set register [gen, rx, tx, h2c, c2h, irq, con, h2cs, c2hs, com, msix] <addr(Hex)> <data(Hex)>\n", \
         "   set XDMA resource"},
+#ifdef ONE_QUEUE_TSN
+    { "send",  EXECUTION_ATTR,   process_main_sendCmd, \
+        "   send -i <ipv4 addr> -f <from_tick> -m <margin>", \
+        "   Send a test packet\n"
+        "       <ipv4 addr> default value: 192.168.100.10\n"
+        "       <from_tick> default value: 12500\n"
+        "          <margin> default value: 5000"},
+#endif
     { 0,           EXECUTION_ATTR,   NULL, " ", " "}
 };
 
@@ -901,6 +914,55 @@ int process_main_setCmd(int argc, const char *argv[],
 
     return ERR_INVALID_PARAMETER;
 }
+
+#ifdef ONE_QUEUE_TSN
+
+int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin);
+
+#define MAIN_SEND_OPTION_STRING  "i:f:m:hv"
+int process_main_sendCmd(int argc, const char *argv[],
+                            menu_command_t *menu_tbl) {
+    char ip_address[INET_ADDRSTRLEN] = "192.168.100.10";
+    uint32_t from_tick = 12500;
+    uint32_t margin = 5000;
+    int argflag;
+
+    while ((argflag = getopt(argc, (char **)argv,
+                             MAIN_SEND_OPTION_STRING)) != -1) {
+        switch (argflag) {
+        case 'i':
+            memset(ip_address, 0, INET_ADDRSTRLEN);
+            strcpy(ip_address, optarg);
+            break;
+        case 'f':
+            if (str2uint(optarg, &from_tick) != 0) {
+                printf("Invalid parameter given or out of range for '-f'.");
+                return -1;
+            }
+            break;
+        case 'm':
+            if (str2uint(optarg, &margin) != 0) {
+                printf("Invalid parameter given or out of range for '-t'.");
+                return -1;
+            }
+            break;
+        case 'v':
+            log_level_set(++verbose);
+            if (verbose == 2) {
+                /* add version info to debug output */
+                lprintf(LOG_DEBUG, "%s\n", VERSION_STRING);
+            }
+            break;
+
+        case 'h':
+            process_manCmd(argc, argv, menu_tbl, ECHO);
+            return 0;
+        }
+    }
+
+    return send_1queueTSN_packet(ip_address, from_tick, margin);
+}
+#endif
 
 int command_parser(int argc, char ** argv) {
     char **pav = NULL;

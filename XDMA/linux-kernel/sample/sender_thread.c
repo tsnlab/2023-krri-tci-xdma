@@ -765,3 +765,48 @@ void* sender_thread(void* arg) {
     return NULL;
 }
 
+#ifdef ONE_QUEUE_TSN
+
+int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin) {
+    struct tsn_tx_buffer packet;
+    struct tsn_tx_buffer* tx = (struct tsn_tx_buffer*)(&packet);
+    struct tx_metadata* tx_metadata = &tx->metadata;
+
+    uint8_t default_packet[64] = {
+        0xd8, 0xbb, 0xc1, 0x15, 0x66, 0xcb, 0x00, 0x03, 0x47, 0xab, 0xd5, 0xe9, 0x08, 0x00, 0x45, 0x10,
+        0x00, 0x28, 0xff, 0x5d, 0x40, 0x00, 0x40, 0x06, 0x2f, 0x78, 0xc0, 0xa8, 0x45, 0x36, 0xc0, 0xa8,
+        0x45, 0x63, 0x00, 0x16, 0xd1, 0xb9, 0x34, 0xb6, 0xdc, 0xec, 0xec, 0x2c, 0x0b, 0x68, 0x50, 0x10,
+        0x0c, 0x12, 0x0c, 0x05, 0x00, 0x00 };
+
+    memset(tx_devname, 0, MAX_DEVICE_NAME);
+    memcpy(tx_devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
+
+    if(xdma_api_dev_open(DEF_TX_DEVICE_NAME, 0 /* eop_flush */, &tx_fd)) {
+        printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", DEF_TX_DEVICE_NAME);
+        printf("<<< %s\n", __func__);
+        return -1;
+    }
+
+    memset(&packet, 0, sizeof(struct tsn_tx_buffer));
+
+    memcpy(packet.data, default_packet, 54);
+
+    // make tx metadata
+    tx_metadata->timestamp_id = 0;
+    tx_metadata->fail_policy = 0;
+
+    uint64_t now = get_sys_count();
+    tx_metadata->from_tick = (uint32_t)((now + from_tick) & 0xFFFFFFFF);
+    tx_metadata->to_tick = (uint32_t)((now + from_tick + margin) & 0xFFFFFFFF);
+    tx_metadata->delay_from_tick = (uint32_t)((now + DELAY_TICKS) & 0xFFFFFFFF);
+    tx_metadata->delay_to_tick = (uint32_t)((now + DELAY_TICKS + DELAY_TICKS_MARGIN) & 0xFFFFFFFF);
+
+    tx_metadata->frame_length = 64;
+    transmit_tsn_packet_no_free(tx);
+
+    close(tx_fd);
+    printf("<<< %s()\n", __func__);
+    return XST_SUCCESS;
+}
+
+#endif
