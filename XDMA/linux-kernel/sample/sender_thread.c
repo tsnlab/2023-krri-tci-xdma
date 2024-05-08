@@ -767,20 +767,202 @@ void* sender_thread(void* arg) {
 
 #ifdef ONE_QUEUE_TSN
 
-int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin) {
+#define DEFAULT_PKT_LEN 74
+#define TOTAL_PKT_LEN 78
+
+void dump_buffer(unsigned char* buffer, int len) {
+
+    for(int idx = 0; idx < len; idx++) {
+        if((idx % 16) == 0) {
+            printf("\n  ");
+        }
+        printf("0x%02x ", buffer[idx] & 0xFF);
+    }
+    printf("\n");
+}
+
+void dump_tsn_tx_buffer(struct tsn_tx_buffer* packet, int len) {
+
+    printf("[tx_metadata]\n");
+    printf("        from_tick: 0x%08x,         to_tick: 0x%08x\n", 
+        packet->metadata.from_tick, packet->metadata.to_tick);
+    printf("  delay_from_tick: 0x%08x,   delay_to_tick: 0x%08x\n", 
+        packet->metadata.delay_from_tick, packet->metadata.delay_to_tick);
+    printf("     frame_length: %10d,     fail_policy: %10d\n", 
+        packet->metadata.frame_length, packet->metadata.fail_policy);
+    printf("[packet_data]");
+    dump_buffer((unsigned char*)packet->data, (int)(len - sizeof(struct tx_metadata)));
+    printf("\n");
+}
+
+void fill_packet_data_with_default_packet(struct tsn_tx_buffer* packet, uint8_t stuff) {
+
+    uint8_t default_packet[DEFAULT_PKT_LEN] = {
+        0xa4, 0xbf, 0x01, 0x65, 0xde, 0x83, 0xd8, 0xbb, 0xc1, 0x15, 0x66, 0xc1, 0x08, 0x00, 0x45, 0x00,
+        0x00, 0x3c, 0xce, 0x38, 0x00, 0x00, 0x80, 0x01, 0x60, 0x9e, 0xc0, 0xa8, 0x0a, 0x64, 0xc0, 0xa8,
+        0x45, 0x36, 0x08, 0x00, 0x4c, 0x75, 0x00, 0x01, 0x00, 0xe6, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66,
+        0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76,
+        0x77, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69 };
+
+    if(stuff == 0 ) {
+        memcpy(packet->data, default_packet, DEFAULT_PKT_LEN);
+    } else {
+        memcpy(packet->data, default_packet, 42);
+        for(int idx = 42; idx < DEFAULT_PKT_LEN; idx++) {
+            packet->data[idx] = stuff & 0xFF;
+        }
+    }
+}
+
+void fill_tx_metadata(struct tx_metadata* tx_metadata, int FP, int FT_OF, int DF_OF, uint16_t f_len) {
+
+    tx_metadata->timestamp_id = 0;
+    tx_metadata->fail_policy = (uint8_t)(FP & 0x1);
+    tx_metadata->frame_length = f_len;
+
+    if(((FT_OF & 0x1) == 0) && ((DF_OF & 0x1) == 0)) {
+        tx_metadata->from_tick = (uint32_t)(0x000000f0);
+        tx_metadata->to_tick = (uint32_t)(0x000000ff);
+        tx_metadata->delay_from_tick = (uint32_t)(0x000001f0);
+        tx_metadata->delay_to_tick = (uint32_t)(0x000001ff);
+    } else if(((FT_OF & 0x1) == 0) && ((DF_OF & 0x1) == 1)) {
+        tx_metadata->from_tick = (uint32_t)(0xffffffe0);
+        tx_metadata->to_tick = (uint32_t)(0xffffffef);
+        tx_metadata->delay_from_tick = (uint32_t)(0x000000e0);
+        tx_metadata->delay_to_tick = (uint32_t)(0x000000ef);
+    } else if(((FT_OF & 0x1) == 1) && ((DF_OF & 0x1) == 0)) {
+        tx_metadata->from_tick = (uint32_t)(0xfffffff1);
+        tx_metadata->to_tick = (uint32_t)(0x00000000);
+        tx_metadata->delay_from_tick = (uint32_t)(0xffffffff);
+        tx_metadata->delay_to_tick = (uint32_t)(0x0000000e);
+    } else if(((FT_OF & 0x1) == 1) && ((DF_OF & 0x1) == 1)) {
+        tx_metadata->from_tick = (uint32_t)(0xfffffff1);
+        tx_metadata->to_tick = (uint32_t)(0x00000000);
+        tx_metadata->delay_from_tick = (uint32_t)(0x000000f1);
+        tx_metadata->delay_to_tick = (uint32_t)(0x00000100);
+    }
+}
+
+void make_tsn_tx_buffer(struct tsn_tx_buffer* packet) {
+    struct tsn_tx_buffer* tx = (struct tsn_tx_buffer*)(packet);
+    struct tx_metadata* tx_metadata = &tx->metadata;
+
+    memset(packet, 0, sizeof(struct tsn_tx_buffer));
+
+    fill_packet_data_with_default_packet(packet, 0);
+}
+
+/* Test Case #1 */
+int test_case_001(char* ip_address, uint32_t from_tick, uint32_t margin) {
+    struct tsn_tx_buffer packet;
+    struct tx_metadata* tx_metadata = &packet.metadata;
+
+    make_tsn_tx_buffer(&packet);
+    fill_tx_metadata(tx_metadata, /* FP */ 0, /* FT_OF */ 0, /* DF_OF */ 0, TOTAL_PKT_LEN);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
+    transmit_tsn_packet_no_free(&packet);
+    printf("<<< %s()\n", __func__);
+    return XST_SUCCESS;
+}
+
+/* Test Case #2 */
+int test_case_002(char* ip_address, uint32_t from_tick, uint32_t margin) {
+    struct tsn_tx_buffer packet;
+    struct tx_metadata* tx_metadata = &packet.metadata;
+
+    make_tsn_tx_buffer(&packet);
+    fill_tx_metadata(tx_metadata, /* FP */ 0, /* FT_OF */ 0, /* DF_OF */ 1, TOTAL_PKT_LEN);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
+    transmit_tsn_packet_no_free(&packet);
+    printf("<<< %s()\n", __func__);
+    return XST_SUCCESS;
+}
+
+/* Test Case #3 */
+int test_case_003(char* ip_address, uint32_t from_tick, uint32_t margin) {
+    struct tsn_tx_buffer packet;
+    struct tx_metadata* tx_metadata = &packet.metadata;
+
+    make_tsn_tx_buffer(&packet);
+    fill_tx_metadata(tx_metadata, /* FP */ 0, /* FT_OF */ 1, /* DF_OF */ 0, TOTAL_PKT_LEN);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
+    transmit_tsn_packet_no_free(&packet);
+    printf("<<< %s()\n", __func__);
+    return XST_SUCCESS;
+}
+
+/* Test Case #4 */
+int test_case_004(char* ip_address, uint32_t from_tick, uint32_t margin) {
+    struct tsn_tx_buffer packet;
+    struct tx_metadata* tx_metadata = &packet.metadata;
+
+    make_tsn_tx_buffer(&packet);
+    fill_tx_metadata(tx_metadata, /* FP */ 0, /* FT_OF */ 1, /* DF_OF */ 1, TOTAL_PKT_LEN);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
+    transmit_tsn_packet_no_free(&packet);
+    printf("<<< %s()\n", __func__);
+    return XST_SUCCESS;
+}
+
+/* Test Case #5 */
+int test_case_005(char* ip_address, uint32_t from_tick, uint32_t margin) {
+    struct tsn_tx_buffer packet;
+    struct tx_metadata* tx_metadata = &packet.metadata;
+
+    make_tsn_tx_buffer(&packet);
+    fill_tx_metadata(tx_metadata, /* FP */ 1, /* FT_OF */ 0, /* DF_OF */ 0, TOTAL_PKT_LEN);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
+    transmit_tsn_packet_no_free(&packet);
+    printf("<<< %s()\n", __func__);
+    return XST_SUCCESS;
+}
+
+/* Test Case #6 */
+int test_case_006(char* ip_address, uint32_t from_tick, uint32_t margin) {
+    struct tsn_tx_buffer packet;
+    struct tx_metadata* tx_metadata = &packet.metadata;
+
+    make_tsn_tx_buffer(&packet);
+    fill_tx_metadata(tx_metadata, /* FP */ 1, /* FT_OF */ 0, /* DF_OF */ 1, TOTAL_PKT_LEN);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
+    transmit_tsn_packet_no_free(&packet);
+    printf("<<< %s()\n", __func__);
+    return XST_SUCCESS;
+}
+
+/* Test Case #7 */
+int test_case_007(char* ip_address, uint32_t from_tick, uint32_t margin) {
+    struct tsn_tx_buffer packet;
+    struct tx_metadata* tx_metadata = &packet.metadata;
+
+    make_tsn_tx_buffer(&packet);
+    fill_tx_metadata(tx_metadata, /* FP */ 1, /* FT_OF */ 1, /* DF_OF */ 0, TOTAL_PKT_LEN);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
+    transmit_tsn_packet_no_free(&packet);
+    printf("<<< %s()\n", __func__);
+    return XST_SUCCESS;
+}
+
+/* Test Case #8 */
+int test_case_008(char* ip_address, uint32_t from_tick, uint32_t margin) {
+    struct tsn_tx_buffer packet;
+    struct tx_metadata* tx_metadata = &packet.metadata;
+
+    make_tsn_tx_buffer(&packet);
+    fill_tx_metadata(tx_metadata, /* FP */ 1, /* FT_OF */ 1, /* DF_OF */ 1, TOTAL_PKT_LEN);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
+    transmit_tsn_packet_no_free(&packet);
+    printf("<<< %s()\n", __func__);
+    return XST_SUCCESS;
+}
+
+int sample_send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin) {
     struct tsn_tx_buffer packet;
     struct tsn_tx_buffer* tx = (struct tsn_tx_buffer*)(&packet);
     struct tx_metadata* tx_metadata = &tx->metadata;
     uint8_t* tx_frame = (uint8_t*)&tx->data;
     struct ethernet_header* tx_eth = (struct ethernet_header*)tx_frame;
     struct arp_header* tx_arp = (struct arp_header*)ETH_PAYLOAD(tx_frame);
-
-    uint8_t default_packet[74] = {
-        0xa4, 0xbf, 0x01, 0x65, 0xde, 0x83, 0xd8, 0xbb, 0xc1, 0x15, 0x66, 0xc1, 0x08, 0x00, 0x45, 0x00,
-        0x00, 0x3c, 0xce, 0x38, 0x00, 0x00, 0x80, 0x01, 0x60, 0x9e, 0xc0, 0xa8, 0x0a, 0x64, 0xc0, 0xa8,
-        0x45, 0x36, 0x08, 0x00, 0x4c, 0x75, 0x00, 0x01, 0x00, 0xe6, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66,
-        0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76,
-        0x77, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69 };
 
     memset(tx_devname, 0, MAX_DEVICE_NAME);
     memcpy(tx_devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
@@ -795,7 +977,7 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
 
     memset(&packet, 0, sizeof(struct tsn_tx_buffer));
 
-    memcpy(packet.data, default_packet, 74);
+    fill_packet_data_with_default_packet(&packet, 0);
 
     // make tx metadata
     tx_metadata->timestamp_id = 0;
@@ -807,12 +989,48 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
     tx_metadata->delay_from_tick = (uint32_t)((now + DELAY_TICKS) & 0xFFFFFFFF);
     tx_metadata->delay_to_tick = (uint32_t)((now + DELAY_TICKS + DELAY_TICKS_MARGIN) & 0xFFFFFFFF);
 
-    tx_metadata->frame_length = 78;
+    tx_metadata->frame_length = TOTAL_PKT_LEN;
+
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
+
     transmit_tsn_packet_no_free(tx);
 
     close(tx_fd);
+    sleep(5);
     set_register(REG_TSN_CONTROL, 0);
     printf("<<< %s()\n", __func__);
+    return XST_SUCCESS;
+}
+
+int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin) {
+
+    memset(tx_devname, 0, MAX_DEVICE_NAME);
+    memcpy(tx_devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
+
+    if(xdma_api_dev_open(DEF_TX_DEVICE_NAME, 0 /* eop_flush */, &tx_fd)) {
+        printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", DEF_TX_DEVICE_NAME);
+        printf("<<< %s\n", __func__);
+        return -1;
+    }
+
+    set_register(REG_TSN_CONTROL, 1);
+
+//    send_packet_with_from_bigger_than_to(ip_address, from_tick, margin);
+    test_case_001(ip_address, from_tick, margin);
+//    test_case_002(ip_address, from_tick, margin);
+//    test_case_003(ip_address, from_tick, margin);
+//    test_case_004(ip_address, from_tick, margin);
+//    test_case_005(ip_address, from_tick, margin);
+//    test_case_006(ip_address, from_tick, margin);
+//    test_case_007(ip_address, from_tick, margin);
+//    test_case_008(ip_address, from_tick, margin);
+
+    close(tx_fd);
+    sleep(5);
+
+    set_register(REG_TSN_CONTROL, 0);
+    printf("<<< %s()\n", __func__);
+
     return XST_SUCCESS;
 }
 
