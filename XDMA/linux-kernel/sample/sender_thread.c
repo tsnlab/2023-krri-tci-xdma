@@ -1013,8 +1013,8 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
         return -1;
     }
 
+    dump_registers(DUMPREG_TX, 1);
     set_register(REG_TSN_CONTROL, 1);
-
 //    send_packet_with_from_bigger_than_to(ip_address, from_tick, margin);
     test_case_001(ip_address, from_tick, margin);
 //    test_case_002(ip_address, from_tick, margin);
@@ -1029,6 +1029,7 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
     sleep(5);
 
     set_register(REG_TSN_CONTROL, 0);
+    dump_registers(DUMPREG_TX, 1);
     printf("<<< %s()\n", __func__);
 
     return XST_SUCCESS;
