@@ -859,8 +859,8 @@ int test_case_001(char* ip_address, uint32_t from_tick, uint32_t margin) {
 
     make_tsn_tx_buffer(&packet);
     fill_tx_metadata(tx_metadata, /* FP */ 0, /* FT_OF */ 0, /* DF_OF */ 0, TOTAL_PKT_LEN);
-    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     transmit_tsn_packet_no_free(&packet);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     printf("<<< %s()\n", __func__);
     return XST_SUCCESS;
 }
@@ -872,8 +872,8 @@ int test_case_002(char* ip_address, uint32_t from_tick, uint32_t margin) {
 
     make_tsn_tx_buffer(&packet);
     fill_tx_metadata(tx_metadata, /* FP */ 0, /* FT_OF */ 0, /* DF_OF */ 1, TOTAL_PKT_LEN);
-    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     transmit_tsn_packet_no_free(&packet);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     printf("<<< %s()\n", __func__);
     return XST_SUCCESS;
 }
@@ -885,8 +885,8 @@ int test_case_003(char* ip_address, uint32_t from_tick, uint32_t margin) {
 
     make_tsn_tx_buffer(&packet);
     fill_tx_metadata(tx_metadata, /* FP */ 0, /* FT_OF */ 1, /* DF_OF */ 0, TOTAL_PKT_LEN);
-    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     transmit_tsn_packet_no_free(&packet);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     printf("<<< %s()\n", __func__);
     return XST_SUCCESS;
 }
@@ -898,8 +898,8 @@ int test_case_004(char* ip_address, uint32_t from_tick, uint32_t margin) {
 
     make_tsn_tx_buffer(&packet);
     fill_tx_metadata(tx_metadata, /* FP */ 0, /* FT_OF */ 1, /* DF_OF */ 1, TOTAL_PKT_LEN);
-    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     transmit_tsn_packet_no_free(&packet);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     printf("<<< %s()\n", __func__);
     return XST_SUCCESS;
 }
@@ -911,8 +911,8 @@ int test_case_005(char* ip_address, uint32_t from_tick, uint32_t margin) {
 
     make_tsn_tx_buffer(&packet);
     fill_tx_metadata(tx_metadata, /* FP */ 1, /* FT_OF */ 0, /* DF_OF */ 0, TOTAL_PKT_LEN);
-    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     transmit_tsn_packet_no_free(&packet);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     printf("<<< %s()\n", __func__);
     return XST_SUCCESS;
 }
@@ -924,8 +924,8 @@ int test_case_006(char* ip_address, uint32_t from_tick, uint32_t margin) {
 
     make_tsn_tx_buffer(&packet);
     fill_tx_metadata(tx_metadata, /* FP */ 1, /* FT_OF */ 0, /* DF_OF */ 1, TOTAL_PKT_LEN);
-    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     transmit_tsn_packet_no_free(&packet);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     printf("<<< %s()\n", __func__);
     return XST_SUCCESS;
 }
@@ -937,8 +937,8 @@ int test_case_007(char* ip_address, uint32_t from_tick, uint32_t margin) {
 
     make_tsn_tx_buffer(&packet);
     fill_tx_metadata(tx_metadata, /* FP */ 1, /* FT_OF */ 1, /* DF_OF */ 0, TOTAL_PKT_LEN);
-    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     transmit_tsn_packet_no_free(&packet);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     printf("<<< %s()\n", __func__);
     return XST_SUCCESS;
 }
@@ -950,8 +950,8 @@ int test_case_008(char* ip_address, uint32_t from_tick, uint32_t margin) {
 
     make_tsn_tx_buffer(&packet);
     fill_tx_metadata(tx_metadata, /* FP */ 1, /* FT_OF */ 1, /* DF_OF */ 1, TOTAL_PKT_LEN);
-    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     transmit_tsn_packet_no_free(&packet);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     printf("<<< %s()\n", __func__);
     return XST_SUCCESS;
 }
@@ -968,14 +968,15 @@ int find_tick_count_delay(char* ip_address, uint32_t from_tick, uint32_t margin)
     tx_metadata->fail_policy = 0;
 
     uint64_t now = get_sys_count();
-    tx_metadata->from_tick = (uint32_t)((now + 10000) & 0xFFFFFFFF);
-    tx_metadata->to_tick = (uint32_t)((now + 15000) & 0xFFFFFFFF);
-    tx_metadata->delay_from_tick = (uint32_t)((now + 30000) & 0xFFFFFFFF);
-    tx_metadata->delay_to_tick = (uint32_t)((now + 35000) & 0xFFFFFFFF);
+    tx_metadata->from_tick = (uint32_t)((now + 1000000) & 0xFFFFFFFF);
+    tx_metadata->to_tick = (uint32_t)((now + 1500000) & 0xFFFFFFFF);
+    tx_metadata->delay_from_tick = (uint32_t)((now + 3000000) & 0xFFFFFFFF);
+    tx_metadata->delay_to_tick = (uint32_t)((now + 3500000) & 0xFFFFFFFF);
 
     tx_metadata->frame_length = TOTAL_PKT_LEN;
-    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     transmit_tsn_packet_no_free(&packet);
+    dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
+    printf("get_sys_count[31..0]: 0x%08x\n", (uint32_t)(now & 0xFFFFFFFF));
     printf("<<< %s()\n", __func__);
     return XST_SUCCESS;
 }
