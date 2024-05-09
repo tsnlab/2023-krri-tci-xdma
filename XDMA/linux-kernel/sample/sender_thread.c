@@ -822,9 +822,9 @@ void fill_tx_metadata(struct tx_metadata* tx_metadata, int FP, int FT_OF, int DF
 
     if(((FT_OF & 0x1) == 0) && ((DF_OF & 0x1) == 0)) {
         tx_metadata->from_tick = (uint32_t)(0x000000f0);
-        tx_metadata->to_tick = (uint32_t)(0x000000ff);
+        tx_metadata->to_tick = (uint32_t)(0x00000286);
         tx_metadata->delay_from_tick = (uint32_t)(0x000001f0);
-        tx_metadata->delay_to_tick = (uint32_t)(0x000001ff);
+        tx_metadata->delay_to_tick = (uint32_t)(0x00000295);
     } else if(((FT_OF & 0x1) == 0) && ((DF_OF & 0x1) == 1)) {
         tx_metadata->from_tick = (uint32_t)(0xffffffe0);
         tx_metadata->to_tick = (uint32_t)(0xffffffef);
@@ -956,48 +956,26 @@ int test_case_008(char* ip_address, uint32_t from_tick, uint32_t margin) {
     return XST_SUCCESS;
 }
 
-int sample_send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin) {
+/* Test Case #999 */
+int find_tick_count_delay(char* ip_address, uint32_t from_tick, uint32_t margin) {
     struct tsn_tx_buffer packet;
-    struct tsn_tx_buffer* tx = (struct tsn_tx_buffer*)(&packet);
-    struct tx_metadata* tx_metadata = &tx->metadata;
-    uint8_t* tx_frame = (uint8_t*)&tx->data;
-    struct ethernet_header* tx_eth = (struct ethernet_header*)tx_frame;
-    struct arp_header* tx_arp = (struct arp_header*)ETH_PAYLOAD(tx_frame);
+    struct tx_metadata* tx_metadata = &packet.metadata;
 
-    memset(tx_devname, 0, MAX_DEVICE_NAME);
-    memcpy(tx_devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
-
-    if(xdma_api_dev_open(DEF_TX_DEVICE_NAME, 0 /* eop_flush */, &tx_fd)) {
-        printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", DEF_TX_DEVICE_NAME);
-        printf("<<< %s\n", __func__);
-        return -1;
-    }
-
-    set_register(REG_TSN_CONTROL, 1);
-
-    memset(&packet, 0, sizeof(struct tsn_tx_buffer));
-
-    fill_packet_data_with_default_packet(&packet, 0);
+    make_tsn_tx_buffer(&packet);
 
     // make tx metadata
     tx_metadata->timestamp_id = 0;
     tx_metadata->fail_policy = 0;
 
     uint64_t now = get_sys_count();
-    tx_metadata->from_tick = (uint32_t)((now + from_tick) & 0xFFFFFFFF);
-    tx_metadata->to_tick = (uint32_t)((now + from_tick + margin) & 0xFFFFFFFF);
-    tx_metadata->delay_from_tick = (uint32_t)((now + DELAY_TICKS) & 0xFFFFFFFF);
-    tx_metadata->delay_to_tick = (uint32_t)((now + DELAY_TICKS + DELAY_TICKS_MARGIN) & 0xFFFFFFFF);
+    tx_metadata->from_tick = (uint32_t)((now + 10000) & 0xFFFFFFFF);
+    tx_metadata->to_tick = (uint32_t)((now + 15000) & 0xFFFFFFFF);
+    tx_metadata->delay_from_tick = (uint32_t)((now + 30000) & 0xFFFFFFFF);
+    tx_metadata->delay_to_tick = (uint32_t)((now + 35000) & 0xFFFFFFFF);
 
     tx_metadata->frame_length = TOTAL_PKT_LEN;
-
     dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
-
-    transmit_tsn_packet_no_free(tx);
-
-    close(tx_fd);
-    sleep(5);
-    set_register(REG_TSN_CONTROL, 0);
+    transmit_tsn_packet_no_free(&packet);
     printf("<<< %s()\n", __func__);
     return XST_SUCCESS;
 }
@@ -1015,8 +993,8 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
 
     dump_registers(DUMPREG_TX, 1);
     set_register(REG_TSN_CONTROL, 1);
-//    send_packet_with_from_bigger_than_to(ip_address, from_tick, margin);
-    test_case_001(ip_address, from_tick, margin);
+    find_tick_count_delay(ip_address, from_tick, margin);
+//    test_case_001(ip_address, from_tick, margin);
 //    test_case_002(ip_address, from_tick, margin);
 //    test_case_003(ip_address, from_tick, margin);
 //    test_case_004(ip_address, from_tick, margin);
