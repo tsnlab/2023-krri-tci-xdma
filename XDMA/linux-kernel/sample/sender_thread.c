@@ -965,7 +965,7 @@ int find_tick_count_delay(char* ip_address, uint32_t from_tick, uint32_t margin)
 
     // make tx metadata
     tx_metadata->timestamp_id = 0;
-    tx_metadata->fail_policy = 0;
+    tx_metadata->fail_policy = 1;
 
     uint64_t now = get_sys_count();
 #if 1
@@ -974,10 +974,10 @@ int find_tick_count_delay(char* ip_address, uint32_t from_tick, uint32_t margin)
     tx_metadata->delay_from_tick = (uint32_t)((now + 3000000) & 0xFFFFFFFF);
     tx_metadata->delay_to_tick = (uint32_t)((now + 3500000) & 0xFFFFFFFF);
 #else
-    tx_metadata->to_tick = (uint32_t)((now + 1000000) & 0xFFFFFFFF);
-    tx_metadata->from_tick = (uint32_t)((now + 1500000) & 0xFFFFFFFF);
-    tx_metadata->delay_to_tick = (uint32_t)((now + 3000000) & 0xFFFFFFFF);
-    tx_metadata->delay_from_tick = (uint32_t)((now + 3500000) & 0xFFFFFFFF);
+    tx_metadata->from_tick = (uint32_t)((now + 1000000) & 0xFFFFFFFF);
+    tx_metadata->to_tick = (uint32_t)(0xFFFFFFFF);
+    tx_metadata->delay_from_tick = (uint32_t)(0xFFFFF800);
+    tx_metadata->delay_to_tick = (uint32_t)(0xFFFFFFFF);
 #endif
 
     tx_metadata->frame_length = TOTAL_PKT_LEN;
