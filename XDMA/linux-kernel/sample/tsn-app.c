@@ -183,6 +183,7 @@ int process_main_ioctlCmd(int argc, const char *argv[], menu_command_t *menu_tbl
 int process_main_showCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_setCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 #ifdef ONE_QUEUE_TSN
+int process_main_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 #endif
 
@@ -201,6 +202,9 @@ menu_command_t  mainCommand_tbl[] = {
         "   set register [gen, rx, tx, h2c, c2h, irq, con, h2cs, c2hs, com, msix] <addr(Hex)> <data(Hex)>\n", \
         "   set XDMA resource"},
 #ifdef ONE_QUEUE_TSN
+    {"test",   EXECUTION_ATTR, process_main_testCmd, \
+        "   test register -c <count>\n", \
+        "   test FPGA register read/write"},
     { "send",  EXECUTION_ATTR,   process_main_sendCmd, \
         "   send -f <from_tick> -m <margin>", \
         "   Send a test packet\n"
@@ -916,7 +920,70 @@ int process_main_setCmd(int argc, const char *argv[],
 
 #ifdef ONE_QUEUE_TSN
 
+int test_fpga_register_rd_wr(uint32_t count);
 int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin);
+
+int test_fpga_register_rd_wr(uint32_t count) {
+
+    int32_t addr = 0x0010; // Scratch Register
+    int32_t value;
+    int32_t version = 0x24012601;
+
+    for(uint32_t loop = 1; loop <= count; loop++) {
+        set_register(addr, loop);
+        value = get_register(0);
+        if(version != value) {
+            printf("version value changed from 0x%08x to 0x%08x\n", version, value);
+            version = value;
+        }
+        value = get_register(addr);
+        if(loop != value) {
+            printf("\n  [Fail] scratch register write(%d) and read(%d)\n", loop, value);
+            return -1;
+        }
+        if((loop % 1000) == 0) {
+            printf("  %10dth loop in progress\r", loop);
+            fflush(stdout);
+        }
+    }
+
+    printf("\n  [Success] Write/read scratch register %d times\n", value);
+
+    return 0;
+}
+
+int process_main_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+#define MAIN_TEST_OPTION_STRING  "c:hv"
+int process_main_testCmd(int argc, const char *argv[],
+                            menu_command_t *menu_tbl) {
+    uint32_t count = 100;
+    int argflag;
+
+    while ((argflag = getopt(argc, (char **)argv,
+                             MAIN_TEST_OPTION_STRING)) != -1) {
+        switch (argflag) {
+        case 'c':
+            if (str2uint(optarg, &count) != 0) {
+                printf("Invalid parameter given or out of range for '-c'.");
+                return -1;
+            }
+            break;
+        case 'v':
+            log_level_set(++verbose);
+            if (verbose == 2) {
+                /* add version info to debug output */
+                lprintf(LOG_DEBUG, "%s\n", VERSION_STRING);
+            }
+            break;
+
+        case 'h':
+            process_manCmd(argc, argv, menu_tbl, ECHO);
+            return 0;
+        }
+    }
+
+    return test_fpga_register_rd_wr(count);
+}
 
 #define MAIN_SEND_OPTION_STRING  "i:f:m:hv"
 int process_main_sendCmd(int argc, const char *argv[],
