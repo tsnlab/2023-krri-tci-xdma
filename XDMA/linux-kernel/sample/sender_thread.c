@@ -339,10 +339,10 @@ static int process_send_packet(struct tsn_rx_buffer* rx) {
     tx_metadata->reserved2 = 0;
 
     uint64_t now = get_sys_count();
-    tx_metadata->from_tick = (uint32_t)((now + XDMA_SECTION_TAKEN_TICKS) & 0xFFFFFFFF);
-    tx_metadata->to_tick = (uint32_t)((now + XDMA_SECTION_TAKEN_TICKS + XDMA_SECTION_TICKS_MARGIN) & 0xFFFFFFFF);
-    tx_metadata->delay_from_tick = (uint32_t)((now + DELAY_TICKS) & 0xFFFFFFFF);
-    tx_metadata->delay_to_tick = (uint32_t)((now + DELAY_TICKS + DELAY_TICKS_MARGIN) & 0xFFFFFFFF);
+    tx_metadata->from.tick = (uint32_t)((now + XDMA_SECTION_TAKEN_TICKS) & 0xFFFFFFFF);
+    tx_metadata->to.tick = (uint32_t)((now + XDMA_SECTION_TAKEN_TICKS + XDMA_SECTION_TICKS_MARGIN) & 0xFFFFFFFF);
+    tx_metadata->delay_from.tick = (uint32_t)((now + DELAY_TICKS) & 0xFFFFFFFF);
+    tx_metadata->delay_to.tick = (uint32_t)((now + DELAY_TICKS + DELAY_TICKS_MARGIN) & 0xFFFFFFFF);
 
 #else
     uint8_t *buffer =(uint8_t *)rx;
@@ -784,10 +784,10 @@ void dump_buffer(unsigned char* buffer, int len) {
 void dump_tsn_tx_buffer(struct tsn_tx_buffer* packet, int len) {
 
     printf("[tx_metadata]\n");
-    printf("        from_tick: 0x%08x,         to_tick: 0x%08x\n", 
-        packet->metadata.from_tick, packet->metadata.to_tick);
-    printf("  delay_from_tick: 0x%08x,   delay_to_tick: 0x%08x\n", 
-        packet->metadata.delay_from_tick, packet->metadata.delay_to_tick);
+    printf("        from.tick: 0x%08x,         to.tick: 0x%08x\n", 
+        packet->metadata.from.tick, packet->metadata.to.tick);
+    printf("  delay_from.tick: 0x%08x,   delay_to.tick: 0x%08x\n", 
+        packet->metadata.delay_from.tick, packet->metadata.delay_to.tick);
     printf("     frame_length: %10d,     fail_policy: %10d\n", 
         packet->metadata.frame_length, packet->metadata.fail_policy);
     printf("[packet_data]");
@@ -821,25 +821,31 @@ void fill_tx_metadata(struct tx_metadata* tx_metadata, int FP, int FT_OF, int DF
     tx_metadata->frame_length = f_len;
 
     if(((FT_OF & 0x1) == 0) && ((DF_OF & 0x1) == 0)) {
-        tx_metadata->from_tick = (uint32_t)(0x000000f0);
-        tx_metadata->to_tick = (uint32_t)(0x00000286);
-        tx_metadata->delay_from_tick = (uint32_t)(0x000001f0);
-        tx_metadata->delay_to_tick = (uint32_t)(0x00000295);
+        uint64_t now = get_sys_count();
+        tx_metadata->from.tick = (uint32_t)((now + 1000000) & 0x1FFFFFFF);
+        tx_metadata->to.tick = (uint32_t)((now + 1500000) & 0x1FFFFFFF);
+        tx_metadata->delay_from.tick = (uint32_t)((now + 3000000) & 0x1FFFFFFF);
+        tx_metadata->delay_to.tick = (uint32_t)((now + 3500000) & 0x1FFFFFFF);
+
+//        tx_metadata->from.tick = (uint32_t)(0x000000f0);
+//        tx_metadata->to.tick = (uint32_t)(0x00000286);
+//        tx_metadata->delay_from.tick = (uint32_t)(0x000001f0);
+//        tx_metadata->delay_to.tick = (uint32_t)(0x00000295);
     } else if(((FT_OF & 0x1) == 0) && ((DF_OF & 0x1) == 1)) {
-        tx_metadata->from_tick = (uint32_t)(0xffffffe0);
-        tx_metadata->to_tick = (uint32_t)(0xffffffef);
-        tx_metadata->delay_from_tick = (uint32_t)(0x000000e0);
-        tx_metadata->delay_to_tick = (uint32_t)(0x000000ef);
+        tx_metadata->from.tick = (uint32_t)(0x1fffffe0);
+        tx_metadata->to.tick = (uint32_t)(0x1fffffef);
+        tx_metadata->delay_from.tick = (uint32_t)(0x000000e0);
+        tx_metadata->delay_to.tick = (uint32_t)(0x1fffffff);
     } else if(((FT_OF & 0x1) == 1) && ((DF_OF & 0x1) == 0)) {
-        tx_metadata->from_tick = (uint32_t)(0xfffffff1);
-        tx_metadata->to_tick = (uint32_t)(0x00000000);
-        tx_metadata->delay_from_tick = (uint32_t)(0xffffffff);
-        tx_metadata->delay_to_tick = (uint32_t)(0x0000000e);
+        tx_metadata->from.tick = (uint32_t)(0x1ffffff1);
+        tx_metadata->to.tick = (uint32_t)(0x00000000);
+        tx_metadata->delay_from.tick = (uint32_t)(0x1fffffff);
+        tx_metadata->delay_to.tick = (uint32_t)(0x0000000e);
     } else if(((FT_OF & 0x1) == 1) && ((DF_OF & 0x1) == 1)) {
-        tx_metadata->from_tick = (uint32_t)(0xfffffff1);
-        tx_metadata->to_tick = (uint32_t)(0x00000000);
-        tx_metadata->delay_from_tick = (uint32_t)(0x000000f1);
-        tx_metadata->delay_to_tick = (uint32_t)(0x00000100);
+        tx_metadata->from.tick = (uint32_t)(0x1ffffff1);
+        tx_metadata->to.tick = (uint32_t)(0x00000000);
+        tx_metadata->delay_from.tick = (uint32_t)(0x000000f1);
+        tx_metadata->delay_to.tick = (uint32_t)(0x00000100);
     }
 }
 
@@ -969,15 +975,15 @@ int find_tick_count_delay(char* ip_address, uint32_t from_tick, uint32_t margin)
 
     uint64_t now = get_sys_count();
 #if 1
-    tx_metadata->from_tick = (uint32_t)((now + 1000000) & 0xFFFFFFFF);
-    tx_metadata->to_tick = (uint32_t)((now + 1500000) & 0xFFFFFFFF);
-    tx_metadata->delay_from_tick = (uint32_t)((now + 3000000) & 0xFFFFFFFF);
-    tx_metadata->delay_to_tick = (uint32_t)((now + 3500000) & 0xFFFFFFFF);
+    tx_metadata->from.tick = (uint32_t)((now + 1000000) & 0x1FFFFFFF);
+    tx_metadata->to.tick = (uint32_t)((now + 1500000) & 0x1FFFFFFF);
+    tx_metadata->delay_from.tick = (uint32_t)((now + 3000000) & 0x1FFFFFFF);
+    tx_metadata->delay_to.tick = (uint32_t)((now + 3500000) & 0x1FFFFFFF);
 #else
-    tx_metadata->from_tick = (uint32_t)((now + 1000000) & 0xFFFFFFFF);
-    tx_metadata->to_tick = (uint32_t)(0xFFFFFFFF);
-    tx_metadata->delay_from_tick = (uint32_t)(0xFFFFF800);
-    tx_metadata->delay_to_tick = (uint32_t)(0xFFFFFFFF);
+    tx_metadata->from.tick = (uint32_t)((now + 1000000) & 0x1FFFFFFF);
+    tx_metadata->to.tick = (uint32_t)(0x1FFFFFFF);
+    tx_metadata->delay_from.tick = (uint32_t)(0x1FFFF800);
+    tx_metadata->delay_to.tick = (uint32_t)(0x1FFFFFFF);
 #endif
 
     tx_metadata->frame_length = TOTAL_PKT_LEN;
@@ -985,7 +991,7 @@ int find_tick_count_delay(char* ip_address, uint32_t from_tick, uint32_t margin)
     dump_tsn_tx_buffer(&packet, (int)(sizeof(struct tx_metadata) + tx_metadata->frame_length));
     printf("\n[raw data]");
     dump_buffer((unsigned char*)&packet, (int)(tx_metadata->frame_length + sizeof(struct tx_metadata)));
-    printf("get_sys_count[31..0]: 0x%08x\n", (uint32_t)(now & 0xFFFFFFFF));
+    printf("get_sys_count[31..0]: 0x%08x\n", (uint32_t)(now & 0x1FFFFFFF));
     printf("<<< %s()\n", __func__);
     return XST_SUCCESS;
 }

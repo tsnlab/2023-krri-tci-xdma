@@ -144,12 +144,19 @@ struct rx_metadata {
     uint16_t frame_length;
 } __attribute__((packed, scalar_storage_order("big-endian")));
 
+#ifdef ONE_QUEUE_TSN
+struct tick_count {
+    uint32_t tick:29;
+    uint32_t priority:3;
+} __attribute__((packed, scalar_storage_order("big-endian")));
+#endif
+
 struct tx_metadata {
 #ifdef ONE_QUEUE_TSN
-    uint32_t from_tick;
-    uint32_t to_tick;
-    uint32_t delay_from_tick;
-    uint32_t delay_to_tick;
+    struct tick_count from;
+    struct tick_count to;
+    struct tick_count delay_from;
+    struct tick_count delay_to;
     uint16_t frame_length;
     uint16_t timestamp_id;
     uint8_t fail_policy;
