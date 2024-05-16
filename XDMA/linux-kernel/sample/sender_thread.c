@@ -795,6 +795,15 @@ void dump_tsn_tx_buffer(struct tsn_tx_buffer* packet, int len) {
     printf("\n");
 }
 
+static inline void wait_tick_count_almost_full(uint32_t h_count, uint32_t l_count) {
+    uint32_t sys_count;
+
+    sys_count = (uint32_t)(get_register(REG_SYS_COUNT_LOW) & 0x1FFFFFFF);
+    while(((0x1FFFFFFF - sys_count) > h_count) && ((0x1FFFFFFF - sys_count) < l_count) ) {
+        sys_count = (uint32_t)(get_register(REG_SYS_COUNT_LOW) & 0x1FFFFFFF);
+    }
+}
+
 void fill_packet_data_with_default_packet(struct tsn_tx_buffer* packet, uint8_t stuff) {
 
     uint8_t default_packet[DEFAULT_PKT_LEN] = {
@@ -814,6 +823,9 @@ void fill_packet_data_with_default_packet(struct tsn_tx_buffer* packet, uint8_t 
     }
 }
 
+#define TICK_COUNT_ALMOST_FULL_H (10000)
+#define TICK_COUNT_ALMOST_FULL_L (1000)
+
 void fill_tx_metadata(struct tx_metadata* tx_metadata, int FP, int FT_OF, int DF_OF, uint16_t f_len) {
 
     tx_metadata->timestamp_id = 0;
@@ -826,12 +838,8 @@ void fill_tx_metadata(struct tx_metadata* tx_metadata, int FP, int FT_OF, int DF
         tx_metadata->to.tick = (uint32_t)((now + 1500000) & 0x1FFFFFFF);
         tx_metadata->delay_from.tick = (uint32_t)((now + 3000000) & 0x1FFFFFFF);
         tx_metadata->delay_to.tick = (uint32_t)((now + 3500000) & 0x1FFFFFFF);
-
-//        tx_metadata->from.tick = (uint32_t)(0x000000f0);
-//        tx_metadata->to.tick = (uint32_t)(0x00000286);
-//        tx_metadata->delay_from.tick = (uint32_t)(0x000001f0);
-//        tx_metadata->delay_to.tick = (uint32_t)(0x00000295);
     } else if(((FT_OF & 0x1) == 0) && ((DF_OF & 0x1) == 1)) {
+        wait_tick_count_almost_full(TICK_COUNT_ALMOST_FULL_H, TICK_COUNT_ALMOST_FULL_L);
         tx_metadata->from.tick = (uint32_t)(0x1fffffe0);
         tx_metadata->to.tick = (uint32_t)(0x1fffffef);
         tx_metadata->delay_from.tick = (uint32_t)(0x000000e0);
