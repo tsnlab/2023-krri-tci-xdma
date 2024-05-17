@@ -44,7 +44,7 @@ int xdma_netdev_open(struct net_device *ndev)
         struct xdma_private *priv = netdev_priv(ndev);
         dma_addr_t dma_addr;
         u32 lo, hi;
-        long flag;
+        unsigned long flag;
 
         netif_carrier_on(ndev);
         netif_start_queue(ndev);
@@ -89,13 +89,8 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         struct xdma_private *priv = netdev_priv(ndev);
         struct xdma_dev *xdev = priv->xdev;
         int padding = 0;
-        unsigned long flag;
-        int index;
-        int desc1_status;
-        int desc2_status;
         u32 w;
         dma_addr_t dma_addr;
-        dma_addr_t bus_addr;
 
         /* Check desc count */
         netif_stop_queue(ndev);

@@ -157,7 +157,6 @@ static const struct net_device_ops xdma_netdev_ops = {
 static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	int rv = 0;
-	int i;
 	struct xdma_pci_dev *xpdev = NULL;
 	struct xdma_dev *xdev;
 	void *hndl;

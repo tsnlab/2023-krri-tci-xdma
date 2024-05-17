@@ -1390,7 +1390,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		struct xdma_result *result = priv->res;
 		struct sk_buff *skb;
 		int skb_len;
-		long flag;
+		unsigned long flag;
 
 		spin_lock_irqsave(&priv->rx_lock, flag);
 		engine_status_read(engine, 1, 0);
@@ -1427,10 +1427,6 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 	if (mask) {
 		struct xdma_private *priv = netdev_priv(ndev);
 		struct xdma_engine *engine = &xdev->engine_h2c[0];
-		struct xdma_desc *desc;
-		struct sk_buff *skb;
-		long flag;
-		dma_addr_t bus_addr;
 		
 		engine_status_read(engine, 1, 0);
 
