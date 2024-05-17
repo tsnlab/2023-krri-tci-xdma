@@ -42,6 +42,10 @@ static void set_pulse_at(struct ptp_device_data *ptp_data, sysclock_t sys_count)
         current_ns = alinx_get_timestamp(sys_count, ptp_data->ticks_scale, ptp_data->offset);;
         next_pulse_ns = current_ns - (current_ns % 1000000000) + 1000000000;
         next_pulse_sysclock = ((double)(next_pulse_ns - ptp_data->offset) / ptp_data->ticks_scale);
+#ifdef __LIBXDMA_DEBUG__
+        pr_debug("ptp%u: %s sys_count=%llu, current_ns=%llu, next_pulse_ns=%llu, next_pulse_sysclock=%llu",
+               ptp_data->ptp_id, __func__, sys_count, current_ns, next_pulse_ns, next_pulse_sysclock);
+#endif
 
         set_pps_pulse_at(xdev, next_pulse_sysclock);
 }
@@ -51,6 +55,9 @@ static void set_pps_cycle_1s(struct xdma_dev *xdev, u32 cycle_1s) {
 }
 
 static void set_cycle_1s(struct ptp_device_data *ptp_data, u32 cycle_1s) {
+#ifdef __LIBXDMA_DEBUG__
+        pr_debug("ptp%u: %s cycle_1s=%u", ptp_data->ptp_id, __func__, cycle_1s);
+#endif
         set_pps_cycle_1s(ptp_data->xdev, cycle_1s);
 }
 
@@ -75,6 +82,11 @@ static int alinx_ptp_gettimex(struct ptp_clock_info *ptp, struct timespec64 *ts,
         ts->tv_nsec = timestamp % 1000000000;
 
         spin_unlock_irqrestore(&ptp_data->lock, flags);
+
+#ifdef __LIBXDMA_DEBUG__
+        pr_debug("ptp%u: %s clock=%llu, timestamp=%llu",
+                 ptp_data->ptp_id, __func__, clock, timestamp);
+#endif
 
         return 0;
 }
@@ -108,6 +120,11 @@ static int alinx_ptp_settime(struct ptp_clock_info *ptp, const struct timespec64
 
         spin_unlock_irqrestore(&ptp_data->lock, flags);
 
+#ifdef __LIBXDMA_DEBUG__
+        pr_debug("ptp%u: %s host_timestamp=%llu, hw_timestamp=%llu, offset=%llu",
+                 ptp_data->ptp_id,__func__, host_timestamp, hw_timestamp, ptp_data->offset);
+#endif
+
         return 0;
 }
 
@@ -131,6 +148,10 @@ static int alinx_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
         set_pulse_at(ptp_data, sys_clock);
 
         spin_unlock_irqrestore(&ptp_data->lock, flags);
+
+#ifdef __LIBXDMA_DEBUG__
+        pr_debug("ptp%u: %s delta=%lld, offset=%llu", ptp_data->ptp_id, __func__, delta, ptp_data->offset);
+#endif
 
         return 0;
 }
@@ -181,6 +202,11 @@ static int alinx_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
         sys_clock = get_sys_clock(xdev);
         set_pulse_at(ptp_data, sys_clock);
 
+#ifdef __LIBXDMA_DEBUG__
+        pr_debug("ptp%u: %s scaled_ppm=%ld, offset=%llu, ticks_scale:%lf",
+                 ptp_data->ptp_id, __func__, scaled_ppm, ptp_data->offset, ptp_data->ticks_scale);
+#endif
+
 exit:
         spin_unlock_irqrestore(&ptp_data->lock, flags);
 
@@ -207,6 +233,9 @@ struct ptp_device_data *ptp_device_init(struct device *dev, struct xdma_dev *xde
 
         struct ptp_device_data *ptp;
         struct timespec64 ts;
+#ifdef __LIBXDMA_DEBUG__
+        static u32 ptp_cnt = 0;
+#endif
 
         ptp = kzalloc(sizeof(struct ptp_device_data), GFP_KERNEL);
         if (!ptp) {
@@ -228,6 +257,10 @@ struct ptp_device_data *ptp_device_init(struct device *dev, struct xdma_dev *xde
                 kfree(ptp);
                 return NULL;
         }
+
+#ifdef __LIBXDMA_DEBUG__
+        ptp->ptp_id = ptp_cnt++;
+#endif
 
         /* Set offset, cycle_1s */
         ts = ktime_to_timespec64(ktime_get_real());

@@ -27,6 +27,9 @@ struct ptp_device_data {
         double ticks_scale;
         u64 offset;
         spinlock_t lock;
+#ifdef __LIBXDMA_DEBUG__
+        u32 ptp_id;
+#endif
 };
 
 struct ptp_device_data *ptp_device_init(struct device *dev, struct xdma_dev *xdev);
