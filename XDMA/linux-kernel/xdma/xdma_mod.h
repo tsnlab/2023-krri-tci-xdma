@@ -48,7 +48,7 @@
 
 #include "libxdma.h"
 #include "xdma_thread.h"
-#include "example_ptp.h"
+#include "alinx_ptp.h"
 
 #define MAGIC_ENGINE	0xEEEEEEEEUL
 #define MAGIC_DEVICE	0xDDDDDDDDUL

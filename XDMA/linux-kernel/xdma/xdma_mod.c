@@ -27,7 +27,7 @@
 #include "xdma_cdev.h"
 #include "version.h"
 #include "xdma_netdev.h"
-#include "example_ptp.h"
+#include "alinx_ptp.h"
 
 #define DRV_MODULE_NAME		"xdma"
 #define DRV_MODULE_DESC		"Xilinx XDMA Reference Driver"
