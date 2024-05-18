@@ -91,6 +91,7 @@ typedef uintptr_t UINTPTR;
 #define REG_RASB_FIFO_STATUS                        0x0474
 
 #ifdef ONE_QUEUE_TSN
+#define REG_TX_AXIS_FIFO_STATUS1                    0x0480
 #define REG_TX_AXIS_FIFO_STATUS                     0x0484
 #define REG_RX_DEBUG                                0x04A0
 #define REG_TX_DEBUG                                0x04B0
@@ -122,8 +123,8 @@ typedef uintptr_t UINTPTR;
 
 
 #ifdef ONE_QUEUE_TSN
-#define XDMA_SECTION_TAKEN_TICKS (12500)
-#define XDMA_SECTION_TICKS_MARGIN (5000)
+#define XDMA_SECTION_TAKEN_TICKS (3000)
+#define XDMA_SECTION_TICKS_MARGIN (2000)
 #define DELAY_TICKS (50000)
 #define DELAY_TICKS_MARGIN (5000)
 #endif
