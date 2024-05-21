@@ -5,6 +5,12 @@
 #include "alinx_ptp.h"
 #include "alinx_arch.h"
 
+#ifdef __LIBXDMA_DEBUG__
+#define xdma_debug(...) pr_debug(__VA_ARGS__)
+#else
+#define xdma_debug(...) {}
+#endif  // __LIBXDMA_DEBUG__
+
 static void set_pps_pulse_at(struct xdma_dev *xdev, sysclock_t time) {
         write32((u32)(time >> 32), xdev->bar[0] + REG_NEXT_PULSE_AT_HI);
         write32((u32)time, xdev->bar[0] + REG_NEXT_PULSE_AT_LO);
@@ -35,10 +41,8 @@ static void set_pulse_at(struct ptp_device_data *ptp_data, sysclock_t sys_count)
         current_ns = alinx_get_timestamp(sys_count, ptp_data->ticks_scale, ptp_data->offset);;
         next_pulse_ns = current_ns - (current_ns % 1000000000) + 1000000000;
         next_pulse_sysclock = ((double)(next_pulse_ns - ptp_data->offset) / ptp_data->ticks_scale);
-#ifdef __LIBXDMA_DEBUG__
-        pr_debug("ptp%u: %s sys_count=%llu, current_ns=%llu, next_pulse_ns=%llu, next_pulse_sysclock=%llu",
-               ptp_data->ptp_id, __func__, sys_count, current_ns, next_pulse_ns, next_pulse_sysclock);
-#endif
+        xdma_debug("ptp%u: %s sys_count=%llu, current_ns=%llu, next_pulse_ns=%llu, next_pulse_sysclock=%llu",
+                   ptp_data->ptp_id, __func__, sys_count, current_ns, next_pulse_ns, next_pulse_sysclock);
 
         set_pps_pulse_at(xdev, next_pulse_sysclock);
 }
@@ -48,9 +52,7 @@ static void set_pps_cycle_1s(struct xdma_dev *xdev, u32 cycle_1s) {
 }
 
 static void set_cycle_1s(struct ptp_device_data *ptp_data, u32 cycle_1s) {
-#ifdef __LIBXDMA_DEBUG__
-        pr_debug("ptp%u: %s cycle_1s=%u", ptp_data->ptp_id, __func__, cycle_1s);
-#endif
+        xdma_debug("ptp%u: %s cycle_1s=%u", ptp_data->ptp_id, __func__, cycle_1s);
         set_pps_cycle_1s(ptp_data->xdev, cycle_1s);
 }
 
@@ -76,10 +78,7 @@ static int alinx_ptp_gettimex(struct ptp_clock_info *ptp, struct timespec64 *ts,
 
         spin_unlock_irqrestore(&ptp_data->lock, flags);
 
-#ifdef __LIBXDMA_DEBUG__
-        pr_debug("ptp%u: %s clock=%llu, timestamp=%llu",
-                 ptp_data->ptp_id, __func__, clock, timestamp);
-#endif
+        xdma_debug("ptp%u: %s clock=%llu, timestamp=%llu", ptp_data->ptp_id, __func__, clock, timestamp);
 
         return 0;
 }
@@ -113,10 +112,8 @@ static int alinx_ptp_settime(struct ptp_clock_info *ptp, const struct timespec64
 
         spin_unlock_irqrestore(&ptp_data->lock, flags);
 
-#ifdef __LIBXDMA_DEBUG__
-        pr_debug("ptp%u: %s host_timestamp=%llu, hw_timestamp=%llu, offset=%llu",
-                 ptp_data->ptp_id,__func__, host_timestamp, hw_timestamp, ptp_data->offset);
-#endif
+        xdma_debug("ptp%u: %s host_timestamp=%llu, hw_timestamp=%llu, offset=%llu",
+                   ptp_data->ptp_id,__func__, host_timestamp, hw_timestamp, ptp_data->offset);
 
         return 0;
 }
@@ -142,9 +139,7 @@ static int alinx_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 
         spin_unlock_irqrestore(&ptp_data->lock, flags);
 
-#ifdef __LIBXDMA_DEBUG__
-        pr_debug("ptp%u: %s delta=%lld, offset=%llu", ptp_data->ptp_id, __func__, delta, ptp_data->offset);
-#endif
+        xdma_debug("ptp%u: %s delta=%lld, offset=%llu", ptp_data->ptp_id, __func__, delta, ptp_data->offset);
 
         return 0;
 }
@@ -195,10 +190,8 @@ static int alinx_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
         sys_clock = get_sys_clock(xdev);
         set_pulse_at(ptp_data, sys_clock);
 
-#ifdef __LIBXDMA_DEBUG__
-        pr_debug("ptp%u: %s scaled_ppm=%ld, offset=%llu, ticks_scale:%lf",
-                 ptp_data->ptp_id, __func__, scaled_ppm, ptp_data->offset, ptp_data->ticks_scale);
-#endif
+        xdma_debug("ptp%u: %s scaled_ppm=%ld, offset=%llu, ticks_scale:%lf",
+                   ptp_data->ptp_id, __func__, scaled_ppm, ptp_data->offset, ptp_data->ticks_scale);
 
 exit:
         spin_unlock_irqrestore(&ptp_data->lock, flags);
