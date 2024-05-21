@@ -13,15 +13,15 @@ static void write32(u32 val, void * addr) {
 }
 
 static void set_pps_pulse_at(struct xdma_dev *xdev, sysclock_t time) {
-        write32((u32)(time >> 32), xdev->bar[0] + NEXT_PULSE_AT_HI);
-        write32((u32)time, xdev->bar[0] + NEXT_PULSE_AT_LO);
+        write32((u32)(time >> 32), xdev->bar[0] + REG_NEXT_PULSE_AT_HI);
+        write32((u32)time, xdev->bar[0] + REG_NEXT_PULSE_AT_LO);
 }
 
 static sysclock_t get_sys_clock(struct xdma_dev *xdev)
 {
         timestamp_t clock;
-        clock = ((u64)read32(xdev->bar[0] + SYS_CLOCK_HI) << 32) |
-                read32(xdev->bar[0] + SYS_CLOCK_LO);
+        clock = ((u64)read32(xdev->bar[0] + REG_SYS_CLOCK_HI) << 32) |
+                read32(xdev->bar[0] + REG_SYS_CLOCK_LO);
 
         return clock;
 }
@@ -51,7 +51,7 @@ static void set_pulse_at(struct ptp_device_data *ptp_data, sysclock_t sys_count)
 }
 
 static void set_pps_cycle_1s(struct xdma_dev *xdev, u32 cycle_1s) {
-        write32(cycle_1s, xdev->bar[0] + CYCLE_1S);
+        write32(cycle_1s, xdev->bar[0] + REG_CYCLE_1S);
 }
 
 static void set_cycle_1s(struct ptp_device_data *ptp_data, u32 cycle_1s) {

@@ -5,11 +5,11 @@
 #include "xdma_mod.h"
 #include "libxdma.h"
 
-#define NEXT_PULSE_AT_HI 0x002c
-#define NEXT_PULSE_AT_LO 0x0030
-#define CYCLE_1S 0x0034
-#define SYS_CLOCK_HI 0x0380
-#define SYS_CLOCK_LO 0x0384
+#define REG_NEXT_PULSE_AT_HI 0x002c
+#define REG_NEXT_PULSE_AT_LO 0x0030
+#define REG_CYCLE_1S 0x0034
+#define REG_SYS_CLOCK_HI 0x0380
+#define REG_SYS_CLOCK_LO 0x0384
 
 /* 125 MHz */
 #define TICKS_SCALE 8.0
