@@ -3,14 +3,7 @@
 #include "version.h"
 #include "xdma_netdev.h" 
 #include "alinx_ptp.h"
-
-static u32 read32(void * addr) {
-        return ioread32(addr);
-}
-
-static void write32(u32 val, void * addr) {
-        iowrite32(val, addr);
-}
+#include "alinx_arch.h"
 
 static void set_pps_pulse_at(struct xdma_dev *xdev, sysclock_t time) {
         write32((u32)(time >> 32), xdev->bar[0] + REG_NEXT_PULSE_AT_HI);
