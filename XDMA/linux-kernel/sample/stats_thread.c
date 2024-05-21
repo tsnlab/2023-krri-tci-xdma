@@ -189,7 +189,7 @@ void* stats_thread(void* arg) {
     printf(">>> %s(mode: %d)\n", __func__, p_arg->mode);
 
     if(p_arg->mode == RUN_MODE_DEBUG) return NULL;
-    if(p_arg->mode == RUN_MODE_NORMAL) return NULL;
+//    if(p_arg->mode == RUN_MODE_NORMAL) return NULL;
 
     time(&start_time);
     gettimeofday(&tv, NULL);

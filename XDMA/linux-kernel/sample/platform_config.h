@@ -21,7 +21,7 @@ typedef uint64_t timestamp_t;
 
 typedef uintptr_t UINTPTR;
 
-//#define PLATFORM_DEBUG
+#define PLATFORM_DEBUG
 
 #define ONE_QUEUE_TSN
 
