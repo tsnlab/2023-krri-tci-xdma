@@ -39,7 +39,7 @@ struct xdma_private {
         struct xdma_desc *tx_desc;
 
         struct xdma_result *res;
-        
+
         dma_addr_t tx_bus_addr;
         dma_addr_t tx_dma_addr;
         dma_addr_t rx_bus_addr;

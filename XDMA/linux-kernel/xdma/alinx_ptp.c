@@ -1,7 +1,7 @@
 #include "xdma_mod.h"
-#include "xdma_cdev.h" 
+#include "xdma_cdev.h"
 #include "version.h"
-#include "xdma_netdev.h" 
+#include "xdma_netdev.h"
 #include "alinx_ptp.h"
 #include "alinx_arch.h"
 
@@ -74,7 +74,7 @@ static int alinx_ptp_gettimex(struct ptp_clock_info *ptp, struct timespec64 *ts,
         ptp_read_system_postts(sts);
 
         timestamp = alinx_get_timestamp(clock, ptp_data->ticks_scale, ptp_data->offset);
-        
+
         ts->tv_sec = timestamp / 1000000000;
         ts->tv_nsec = timestamp % 1000000000;
 

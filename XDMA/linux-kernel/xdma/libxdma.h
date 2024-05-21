@@ -444,7 +444,7 @@ struct sw_desc {
 
 /* Describes a (SG DMA) single transfer for the engine */
 #define XFER_FLAG_NEED_UNMAP		0x1
-#define XFER_FLAG_ST_C2H_EOP_RCVED	0x2	/* ST c2h only */ 
+#define XFER_FLAG_ST_C2H_EOP_RCVED	0x2	/* ST c2h only */
 struct xdma_transfer {
 	struct list_head entry;		/* queue of non-completed transfers */
 	struct xdma_desc *desc_virt;	/* virt addr of the 1st descriptor */

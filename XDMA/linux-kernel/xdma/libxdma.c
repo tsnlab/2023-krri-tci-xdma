@@ -1427,7 +1427,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 	if (mask) {
 		struct xdma_private *priv = netdev_priv(ndev);
 		struct xdma_engine *engine = &xdev->engine_h2c[0];
-		
+
 		engine_status_read(engine, 1, 0);
 
 		/* Free last resource */

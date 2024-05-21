@@ -10,7 +10,7 @@ static void tx_desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len)
 
         desc->control = cpu_to_le32(DESC_MAGIC);
         control_field = XDMA_DESC_STOPPED;
-        control_field |= XDMA_DESC_EOP; 
+        control_field |= XDMA_DESC_EOP;
         control_field |= XDMA_DESC_COMPLETED;
         control = le32_to_cpu(desc->control & ~(LS_BYTE_MASK));
         control |= control_field;
@@ -28,7 +28,7 @@ void rx_desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len)
 
         desc->control = cpu_to_le32(DESC_MAGIC);
         control_field = XDMA_DESC_STOPPED;
-        control_field |= XDMA_DESC_EOP; 
+        control_field |= XDMA_DESC_EOP;
         control_field |= XDMA_DESC_COMPLETED;
         control = le32_to_cpu(desc->control & ~(LS_BYTE_MASK));
         control |= control_field;

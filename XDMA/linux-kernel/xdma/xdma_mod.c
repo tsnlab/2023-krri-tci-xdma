@@ -263,7 +263,7 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	priv->xdev = xpdev->xdev;
 	priv->rx_engine = &xdev->engine_c2h[0];
 	priv->tx_engine = &xdev->engine_h2c[0];
-	
+
 	priv->tx_desc = dma_alloc_coherent(
 				&pdev->dev,
 				sizeof(struct xdma_desc),

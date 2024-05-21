@@ -88,7 +88,7 @@ static void async_io_handler(unsigned long  cb_hndl, int err)
 	if (!err)
 		numbytes = xdma_xfer_completion((void *)cb, xdev,
 				engine->channel, cb->write, cb->ep_addr,
-				&cb->sgt, 0, 
+				&cb->sgt, 0,
 				cb->write ? h2c_timeout * 1000 :
 					    c2h_timeout * 1000);
 
@@ -114,7 +114,7 @@ skip_tran:
 		kmem_cache_free(cdev_cache, caio);
 		kfree(cb);
 		return;
-	} 
+	}
 	spin_unlock(&caio->lock);
 	return;
 
@@ -792,8 +792,8 @@ static int ioctl_do_align_get(struct xdma_engine *engine, unsigned long arg)
 	return put_user(engine->addr_align, (int __user *)arg);
 }
 
-static int ioctl_do_burst_read_write(struct xdma_engine *engine, 
-                                     unsigned long arg, bool write) 
+static int ioctl_do_burst_read_write(struct xdma_engine *engine,
+                                     unsigned long arg, bool write)
 {
 	struct xdma_multi_read_write_ioctl io;
 	struct xdma_io_cb cb;
@@ -852,7 +852,7 @@ static int ioctl_do_burst_read_write(struct xdma_engine *engine,
 
 	return res;
 }
-	
+
 static int ioctl_do_aperture_dma(struct xdma_engine *engine, unsigned long arg,
 				bool write)
 {
@@ -916,7 +916,7 @@ static int ioctl_do_aperture_dma(struct xdma_engine *engine, unsigned long arg,
 
 	return io.error;
 }
-	
+
 static long char_sgdma_ioctl(struct file *file, unsigned int cmd,
 		unsigned long arg)
 {
