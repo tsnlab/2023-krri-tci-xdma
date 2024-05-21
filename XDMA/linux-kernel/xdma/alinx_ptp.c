@@ -69,7 +69,9 @@ static int alinx_ptp_gettimex(struct ptp_clock_info *ptp, struct timespec64 *ts,
 
         spin_lock_irqsave(&ptp_data->lock, flags);
 
+        ptp_read_system_prets(sts);
         clock = get_sys_clock(ptp_data->xdev);
+        ptp_read_system_postts(sts);
 
         timestamp = alinx_get_timestamp(clock, ptp_data->ticks_scale, ptp_data->offset);
         
@@ -107,7 +109,6 @@ static int alinx_ptp_settime(struct ptp_clock_info *ptp, const struct timespec64
 
         ptp_data->offset = host_timestamp - hw_timestamp;
 
-        set_cycle_1s(ptp_data, RESERVED_CYCLE);
         set_pulse_at(ptp_data, sys_clock);
 
         spin_unlock_irqrestore(&ptp_data->lock, flags);
@@ -203,7 +204,7 @@ struct ptp_clock_info ptp_clock_info_init(void) {
         struct ptp_clock_info info = {
                 .owner = THIS_MODULE,
                 .name = "ptp",
-                .max_adj = 12500000,
+                .max_adj = RESERVED_CYCLE,
                 .n_ext_ts = 0,
                 .pps = 0,
                 .adjfine = alinx_ptp_adjfine,
