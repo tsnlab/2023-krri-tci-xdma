@@ -31,10 +31,11 @@
 #include "libxdma_api.h"
 #include "cdev_sgdma.h"
 #include "xdma_thread.h"
+#include "xdma_netdev.h"
 
 
 /* Module Parameters */
-static unsigned int poll_mode = 1;
+static unsigned int poll_mode;
 module_param(poll_mode, uint, 0644);
 MODULE_PARM_DESC(poll_mode, "Set 1 for hw polling, default is 0 (interrupts)");
 
@@ -255,7 +256,7 @@ static void check_nonzero_interrupt_status(struct xdma_dev *xdev)
 }
 
 /* channel_interrupts_enable -- Enable interrupts we are interested in */
-static void channel_interrupts_enable(struct xdma_dev *xdev, u32 mask)
+void channel_interrupts_enable(struct xdma_dev *xdev, u32 mask)
 {
 	struct interrupt_regs *reg =
 		(struct interrupt_regs *)(xdev->bar[xdev->config_bar_idx] +
@@ -265,7 +266,7 @@ static void channel_interrupts_enable(struct xdma_dev *xdev, u32 mask)
 }
 
 /* channel_interrupts_disable -- Disable interrupts we not interested in */
-static void channel_interrupts_disable(struct xdma_dev *xdev, u32 mask)
+void channel_interrupts_disable(struct xdma_dev *xdev, u32 mask)
 {
 	struct interrupt_regs *reg =
 		(struct interrupt_regs *)(xdev->bar[xdev->config_bar_idx] +
@@ -1343,9 +1344,9 @@ static irqreturn_t user_irq_service(int irq, struct xdma_user_irq *user_irq)
 static irqreturn_t xdma_isr(int irq, void *dev_id)
 {
 	u32 ch_irq;
-	u32 user_irq;
 	u32 mask;
 	struct xdma_dev *xdev;
+	struct net_device *ndev;
 	struct interrupt_regs *irq_regs;
 
 	dbg_irq("(irq=%d, dev 0x%p) <<<< ISR.\n", irq, dev_id);
@@ -1353,13 +1354,14 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		pr_err("Invalid dev_id on irq line %d\n", irq);
 		return -IRQ_NONE;
 	}
-	xdev = (struct xdma_dev *)dev_id;
 
+	xdev = (struct xdma_dev *)dev_id;
 	if (!xdev) {
 		WARN_ON(!xdev);
 		dbg_irq("%s(irq=%d) xdev=%p ??\n", __func__, irq, xdev);
 		return IRQ_NONE;
 	}
+
 
 	irq_regs = (struct interrupt_regs *)(xdev->bar[xdev->config_bar_idx] +
 					     XDMA_OFS_INT_CTRL);
@@ -1375,61 +1377,68 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 	if (ch_irq)
 		channel_interrupts_disable(xdev, ch_irq);
 
-	/* read user interrupts - this read also flushes the above write */
-	user_irq = read_register(&irq_regs->user_int_request);
-	dbg_irq("user_irq = 0x%08x\n", user_irq);
-
-	if (user_irq) {
-		int user = 0;
-		u32 mask = 1;
-		int max = xdev->user_max;
-
-		for (; user < max && user_irq; user++, mask <<= 1) {
-			if (user_irq & mask) {
-				user_irq &= ~mask;
-				user_irq_service(irq, &xdev->user_irq[user]);
-			}
-		}
-	}
-
-	mask = ch_irq & xdev->mask_irq_h2c;
-	if (mask) {
-		int channel = 0;
-		int max = xdev->h2c_channel_max;
-
-		/* iterate over H2C (PCIe read) */
-		for (channel = 0; channel < max && mask; channel++) {
-			struct xdma_engine *engine = &xdev->engine_h2c[channel];
-
-			/* engine present and its interrupt fired? */
-			if ((engine->irq_bitmask & mask) &&
-			    (engine->magic == MAGIC_ENGINE)) {
-				mask &= ~engine->irq_bitmask;
-				dbg_tfr("schedule_work, %s.\n", engine->name);
-				schedule_work(&engine->work);
-			}
-		}
+	ndev = xdev->ndev;
+	if (!ndev) {
+		pr_err("Invalid net device\n");
+		return IRQ_NONE;
 	}
 
 	mask = ch_irq & xdev->mask_irq_c2h;
 	if (mask) {
-		int channel = 0;
-		int max = xdev->c2h_channel_max;
+		struct xdma_engine *engine = &xdev->engine_c2h[0];
+		struct xdma_private *priv = netdev_priv(ndev);
+		struct xdma_result *result = priv->res;
+		struct sk_buff *skb;
+		int skb_len;
+		unsigned long flag;
 
-		/* iterate over C2H (PCIe write) */
-		for (channel = 0; channel < max && mask; channel++) {
-			struct xdma_engine *engine = &xdev->engine_c2h[channel];
-
-			/* engine present and its interrupt fired? */
-			if ((engine->irq_bitmask & mask) &&
-			    (engine->magic == MAGIC_ENGINE)) {
-				mask &= ~engine->irq_bitmask;
-				dbg_tfr("schedule_work, %s.\n", engine->name);
-				schedule_work(&engine->work);
-			}
+		spin_lock_irqsave(&priv->rx_lock, flag);
+		engine_status_read(engine, 1, 0);
+		skb_len = result->length - RX_METADATA_SIZE - CRC_LEN;
+		if (skb_len < 0) {
+			pr_err("Invalid skb_len\n");
+			return IRQ_NONE;
 		}
+		skb = dev_alloc_skb(skb_len);
+		if (!skb) {
+			pr_err("Failed to allocate skb\n");
+			return IRQ_NONE;
+		}
+		memcpy(
+			skb_put(skb, skb_len),
+			priv->rx_buffer + RX_METADATA_SIZE,
+			skb_len);
+		skb->dev = ndev;
+		skb->protocol = eth_type_trans(skb, ndev);
+
+		/* Transfer the skb to the Linux network stack */
+		netif_rx(skb);
+
+		/* Stop the engine */
+		iowrite32(DMA_ENGINE_STOP, &engine->regs->control);
+
+		/* Start the engine */
+		channel_interrupts_enable(engine->xdev, engine->irq_bitmask);
+		iowrite32(DMA_ENGINE_START, &engine->regs->control);
+		spin_unlock_irqrestore(&priv->rx_lock, flag);
 	}
 
+	mask = ch_irq & xdev->mask_irq_h2c;
+	if (mask) {
+		struct xdma_private *priv = netdev_priv(ndev);
+		struct xdma_engine *engine = &xdev->engine_h2c[0];
+
+		engine_status_read(engine, 1, 0);
+
+		/* Free last resource */
+		dma_unmap_single(&xdev->pdev->dev, priv->tx_dma_addr, priv->tx_skb->len, DMA_TO_DEVICE);
+		dev_kfree_skb_any(priv->tx_skb);
+		priv->tx_skb = NULL;
+
+		iowrite32(DMA_ENGINE_STOP, &engine->regs->control);
+		netif_wake_queue(ndev);
+		channel_interrupts_enable(engine->xdev, engine->irq_bitmask);
+	}
 	xdev->irq_count++;
 	return IRQ_HANDLED;
 }
@@ -1513,7 +1522,8 @@ static void unmap_bars(struct xdma_dev *xdev, struct pci_dev *dev)
 		/* is this BAR mapped? */
 		if (xdev->bar[i]) {
 			/* unmap BAR */
-			pci_iounmap(dev, xdev->bar[i]);
+			iounmap(xdev->bar[i]);
+			//pci_iounmap(dev, xdev->bar[i]);
 			/* mark as unmapped */
 			xdev->bar[i] = NULL;
 		}
@@ -1534,6 +1544,7 @@ static int map_single_bar(struct xdma_dev *xdev, struct pci_dev *dev, int idx)
 
 	/* do not map BARs with length 0. Note that start MAY be 0! */
 	if (!bar_len) {
+		pr_info("BAR #%d has zero length - skipping\n", idx);
 		//pr_info("BAR #%d is not present - skipping\n", idx);
 		return 0;
 	}
@@ -1549,7 +1560,8 @@ static int map_single_bar(struct xdma_dev *xdev, struct pci_dev *dev, int idx)
 	 * address space
 	 */
 	dbg_init("BAR%d: %llu bytes to be mapped.\n", idx, (u64)map_len);
-	xdev->bar[idx] = pci_iomap(dev, idx, map_len);
+	//xdev->bar[idx] = pci_iomap(dev, idx, map_len);
+	xdev->bar[idx] = ioremap(bar_start, map_len);
 
 	if (!xdev->bar[idx]) {
 		pr_info("Could not map BAR %d.\n", idx);
@@ -2817,9 +2829,9 @@ static int engine_init(struct xdma_engine *engine, struct xdma_dev *xdev,
 
 	if (enable_st_c2h_credit && engine->streaming &&
 	    engine->dir == DMA_FROM_DEVICE)
-	    	engine->desc_max = XDMA_ENGINE_CREDIT_XFER_MAX_DESC;
+		    engine->desc_max = XDMA_ENGINE_CREDIT_XFER_MAX_DESC;
 	else
-	    	engine->desc_max = XDMA_ENGINE_XFER_MAX_DESC;
+		    engine->desc_max = XDMA_ENGINE_XFER_MAX_DESC;
 
 	dbg_init("engine %p name %s irq_bitmask=0x%08x\n", engine, engine->name,
 		 (int)engine->irq_bitmask);
@@ -2957,10 +2969,10 @@ static int transfer_init(struct xdma_engine *engine,
 
 	xfer->desc_cmpl_th = desc_max;
     if(engine->dir == DMA_TO_DEVICE) {
-        for (i = 0; i < last; i++) {
-            xdma_desc_control_set(xfer->desc_virt + i,
-                        XDMA_DESC_EOP);
-        }
+	for (i = 0; i < last; i++) {
+	    xdma_desc_control_set(xfer->desc_virt + i,
+			XDMA_DESC_EOP);
+	}
     }
 
 	xfer->desc_num = desc_max;
@@ -3207,7 +3219,6 @@ ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 		sg = req->sg;
 		ep_addr = req->ep_addr + (req->offset & (aperture - 1));
 		i = req->sg_idx;
-		
 		for (sg = req->sg; i < sg_max && desc_idx < desc_max;
 			i++, sg = sg_next(sg)) {
 			dma_addr_t addr = sg_dma_address(sg);
@@ -3231,7 +3242,7 @@ ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 				xdma_desc_set(engine->desc + desc_idx, addr,
 						ep_addr, len, dir);
 
-	                	dbg_desc("sg %d -> desc %u: ep 0x%llx, 0x%llx + %u \n",
+				dbg_desc("sg %d -> desc %u: ep 0x%llx, 0x%llx + %u \n",
 					i, desc_idx, ep_addr, addr, len);
 
 				sg_offset += len;
@@ -3240,7 +3251,6 @@ ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 				ep_addr += len;
 				addr += len;
 				tlen -= len;
-				
 				desc_idx++;
 				desc_cnt++;
 				if (desc_idx == desc_max)
@@ -3252,7 +3262,6 @@ ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 			else
 				break;
 		}
-		
 		req->sg_offset = sg_offset;
 		req->sg_idx = i;
 
@@ -3265,8 +3274,8 @@ ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 			desc_bus += sizeof(struct xdma_desc);
 			/* singly-linked list uses bus addresses */
 			desc_virt->next_lo = cpu_to_le32(PCI_DMA_L(desc_bus));
-                	desc_virt->next_hi = cpu_to_le32(PCI_DMA_H(desc_bus));
-                	desc_virt->control = cpu_to_le32(DESC_MAGIC);
+			desc_virt->next_hi = cpu_to_le32(PCI_DMA_H(desc_bus));
+			desc_virt->control = cpu_to_le32(DESC_MAGIC);
 		}
 		/* terminate the last descriptor next pointer */
 		desc_virt->next_lo = cpu_to_le32(0);
@@ -3282,9 +3291,9 @@ ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 			u32 next_adj = xdma_get_next_adj(desc_cnt - i - 1,
 					(xfer->desc_virt + i)->next_lo);
 
-	                dbg_desc("set next adj at idx %d to %u\n", i, next_adj);
-        	        xdma_desc_adjacent(xfer->desc_virt + i, next_adj);
-        	}
+			dbg_desc("set next adj at idx %d to %u\n", i, next_adj);
+			xdma_desc_adjacent(xfer->desc_virt + i, next_adj);
+		}
 
 		engine->desc_idx = (engine->desc_idx + desc_cnt) % desc_max;
 		spin_unlock_irqrestore(&engine->lock, flags);
@@ -3541,7 +3550,6 @@ ssize_t xdma_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
 			if (engine->streaming &&
 			    engine->dir == DMA_FROM_DEVICE) {
 				struct xdma_result *result = xfer->res_virt;
-
 				for (i = 0; i < xfer->desc_cmpl; i++)
 					done += result[i].length;
 
@@ -3761,9 +3769,9 @@ ssize_t xdma_multi_buffer_xfer_submit(struct xdma_engine *engine, int channel, b
 			rv = -ERESTARTSYS;
 			if (engine->streaming &&
 			    engine->dir == DMA_FROM_DEVICE) {
-                if(!xfer->desc_cmpl) {
+		if(!xfer->desc_cmpl) {
 				    struct xdma_result *result = xfer->res_virt;
-			        rv = 0;
+				rv = 0;
 					for (i = 0; i < xfer->desc_cmpl; i++) {
 						done += result[i].length;
 						io->bd[i].len = result[i].length;
@@ -4516,12 +4524,15 @@ void *xdma_device_open(const char *mname, struct pci_dev *pdev, int *user_max,
 
 	/* allocate zeroed device book keeping structure */
 	xdev = alloc_dev_instance(pdev);
-	if (!xdev)
+	if (!xdev) {
+		pr_err("Failed to allocate device instance\n");
 		return NULL;
+	}
 	xdev->mod_name = mname;
 	xdev->user_max = *user_max;
 	xdev->h2c_channel_max = *h2c_channel_max;
 	xdev->c2h_channel_max = *c2h_channel_max;
+	xdev->ndev = NULL;
 
 	xdma_device_flag_set(xdev, XDEV_FLAG_OFFLINE);
 
@@ -4591,9 +4602,6 @@ void *xdma_device_open(const char *mname, struct pci_dev *pdev, int *user_max,
 	rv = irq_setup(xdev, pdev);
 	if (rv < 0)
 		goto err_msix;
-
-	if (!poll_mode)
-		channel_interrupts_enable(xdev, ~0);
 
 	/* Flush writes */
 	read_interrupts(xdev);

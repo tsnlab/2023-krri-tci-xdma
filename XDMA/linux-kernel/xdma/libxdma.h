@@ -3,7 +3,6 @@
  *
  * Copyright (c) 2016-present,  Xilinx, Inc.
  * All rights reserved.
- *
  * This source code is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
@@ -31,6 +30,7 @@
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/workqueue.h>
+#include <linux/netdevice.h>
 
 /* Add compatibility checking for RHEL versions */
 #if defined(RHEL_RELEASE_CODE)
@@ -219,7 +219,10 @@
 
 #define MAX_NUM_ENGINES (XDMA_CHANNEL_NUM_MAX * 2)
 #define H2C_CHANNEL_OFFSET 0x1000
+
 #define SGDMA_OFFSET_FROM_CHANNEL 0x4000
+#define SGDMA_OFFSET_FROM_CHANNEL_RX 0x5000
+
 #define CHANNEL_SPACING 0x100
 #define TARGET_SPACING 0x1000
 
@@ -441,7 +444,7 @@ struct sw_desc {
 
 /* Describes a (SG DMA) single transfer for the engine */
 #define XFER_FLAG_NEED_UNMAP		0x1
-#define XFER_FLAG_ST_C2H_EOP_RCVED	0x2	/* ST c2h only */ 
+#define XFER_FLAG_ST_C2H_EOP_RCVED	0x2	/* ST c2h only */
 struct xdma_transfer {
 	struct list_head entry;		/* queue of non-completed transfers */
 	struct xdma_desc *desc_virt;	/* virt addr of the 1st descriptor */
@@ -589,6 +592,7 @@ struct xdma_dev {
 
 	unsigned long magic;		/* structure ID for sanity checks */
 	struct pci_dev *pdev;	/* pci device struct from probe() */
+        struct net_device *ndev; /* net device struct from probe() */
 	int idx;		/* dev index */
 
 	const char *mod_name;		/* name of module owning the dev */
@@ -697,4 +701,9 @@ int engine_service_poll(struct xdma_engine *engine, u32 expected_desc_count);
 ssize_t xdma_xfer_aperture(struct xdma_engine *engine, bool write, u64 ep_addr,
 			unsigned int aperture, struct sg_table *sgt,
 			bool dma_mapped, int timeout_ms);
+ssize_t xdma_xfer_submit(void *dev_hndl, int channel, bool write, u64 ep_addr,
+			 struct sg_table *sgt, bool dma_mapped, int timeout_ms);
+
+void channel_interrupts_disable(struct xdma_dev *xdev, u32 mask);
+void channel_interrupts_enable(struct xdma_dev *xdev, u32 mask);
 #endif /* XDMA_LIB_H */

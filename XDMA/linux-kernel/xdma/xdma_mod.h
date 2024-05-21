@@ -48,11 +48,19 @@
 
 #include "libxdma.h"
 #include "xdma_thread.h"
+#include "alinx_ptp.h"
 
 #define MAGIC_ENGINE	0xEEEEEEEEUL
 #define MAGIC_DEVICE	0xDDDDDDDDUL
 #define MAGIC_CHAR	0xCCCCCCCCUL
 #define MAGIC_BITSTREAM 0xBBBBBBBBUL
+
+/* XDMA BUFFER SIZE
+ * Ethernet MTU is 1500 bytes, But our board needs meta data for TX/RX
+ * So we need more space for buffer and the buffer size should be changed
+ * */
+/* FIXME: BUFFER_SIZE should be changed */
+#define XDMA_BUFFER_SIZE (1560)
 
 extern unsigned int desc_blen_max;
 extern unsigned int h2c_timeout;
@@ -77,6 +85,8 @@ struct xdma_pci_dev {
 	unsigned long magic;		/* structure ID for sanity checks */
 	struct pci_dev *pdev;	/* pci device struct from probe() */
 	struct xdma_dev *xdev;
+	struct net_device *ndev;
+        struct ptp_device_data *ptp;
 	int major;		/* major number */
 	int instance;		/* instance number */
 	int user_max;
