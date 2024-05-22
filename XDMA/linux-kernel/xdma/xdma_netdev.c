@@ -83,6 +83,35 @@ int xdma_netdev_close(struct net_device *ndev)
         return 0;
 }
 
+#if DEBUG_ONE_QUEUE_TSN_
+void dump_buffer(unsigned char* buffer, int len)
+{
+        int i = 0;
+        pr_err("[Buffer]");
+        pr_err("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+        buffer[i+0] & 0xFF, buffer[i+1] & 0xFF, buffer[i+2] & 0xFF, buffer[i+3] & 0xFF,
+        buffer[i+4] & 0xFF, buffer[i+5] & 0xFF, buffer[i+6] & 0xFF, buffer[i+7] & 0xFF,
+        buffer[i+8] & 0xFF, buffer[i+9] & 0xFF, buffer[i+10] & 0xFF, buffer[i+11] & 0xFF,
+        buffer[i+11] & 0xFF, buffer[i+13] & 0xFF, buffer[i+14] & 0xFF, buffer[i+15] & 0xFF);
+
+        i = 16;
+        pr_err("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+        buffer[i+0] & 0xFF, buffer[i+1] & 0xFF, buffer[i+2] & 0xFF, buffer[i+3] & 0xFF,
+        buffer[i+4] & 0xFF, buffer[i+5] & 0xFF, buffer[i+6] & 0xFF, buffer[i+7] & 0xFF,
+        buffer[i+8] & 0xFF, buffer[i+9] & 0xFF, buffer[i+10] & 0xFF, buffer[i+11] & 0xFF,
+        buffer[i+11] & 0xFF, buffer[i+13] & 0xFF, buffer[i+14] & 0xFF, buffer[i+15] & 0xFF);
+
+        i = 32;
+        pr_err("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+        buffer[i+0] & 0xFF, buffer[i+1] & 0xFF, buffer[i+2] & 0xFF, buffer[i+3] & 0xFF,
+        buffer[i+4] & 0xFF, buffer[i+5] & 0xFF, buffer[i+6] & 0xFF, buffer[i+7] & 0xFF,
+        buffer[i+8] & 0xFF, buffer[i+9] & 0xFF, buffer[i+10] & 0xFF, buffer[i+11] & 0xFF,
+        buffer[i+11] & 0xFF, buffer[i+13] & 0xFF, buffer[i+14] & 0xFF, buffer[i+15] & 0xFF);
+
+        pr_err("\n");
+}
+#endif
+
 netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                 struct net_device *ndev)
 {
@@ -90,11 +119,16 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         struct xdma_dev *xdev = priv->xdev;
         int padding = 0;
         u32 w;
+        u32 sys_count_low;
+        u16 frame_length;
         dma_addr_t dma_addr;
+        struct tx_metadata* tx_metadata;
 
         /* Check desc count */
         netif_stop_queue(ndev);
-        pr_err("xdma_netdev_start_xmit\n");
+#if DEBUG_ONE_QUEUE_TSN_
+        pr_err("xdma_netdev_start_xmit(skb->len : %d)\n", skb->len);
+#endif
         padding = (skb->len < ETH_ZLEN) ? (ETH_ZLEN - skb->len) : 0;
         skb->len += padding;
         if (skb_padto(skb, skb->len)) {
@@ -110,6 +144,9 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                 return NETDEV_TX_OK;
         }
 
+        /* Store packet length */
+        frame_length = skb->len;
+
         /* Add metadata to the skb */
         if (pskb_expand_head(skb, TX_METADATA_SIZE, 0, GFP_ATOMIC) != 0) {
                 pr_err("pskb_expand_head failed\n");
@@ -118,6 +155,29 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         }
         skb_push(skb, TX_METADATA_SIZE);
         memset(skb->data, 0, TX_METADATA_SIZE);
+
+#if DEBUG_ONE_QUEUE_TSN_
+        pr_err("skb->len : %d\n", skb->len);
+#endif
+        /* Fill in the metadata */
+        tx_metadata = (struct tx_metadata*)skb->data;
+        tx_metadata->frame_length = frame_length;
+        //tx_metadata->timestamp_id = 0;
+        //tx_metadata->fail_policy = 0;
+
+        /* Reads the lower 29 bits of the system count. */
+        sys_count_low = (uint32_t)(ioread32(xdev->bar[0] + 0x0384) & 0x1FFFFFFF);
+
+        /* Set the fromtick & to_tick values based on the lower 29 bits of the system count */
+        tx_metadata->from.tick = (uint32_t)((sys_count_low + _DEFAULT_FROM_MARGIN_) & 0x1FFFFFFF);
+        tx_metadata->to.tick = (uint32_t)((sys_count_low + _DEFAULT_TO_MARGIN_) & 0x1FFFFFFF);
+
+#if DEBUG_ONE_QUEUE_TSN_
+        pr_err("0x%08x  0x%08x  0x%08x  %4d  %1d",
+                sys_count_low, tx_metadata->from.tick, tx_metadata->to.tick,
+                tx_metadata->frame_length, tx_metadata->fail_policy);
+        dump_buffer((unsigned char*)tx_metadata, (int)(sizeof(struct tx_metadata) + skb->len));
+#endif
 
         dma_addr = dma_map_single(&xdev->pdev->dev, skb->data, skb->len, DMA_TO_DEVICE);
         if (unlikely(dma_mapping_error(&xdev->pdev->dev, dma_addr))) {

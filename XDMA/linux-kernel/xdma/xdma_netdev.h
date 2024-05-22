@@ -11,7 +11,7 @@
 #include "xdma_mod.h"
 
 #define RX_METADATA_SIZE 16
-#define TX_METADATA_SIZE 8
+#define TX_METADATA_SIZE 32
 
 #define DESC_REG_LO (SGDMA_OFFSET_FROM_CHANNEL + 0x80)
 #define DESC_REG_HI (SGDMA_OFFSET_FROM_CHANNEL + 0x84)
@@ -55,6 +55,27 @@ struct xdma_private {
         int irq;
         int rx_count;
 };
+
+#define DEBUG_ONE_QUEUE_TSN_ 0
+#define _DEFAULT_FROM_MARGIN_ (500)
+#define _DEFAULT_TO_MARGIN_ (19100)
+struct tick_count {
+        uint32_t tick:29;
+        uint32_t priority:3;
+} __attribute__((packed, scalar_storage_order("big-endian")));
+
+struct tx_metadata {
+        struct tick_count from;
+        struct tick_count to;
+        struct tick_count delay_from;
+        struct tick_count delay_to;
+        uint16_t frame_length;
+        uint16_t timestamp_id;
+        uint8_t fail_policy;
+        uint8_t reserved0[3];
+        uint32_t reserved1;
+        uint32_t reserved2;
+} __attribute__((packed, scalar_storage_order("big-endian")));
 
 void rx_desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len);
 
