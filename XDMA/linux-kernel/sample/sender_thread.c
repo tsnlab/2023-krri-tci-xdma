@@ -1002,8 +1002,8 @@ int test_fail_policy(char* ip_address, uint32_t from_tick, uint32_t margin) {
     tx_metadata->from.tick = (uint32_t)((now - 100) & 0x1FFFFFFF);
     tx_metadata->to.tick = (uint32_t)((now + 0) & 0x1FFFFFFF);
     tx_metadata->delay_from.tick = (uint32_t)((now + 115000) & 0x1FFFFFFF);
-    //tx_metadata->delay_to.tick = (uint32_t)((now + 139100) & 0x1FFFFFFF);
-    tx_metadata->delay_to.tick = (uint32_t)(0x1FFFFFFF);
+    tx_metadata->delay_to.tick = (uint32_t)((now + 139100) & 0x1FFFFFFF);
+    //tx_metadata->delay_to.tick = (uint32_t)(0x1FFFFFFF);
 
     transmit_tsn_packet_no_free(&packet);
     printf(" 0x%08x ", (uint32_t)(now & 0x1FFFFFFF));
@@ -1033,7 +1033,7 @@ int test_from_bigger_than_to(char* ip_address, uint32_t from_tick, uint32_t marg
     return XST_SUCCESS;
 }
 
-#define ONE_QUEUE_TSN_DEBUG 1
+#define ONE_QUEUE_TSN_DEBUG 0
 
 uint32_t from_bigger_than_to_count = 0;
 int find_tick_count_delay(char* ip_address, uint32_t from_tick, uint32_t margin) {
@@ -1128,6 +1128,33 @@ int long_test_with_found_tick_count(int count) {
     return XST_SUCCESS;
 }
 
+int long_test_with_burst(int count) {
+    struct tsn_tx_buffer packet;
+    struct tx_metadata* tx_metadata = &packet.metadata;
+
+    make_tsn_tx_buffer(&packet, 0x00);
+
+    // make tx metadata
+    tx_metadata->timestamp_id = 0;
+    tx_metadata->fail_policy = 0;
+    tx_metadata->frame_length = TOTAL_PKT_LEN;
+
+    for(int id = 0; id <count; id++) {
+        uint64_t now = get_sys_count();
+        for(int burst_count = 0; burst_count <16; burst_count++) {
+            tx_metadata->from.tick = (uint32_t)((now + burst_count * 1500 + 500) & 0x1FFFFFFF);
+            tx_metadata->to.tick = (uint32_t)((now + burst_count * 1500 + 19100) & 0x1FFFFFFF);
+
+            transmit_tsn_packet_no_free(&packet);
+
+            if(tx_metadata->from.tick > tx_metadata->to.tick) {
+                from_bigger_than_to_count++;
+            }
+        }
+    }
+    return XST_SUCCESS;
+}
+
 uint32_t tx_packets_zero_count = 0;
 uint32_t tx_packets = 0;
 uint32_t tx_input_packet_counter = 0;
@@ -1135,10 +1162,10 @@ uint32_t tx_output_packet_counter = 0;
 
 #if ONE_QUEUE_TSN_DEBUG
 //#define TEST_PACKET_COUNT (500)
-#define TEST_PACKET_COUNT (20)
+#define TEST_PACKET_COUNT (50)
 #else
-#define TEST_PACKET_COUNT (800000000)
-//#define TEST_PACKET_COUNT (1000000)
+//#define TEST_PACKET_COUNT (800000000)
+#define TEST_PACKET_COUNT (50000000)
 #endif
 int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin) {
 
@@ -1164,13 +1191,14 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
 #endif
     struct timeval start_time, end_time;
     gettimeofday(&start_time, NULL);
-//    long_test_with_found_tick_count(TEST_PACKET_COUNT);
+//    long_test_with_burst(50000000);
+//    long_test_with_found_tick_count(800000000);
     test_with_n_packets(ip_address, from_tick, margin);
 #if 0
     for(int id = 0; id < TEST_PACKET_COUNT; id++) {
 //        find_tick_count_delay(ip_address, from_tick, margin);
 //        test_normal(ip_address, from_tick, margin);
-//        test_from_bigger_than_to(ip_address, from_tick, margin);
+        test_from_bigger_than_to(ip_address, from_tick, margin);
 //        test_fail_policy(ip_address, from_tick, margin);
 //        test_with_two_packets(ip_address, from_tick, margin);
 //        test_count_is_bigger_than_to_fp_1(* ip_address, from_tick, margin);
