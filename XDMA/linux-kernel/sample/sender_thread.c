@@ -767,6 +767,8 @@ void* sender_thread(void* arg) {
 
 #ifdef ONE_QUEUE_TSN
 
+//#define DEFAULT_PKT_LEN 74
+//#define TOTAL_PKT_LEN 78
 #define DEFAULT_PKT_LEN 74
 #define TOTAL_PKT_LEN 78
 
@@ -931,8 +933,8 @@ int test_with_n_packets(char* ip_address, uint32_t from_tick, uint32_t margin) {
 
     uint64_t now = get_sys_count();
     for(id=0; id<PACKET_BURST_SIZE; id++) {
-        tx_metadata[id]->from.tick = (uint32_t)((now + 1000000 + id * 1000) & 0x1FFFFFFF);
-        tx_metadata[id]->to.tick = (uint32_t)((now + 1005000 + id * 1000) & 0x1FFFFFFF);
+        tx_metadata[id]->from.tick = (uint32_t)((now + 1000000 + id * 2000) & 0x1FFFFFFF);
+        tx_metadata[id]->to.tick = (uint32_t)((now + 1005000 + id * 2000) & 0x1FFFFFFF);
     }
 
     for(id=0; id<PACKET_BURST_SIZE; id++) {
@@ -1157,8 +1159,13 @@ int long_test_with_burst(int count) {
 
 uint32_t tx_packets_zero_count = 0;
 uint32_t tx_packets = 0;
+uint64_t tx_bytes = 0;
 uint32_t tx_input_packet_counter = 0;
 uint32_t tx_output_packet_counter = 0;
+uint32_t tx_input_packet_counter1 = 0;
+uint32_t tx_output_packet_counter1 = 0;
+uint32_t tx_input_packet_counter2 = 0;
+uint32_t tx_output_packet_counter2 = 0;
 
 #if ONE_QUEUE_TSN_DEBUG
 //#define TEST_PACKET_COUNT (500)
@@ -1167,6 +1174,55 @@ uint32_t tx_output_packet_counter = 0;
 //#define TEST_PACKET_COUNT (800000000)
 #define TEST_PACKET_COUNT (50000000)
 #endif
+
+void show_n_store_tx_register() {
+    uint32_t uint32_var;
+    uint64_t uint64_var;
+
+    uint32_var = get_register(REG_TX_PACKETS);
+    printf("tx packets: 0x%x( %d)\n", uint32_var, uint32_var);
+    uint64_var = (get_register(REG_TX_BYTES_HIGH) << 32) + get_register(REG_TX_BYTES_LOW);
+    printf("tx bytes: 0x%lx( %ld)\n", uint64_var, uint64_var);
+
+    uint32_var = get_register(REG_TX_DROP_PACKETS);
+    printf("tx drop packets: 0x%x( %d)\n", uint32_var, uint32_var);
+    uint64_var = (get_register(REG_TX_DROP_BYTES_HIGH) << 32) + get_register(REG_TX_DROP_BYTES_LOW);
+    printf("tx drop bytes: 0x%lx( %ld)\n", uint64_var, uint64_var);
+
+    uint32_var = get_register(REG_TX_INPUT_PACKET_COUNT);
+    printf("tx input packet counter: 0x%x( %d)\n", uint32_var, uint32_var);
+    tx_input_packet_counter = uint32_var;
+
+    uint32_var = get_register(REG_TX_OUTPUT_PACKET_COUNT);
+    printf("tx output packet counter: 0x%x( %d)\n", uint32_var, uint32_var);
+    tx_output_packet_counter = uint32_var;
+
+    uint32_var = get_register(REG_TX_BUFFER_FULL_DROP_PACKET_COUNT);
+    printf("tx buffer full drop packet count: 0x%x( %d)\n", uint32_var, uint32_var);
+
+    uint32_var = get_register(REG_TX_AXIS_FIFO_STATUS1);
+    printf("Tx AXIS FIFO Status1 Register: 0x%x\n", uint32_var);
+    uint32_var = get_register(REG_TX_AXIS_FIFO_STATUS);
+    printf("Tx AXIS FIFO Status Register: 0x%x\n", uint32_var);
+    uint32_var = get_register(REG_TX_AXIS_BUFFER_STATUS);
+    printf("Tx AXIS Buffer Status Register: 0x%x\n", uint32_var);
+    uint32_var = get_register(REG_TX_DEBUG);
+    printf("Tx Debug Register: 0x%x\n", uint32_var);
+
+    uint32_var = get_register(REG_TEMAC_TX_STAT);
+    printf("TEMAC tx statistics: 0x%x\n", uint32_var);
+
+    uint32_var = get_register(REG_TX_FAIL_PACKETS);
+    printf("tx_fail_packets: 0x%x( %d)\n", uint32_var, uint32_var);
+    uint64_var = (get_register(REG_TX_FAIL_BYTES_MSB) << 32) + get_register(REG_TX_FAIL_BYTES_LSB);
+    printf("tx_fail_bytes: 0x%lx( %ld)\n", uint64_var, uint64_var);
+
+    uint32_var = get_register(REG_TX_DELAY_PACKETS);
+    printf("tx_delay_packets: 0x%x( %d)\n", uint32_var, uint32_var);
+    uint64_var = (get_register(REG_TX_DELAY_BYTES_MSB) << 32) + get_register(REG_TX_DELAY_BYTES_LSB);
+    printf("tx_delay_bytes: 0x%lx( %ld)\n", uint64_var, uint64_var);
+}
+
 int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin) {
 
     memset(tx_devname, 0, MAX_DEVICE_NAME);
@@ -1178,11 +1234,18 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
         return -1;
     }
 
-    dump_registers(DUMPREG_TX, 1);
+    //dump_registers(DUMPREG_TX, 1);
+    show_n_store_tx_register();
+    tx_input_packet_counter1 = tx_input_packet_counter;
+    tx_output_packet_counter1 = tx_output_packet_counter;
+#if 0
     tx_packets += get_register(REG_TX_PACKETS);
     tx_packets = 0;
+    tx_bytes += (get_register(REG_TX_BYTES_HIGH) << 32) + get_register(REG_TX_BYTES_LOW);
+    tx_bytes = 0;
     tx_input_packet_counter += get_register(REG_TX_INPUT_PACKET_COUNT);
     tx_output_packet_counter += get_register(REG_TX_OUTPUT_PACKET_COUNT);
+#endif
 
     set_register(REG_TSN_CONTROL, 1);
 #if ONE_QUEUE_TSN_DEBUG
@@ -1192,8 +1255,8 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
     struct timeval start_time, end_time;
     gettimeofday(&start_time, NULL);
 //    long_test_with_burst(50000000);
-//    long_test_with_found_tick_count(800000000);
-    test_with_n_packets(ip_address, from_tick, margin);
+    long_test_with_found_tick_count(1000000);
+//    test_with_n_packets(ip_address, from_tick, margin);
 #if 0
     for(int id = 0; id < TEST_PACKET_COUNT; id++) {
 //        find_tick_count_delay(ip_address, from_tick, margin);
@@ -1219,7 +1282,7 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
     long microseconds = end_time.tv_usec - start_time.tv_usec;
     double elapsed_time = seconds + (microseconds / 1000000.0);
 
-    printf("\nElapsed time: %f seconds, from_bigger_than_to_count: %d, tx_packets_zero_count: %d\n", 
+    printf("\nElapsed time: %f seconds\nfrom_bigger_than_to_count: %d, tx_packets_zero_count: %d\n\n", 
              elapsed_time, from_bigger_than_to_count, tx_packets_zero_count);
 
 #if ONE_QUEUE_TSN_DEBUG
@@ -1237,8 +1300,18 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
     close(tx_fd);
     sleep(1);
 
-    dump_registers(DUMPREG_TX, 1);
-    printf("<<< %s()\n", __func__);
+    //dump_registers(DUMPREG_TX, 1);
+    show_n_store_tx_register();
+    tx_input_packet_counter2 = tx_input_packet_counter;
+    tx_output_packet_counter2 = tx_output_packet_counter;
+
+    printf("\n tx_input_packet_counter2: %12d,  tx_input_packet_counter1: %12d\n", 
+             tx_input_packet_counter2, tx_input_packet_counter1);
+    printf("tx_output_packet_counter2: %12d, tx_output_packet_counter1: %12d\n", 
+             tx_output_packet_counter2, tx_output_packet_counter1);
+    printf("     tx_input_packet_diff: %12d,     tx_output_packet_diff: %12d\n\n", 
+             (tx_input_packet_counter2-tx_input_packet_counter1), 
+             (tx_output_packet_counter2-tx_output_packet_counter1));
 
     return XST_SUCCESS;
 }

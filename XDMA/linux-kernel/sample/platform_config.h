@@ -93,6 +93,7 @@ typedef uintptr_t UINTPTR;
 #ifdef ONE_QUEUE_TSN
 #define REG_TX_AXIS_FIFO_STATUS1                    0x0480
 #define REG_TX_AXIS_FIFO_STATUS                     0x0484
+#define REG_TX_AXIS_BUFFER_STATUS                   0x0488
 #define REG_RX_DEBUG                                0x04A0
 #define REG_TX_DEBUG                                0x04B0
 #else

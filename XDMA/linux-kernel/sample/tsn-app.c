@@ -79,6 +79,7 @@ struct reginfo reg_tx[] = {
 #ifdef ONE_QUEUE_TSN
     {"Tx AXIS FIFO Status1 Register", REG_TX_AXIS_FIFO_STATUS1},
     {"Tx AXIS FIFO Status Register", REG_TX_AXIS_FIFO_STATUS},
+    {"Tx AXIS Buffer Status Register", REG_TX_AXIS_BUFFER_STATUS},
     {"Tx Debug Register", REG_TX_DEBUG},
 #else
     {"TASB FIFO status", REG_TASB_FIFO_STATUS},
