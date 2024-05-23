@@ -769,8 +769,8 @@ void* sender_thread(void* arg) {
 
 //#define DEFAULT_PKT_LEN 74
 //#define TOTAL_PKT_LEN 78
-#define DEFAULT_PKT_LEN 74
-#define TOTAL_PKT_LEN 78
+#define DEFAULT_PKT_LEN 1500
+#define TOTAL_PKT_LEN 1504
 
 void dump_buffer(unsigned char* buffer, int len) {
 
@@ -937,9 +937,25 @@ int test_with_n_packets(char* ip_address, uint32_t from_tick, uint32_t margin) {
         tx_metadata[id]->to.tick = (uint32_t)((now + 1005000 + id * 2000) & 0x1FFFFFFF);
     }
 
+    struct timeval start_time, end_time;
+    gettimeofday(&start_time, NULL);
     for(id=0; id<PACKET_BURST_SIZE; id++) {
         transmit_tsn_packet_no_free(&packet[id]);
     }
+    gettimeofday(&end_time, NULL);
+    long seconds = end_time.tv_sec - start_time.tv_sec;
+    long microseconds = end_time.tv_usec - start_time.tv_usec;
+    double elapsed_time = seconds + (microseconds / 1000000.0);
+
+    printf("\n%s - Elapsed time: %f seconds\n", __func__, elapsed_time);
+
+#if ONE_QUEUE_TSN_DEBUG
+    for(id=0; id<PACKET_BURST_SIZE; id++) {
+        printf("\npacket[%3d]\n", id);
+        dump_tsn_tx_buffer(&packet[id], (int)(sizeof(struct tx_metadata) + TOTAL_PKT_LEN));
+        dump_buffer((unsigned char*)&packet[id], (int)(sizeof(struct tx_metadata) + 78));
+    }
+#endif
     return XST_SUCCESS;
 }
 
@@ -1255,8 +1271,8 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
     struct timeval start_time, end_time;
     gettimeofday(&start_time, NULL);
 //    long_test_with_burst(50000000);
-    long_test_with_found_tick_count(1000000);
-//    test_with_n_packets(ip_address, from_tick, margin);
+//    long_test_with_found_tick_count(1000000);
+    test_with_n_packets(ip_address, from_tick, margin);
 #if 0
     for(int id = 0; id < TEST_PACKET_COUNT; id++) {
 //        find_tick_count_delay(ip_address, from_tick, margin);
