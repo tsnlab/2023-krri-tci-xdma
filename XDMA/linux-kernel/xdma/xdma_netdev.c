@@ -159,8 +159,9 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
 #if DEBUG_ONE_QUEUE_TSN_
         pr_err("skb->len : %d\n", skb->len);
 #endif
+        struct tx_buffer* tx_buffer = (struct tx_buffer*)skb->data;
         /* Fill in the metadata */
-        tx_metadata = (struct tx_metadata*)skb->data;
+        tx_metadata = (struct tx_metadata*)&tx_buffer->metadata;
         tx_metadata->frame_length = frame_length;
         //tx_metadata->timestamp_id = 0;
         //tx_metadata->fail_policy = 0;

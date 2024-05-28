@@ -36,8 +36,10 @@
 
 #ifdef __LIBXDMA_DEBUG__
 #define dbg_info(fmt, arg...) pr_info(fmt, ##arg)
+#define assert_eq(a, b) if ((a) != (b)) pr_err("assertion failed: %s != %s\n", #a, #b)
 #else
 #define dbg_info(fmt, arg...) {}
+#define assert_eq(a, b) {}
 #endif
 
 
@@ -1400,9 +1402,9 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		int skb_len;
 		unsigned long flag;
 
-		struct rx_buffer* rx_buffer = priv->rx_buffer;
+		struct rx_buffer* rx_buffer = (struct rx_buffer*)&priv->rx_buffer;
 #ifdef __LIBXDMA_DEBUG__
-		assert(rx_buffer->metadata.frame_length == result->length - RX_METADATA_SIZE);
+		assert_eq(rx_buffer->metadata.frame_length == result->length - RX_METADATA_SIZE);
 #endif
 		spin_lock_irqsave(&priv->rx_lock, flag);
 		engine_status_read(engine, 1, 0);
@@ -1422,7 +1424,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 			skb_len);
 		skb->dev = ndev;
 		skb->protocol = eth_type_trans(skb, ndev);
-		skb->tstamp = alinx_get_timestamp(rx_buffer->metadata.timestamp); // TODO: change to get_rx_timestamp
+		// TODO: skb->tstamp = alinx_get_timestamp(rx_buffer->metadata.timestamp); // TODO: change to get_rx_timestamp
 
 		/* Transfer the skb to the Linux network stack */
 		netif_rx(skb);
