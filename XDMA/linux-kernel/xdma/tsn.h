@@ -12,9 +12,14 @@ enum tsn_prio {
 	TSN_PRIO_BE = 7,
 };
 
+enum tsn_fail_policy {
+	TSN_FAIL_POLICY_DROP = 0,
+	TSN_FAIL_POLICY_RETRY = 1,
+};
+
 struct qbv_slot {
 	uint32_t duration_ns; // We don't support cycle > 1s
-	uint8_t opened_prios;
+	bool opened_prios[VLAN_PRIO_COUNT];
 };
 
 struct qbv_config {
