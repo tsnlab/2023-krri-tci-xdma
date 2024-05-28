@@ -74,9 +74,19 @@ struct tx_metadata {
         uint32_t reserved2;
 } __attribute__((packed, scalar_storage_order("big-endian")));
 
+struct tx_buffer {
+        struct tx_metadata metadata;
+        uint8_t data[0];
+} __attribute__((packed, scalar_storage_order("big-endian")));
+
 struct rx_metadata {
     uint64_t timestamp;
     uint16_t frame_length;
+} __attribute__((packed, scalar_storage_order("big-endian")));
+
+struct rx_buffer {
+    struct rx_metadata metadata;
+    uint8_t data[0];
 } __attribute__((packed, scalar_storage_order("big-endian")));
 
 #define RX_METADATA_SIZE (sizeof(struct rx_metadata))

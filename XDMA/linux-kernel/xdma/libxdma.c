@@ -34,6 +34,13 @@
 #include "xdma_netdev.h"
 
 
+#ifdef __LIBXDMA_DEBUG__
+#define dbg_info(fmt, arg...) pr_info(fmt, ##arg)
+#else
+#define dbg_info(fmt, arg...) {}
+#endif
+
+
 /* Module Parameters */
 static unsigned int poll_mode;
 module_param(poll_mode, uint, 0644);
@@ -1385,7 +1392,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 
 	mask = ch_irq & xdev->mask_irq_c2h;
 	if (mask) {
-		pr_err("xdma_isr c2h");
+		dbg_info("xdma_isr c2h");
 		struct xdma_engine *engine = &xdev->engine_c2h[0];
 		struct xdma_private *priv = netdev_priv(ndev);
 		struct xdma_result *result = priv->res;
@@ -1393,9 +1400,13 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		int skb_len;
 		unsigned long flag;
 
+		struct rx_buffer* rx_buffer = priv->rx_buffer;
+#ifdef __LIBXDMA_DEBUG__
+		assert(rx_buffer->metadata.frame_length == result->length - RX_METADATA_SIZE);
+#endif
 		spin_lock_irqsave(&priv->rx_lock, flag);
 		engine_status_read(engine, 1, 0);
-		skb_len = result->length - RX_METADATA_SIZE - CRC_LEN;
+		skb_len = rx_buffer->metadata.frame_length - CRC_SIZE;
 		if (skb_len < 0) {
 			pr_err("Invalid skb_len\n");
 			return IRQ_NONE;
@@ -1411,7 +1422,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 			skb_len);
 		skb->dev = ndev;
 		skb->protocol = eth_type_trans(skb, ndev);
-		// TODO: timestamp
+		skb->tstamp = alinx_get_timestamp(rx_buffer->metadata.timestamp); // TODO: change to get_rx_timestamp
 
 		/* Transfer the skb to the Linux network stack */
 		netif_rx(skb);
@@ -1427,7 +1438,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 
 	mask = ch_irq & xdev->mask_irq_h2c;
 	if (mask) {
-		pr_err("xdma_isr h2c");
+		dbg_info("xdma_isr h2c");
 		struct xdma_private *priv = netdev_priv(ndev);
 		struct xdma_engine *engine = &xdev->engine_h2c[0];
 
