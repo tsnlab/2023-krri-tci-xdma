@@ -10,9 +10,6 @@
 
 #include "xdma_mod.h"
 
-#define RX_METADATA_SIZE 16
-#define TX_METADATA_SIZE 32
-
 #define DESC_REG_LO (SGDMA_OFFSET_FROM_CHANNEL + 0x80)
 #define DESC_REG_HI (SGDMA_OFFSET_FROM_CHANNEL + 0x84)
 
@@ -76,6 +73,14 @@ struct tx_metadata {
         uint32_t reserved1;
         uint32_t reserved2;
 } __attribute__((packed, scalar_storage_order("big-endian")));
+
+struct rx_metadata {
+    uint64_t timestamp;
+    uint16_t frame_length;
+} __attribute__((packed, scalar_storage_order("big-endian")));
+
+#define RX_METADATA_SIZE (sizeof(struct rx_metadata))
+#define TX_METADATA_SIZE (sizeof(struct tx_metadata))
 
 void rx_desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len);
 

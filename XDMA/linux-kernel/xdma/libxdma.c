@@ -1385,6 +1385,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 
 	mask = ch_irq & xdev->mask_irq_c2h;
 	if (mask) {
+		pr_err("xdma_isr c2h");
 		struct xdma_engine *engine = &xdev->engine_c2h[0];
 		struct xdma_private *priv = netdev_priv(ndev);
 		struct xdma_result *result = priv->res;
@@ -1410,6 +1411,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 			skb_len);
 		skb->dev = ndev;
 		skb->protocol = eth_type_trans(skb, ndev);
+		// TODO: timestamp
 
 		/* Transfer the skb to the Linux network stack */
 		netif_rx(skb);
@@ -1425,6 +1427,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 
 	mask = ch_irq & xdev->mask_irq_h2c;
 	if (mask) {
+		pr_err("xdma_isr h2c");
 		struct xdma_private *priv = netdev_priv(ndev);
 		struct xdma_engine *engine = &xdev->engine_h2c[0];
 
