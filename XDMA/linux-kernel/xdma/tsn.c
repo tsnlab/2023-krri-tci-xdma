@@ -17,12 +17,13 @@ struct timestamps {
 
 static struct tsn_config tsn_config;
 
+static bool is_gptp_packet(const uint8_t* payload);
 static void bake_qbv_config(struct tsn_config* config);
 static uint64_t bytes_to_ns(uint64_t bytes);
 static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint8_t vlan_prio, uint64_t bytes);
 static bool get_timestamps(struct timestamps* timestamps, const struct tsn_config* tsn_config, timestamp_t from, uint8_t vlan_prio, uint64_t bytes, bool consider_delay);
 
-uint8_t tsn_get_prio(const uint8_t *payload) {
+uint8_t tsn_get_vlan_prio(const uint8_t* payload) {
 	uint16_t eth_type = ntohs(*(uint16_t*)(payload + 12)); // TODO: Do better
 	if (eth_type == ETH_P_8021Q) {
 		struct vlan_hdr* vlan = (struct vlan_hdr*)(payload + ETH_HLEN);
@@ -32,11 +33,16 @@ uint8_t tsn_get_prio(const uint8_t *payload) {
 	return 0;
 }
 
+static bool is_gptp_packet(const uint8_t* payload) {
+	uint16_t eth_type = ntohs(*(uint16_t*)(payload + 12)); // TODO: Do better
+	return eth_type == ETH_P_1588;
+}
+
 void tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t from, struct tx_buffer* tx_buf) {
 	struct tx_metadata* metadata = (struct tx_metadata*)&tx_buf->metadata;
 
-	uint8_t vlan_prio = tsn_get_prio(tx_buf->data);
-	bool is_gptp = false; // TODO
+	uint8_t vlan_prio = tsn_get_vlan_prio(tx_buf->data);
+	bool is_gptp = is_gptp_packet(tx_buf->data);
 	memset(metadata, 0, sizeof(struct tx_metadata));
 
 	enum tsn_prio queue_prio;

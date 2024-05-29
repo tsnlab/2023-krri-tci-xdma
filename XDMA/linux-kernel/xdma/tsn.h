@@ -75,6 +75,6 @@ struct vlan_hdr {
 	uint16_t vid:12;
 } __attribute__((packed, scalar_storage_order("big-endian")));
 
-uint8_t tsn_get_prio(const uint8_t* payload);
+uint8_t tsn_get_vlan_prio(const uint8_t* payload);
 void tsn_fill_metadata(struct struct tsn_cofnig, tx_buffer* tx_buf);
 void tsn_init_configs(struct tsn_config* config);
