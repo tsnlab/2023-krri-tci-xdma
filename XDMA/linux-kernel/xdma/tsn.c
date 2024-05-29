@@ -6,6 +6,7 @@
 #include "tsn.h"
 
 #define NS_IN_1S 1000000000
+#define max(a, b) ((a) > (b) ? (a) : (b))
 
 struct timestamps {
 	timestamp_t from;
@@ -61,6 +62,10 @@ void tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t from, struct t
 			from = tsn_config->qav[vlan_prio].available_at_ns;
 		}
 		bool consider_delay = (vlan_prio > 0 || is_gptp);
+		if (!consider_delay) {
+			// Best effort
+			from = max(from, tsn_config->total_available_at);
+		}
 		get_timestamps(&timestamps, tsn_config, from, vlan_prio, metadata->frame_length, consider_delay);
 		metadata->fail_policy = consider_delay ? TSN_FAIL_POLICY_RETRY : TSN_FAIL_POLICY_DROP;
 	}
@@ -77,7 +82,7 @@ void tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t from, struct t
 
 	// Update available_ats
 	spend_qav_credit(tsn_config, from, vlan_prio, metadata->frame_length);
-	tsn_config->vlan_available_at += duration_ns;
+	tsn_config->vlan_available_at[vlan_prio] += duration_ns;
 	tsn_config->total_available_at += duration_ns;
 }
 
@@ -198,8 +203,8 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 		return true;
 	}
 
-	struct qbv_baked_config* baked = &tsn_config->qbv_baked;
-	struct qbv_baked_prio* baked_prio = &baked->prios[vlan_prio];
+	const struct qbv_baked_config* baked = &tsn_config->qbv_baked;
+	const struct qbv_baked_prio* baked_prio = &baked->prios[vlan_prio];
 	uint64_t sending_duration = bytes_to_ns(bytes);
 
 	// TODO: Need to check if the slot is big enough to fit the frame. But, That is a user fault. Don't mind for now
@@ -230,7 +235,7 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 
 	// 1. "from"
 	if (baked_prio->slots[slot_id].opened) {
-		timestamps->from = from;
+		timestamps->from = from - remainder;
 	} else {
 		// Select next slot
 		timestamps->from = from - remainder + baked_prio->slots[slot_id].duration_ns;
@@ -238,7 +243,7 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 	}
 
 	// 2. "to"
-	timestamps->to = timestamps->from + baked_prio->slots[slot_id].duration_ns - sending_duration;
+	timestamps->to = timestamps->from + baked_prio->slots[slot_id].duration_ns;
 
 	if (consider_delay) {
 		// 3. "delay_from"
@@ -247,7 +252,14 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 		timestamps->delay_from += baked_prio->slots[slot_id].duration_ns;
 		slot_id = (slot_id + 1) % baked_prio->slot_count; // Opened slot
 		// 4. "delay_to"
-		timestamps->delay_to = timestamps->delay_from + baked_prio->slots[slot_id].duration_ns - sending_duration;
+		timestamps->delay_to = timestamps->delay_from + baked_prio->slots[slot_id].duration_ns;
+	}
+
+	// Adjust times
+	timestamps->from = max(timestamps->from, from); // If already in the slot
+	timestamps->to -= sending_duration;
+	if (consider_delay) {
+		timestamps->delay_to -= sending_duration;
 	}
 
 	return true;
