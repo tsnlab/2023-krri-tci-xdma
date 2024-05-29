@@ -82,7 +82,7 @@ void tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t from, struct t
 
 	// Update available_ats
 	spend_qav_credit(tsn_config, from, vlan_prio, metadata->frame_length);
-	tsn_config->vlan_available_at[vlan_prio] += duration_ns;
+	tsn_config->queue_available_at[queue_prio] += duration_ns;
 	tsn_config->total_available_at += duration_ns;
 }
 

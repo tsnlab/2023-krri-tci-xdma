@@ -3,7 +3,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "alinx_ptp.h"
+
 #define VLAN_PRIO_COUNT 8
+#define TSN_PRIO_COUNT 8
 #define MAX_QBV_SLOTS 20
 
 enum tsn_prio {
@@ -61,7 +64,7 @@ struct tsn_config {
 	struct qbv_config qbv;
 	struct qbv_baked_config qbv_baked;
 	struct qav_state qav[VLAN_PRIO_COUNT];
-	timestamp_t vlan_available_at[VLAN_PRIO_COUNT];
+	timestamp_t queue_available_at[TSN_PRIO_COUNT];
 	timestamp_t total_available_at;
 };
 
