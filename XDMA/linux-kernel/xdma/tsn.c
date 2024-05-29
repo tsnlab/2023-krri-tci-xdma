@@ -15,9 +15,11 @@ struct timestamps {
 };
 
 static struct tsn_config tsn_config;
+
+static void bake_qbv_config(struct tsn_config* config);
 static uint64_t bytes_to_ns(uint64_t bytes);
 static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint8_t vlan_prio, uint64_t bytes);
-static void get_timestamps(struct timestamps* timestamps, const struct tsn_config* tsn_config, timestamp_t from, uint8_t vlan_prio, uint64_t bytes, bool consider_delay);
+static bool get_timestamps(struct timestamps* timestamps, const struct tsn_config* tsn_config, timestamp_t from, uint8_t vlan_prio, uint64_t bytes, bool consider_delay);
 
 uint8_t tsn_get_prio(const uint8_t *payload) {
 	uint16_t eth_type = ntohs(*(uint16_t*)(payload + 12)); // TODO: Do better
@@ -82,12 +84,40 @@ void tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t from, struct t
 void tsn_init_configs(struct tsn_config* config) {
 	memset(config, 0, sizeof(struct tsn_config));
 
-	// Calculate Qbv cycle
-	// TODO: Extract this to a function and call it when Qbv config is updated by user
-	int i;
-	uint64_t cycle = 0;
-	for (i = 0; i < config->qbv.slot_count; i += 1) {
-		cycle += config->qbv.slots[i].duration_ns;
+	bake_qbv_config(config);
+}
+
+static void bake_qbv_config(struct tsn_config* config) {
+	if (config->qbv.enabled == false) {
+		return;
+	}
+
+	int slot_id, vlan_prio; // Iterators
+	struct qbv_baked_config* baked = &config->qbv_baked;
+
+	baked->cycle_ns = 0;
+
+	// First slot
+	for (vlan_prio = 0; vlan_prio < VLAN_PRIO_COUNT; vlan_prio += 1) {
+		baked->prios[vlan_prio].slot_count = 1;
+		baked->prios[vlan_prio].slots[0].opened = config->qbv.slots[0].opened_prios[vlan_prio];
+	}
+
+	for (slot_id = 0; slot_id < config->qbv.slot_count; slot_id += 1) {
+		uint64_t slot_duration = config->qbv.slots[slot_id].duration_ns;
+		baked->cycle_ns += slot_duration;
+		for (vlan_prio = 0; vlan_prio < VLAN_PRIO_COUNT; vlan_prio += 1) {
+			struct qbv_baked_prio* prio = &baked->prios[vlan_prio];
+			if (prio->slots[prio->slot_count - 1].opened == config->qbv.slots[slot_id].opened_prios[vlan_prio]) {
+				// Same as the last slot. Just increase the duration
+				prio->slots[prio->slot_count - 1].duration_ns += slot_duration;
+			} else {
+				// Different from the last slot. Add a new slot
+				prio->slots[prio->slot_count].opened = config->qbv.slots[slot_id].opened_prios[vlan_prio];
+				prio->slots[prio->slot_count].duration_ns = slot_duration;
+				prio->slot_count += 1;
+			}
+		}
 	}
 }
 
@@ -136,8 +166,15 @@ static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint
 
 /**
  * Get timestamps for a frame based on Qbv configuration
+ * @param timestamps: Output timestamps
+ * @param tsn_config: TSN configuration
+ * @param from: The time when the frame is ready to be sent
+ * @param vlan_prio: VLAN priority of the frame
+ * @param bytes: Size of the frame
+ * @param consider_delay: If true, calculate delay_from and delay_to
+ * @return: true if the frame reserves timestamps, false is for drop
  */
-static void get_timestamps(struct timestamps* timestamps, const struct tsn_config* tsn_config, timestamp_t from, uint8_t vlan_prio, uint64_t bytes, bool consider_delay) {
+static bool get_timestamps(struct timestamps* timestamps, const struct tsn_config* tsn_config, timestamp_t from, uint8_t vlan_prio, uint64_t bytes, bool consider_delay) {
 	memset(timestamps, 0, sizeof(struct timestamps));
 	struct qbv_config* qbv = &tsn_config->qbv;
 
@@ -148,66 +185,60 @@ static void get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 		// delay_* is pointless. Just set it to be right next to the frame
 		timestamps->delay_from = timestamps->from;
 		timestamps->delay_to = timestamps->delay_from - 1;
-		return;
+		return true;
 	}
 
-	uint64_t duration_ns = bytes_to_ns(bytes);
-	// TODO: Get the current Qbv slot
+	struct qbv_baked_config* baked = &tsn_config->qbv_baked;
+	struct qbv_baked_prio* baked_prio = &baked->prios[vlan_prio];
+	uint64_t sending_duration = bytes_to_ns(bytes);
 
-	// TODO: Check if vlan_prio is always open or always closed
-	// TODO: Need to check if the slot is big enough to fit the frame. But, That is a user fault. Don't mind.
+	// TODO: Need to check if the slot is big enough to fit the frame. But, That is a user fault. Don't mind for now
 
-	uint64_t remainder = (from + qbv->start) % qbv->_cycle_ns;
+	uint64_t remainder = (from - qbv->start) % baked->cycle_ns;
 	int slot_id = 0;
-	while (remainder > qbv->slots[slot_id].duration_ns) {
-		remainder -= qbv->slots[slot_id].duration_ns;
+	int slot_count = baked_prio->slot_count;
+
+	// Check if vlan_prio is always open or always closed
+	if (slot_count == 1) {
+		if (baked_prio->slots[0].opened == false) {
+			// The only slot is closed. Drop the frame
+			return false;
+		}
+		timestamps->from = from;
+		timestamps->to = from + baked_prio->slots[0].duration_ns - sending_duration;
+		if (consider_delay) {
+			timestamps->delay_from = timestamps->from + baked_prio->slots[0].duration_ns;
+			timestamps->delay_to = timestamps->delay_from + baked_prio->slots[0].duration_ns - sending_duration;
+		}
+		return true;
+	}
+
+	while (remainder > baked_prio->slots[slot_id].duration_ns) {
+		remainder -= baked_prio->slots[slot_id].duration_ns;
 		slot_id += 1;
 	}
 
-	// 1. Find from
-	if (qbv->slots[slot_id].opened_prios[vlan_prio] == true) {
-		// The slot is opened for this priority
+	// 1. "from"
+	if (baked_prio->slots[slot_id].opened) {
 		timestamps->from = from;
-		timestamps->to = from - remainder + qbv->slots[slot_id].duration_ns;
 	} else {
-		// The slot is not opened for this priority. Find the next opened slot
-		timestamps->from = from - remainder;
-		while (qbv->slots[slot_id].opened_prios[vlan_prio] == false) {
-			timestamps->from += qbv->slots[slot_id].duration_ns;
-			timestamps->to = from + qbv->slots[slot_id].duration_ns;
-			slot_id = (slot_id + 1) % qbv->slot_count;
-		}
+		// Select next slot
+		timestamps->from = from - remainder + baked_prio->slots[slot_id].duration_ns;
+		slot_id = (slot_id + 1) % baked_prio->slot_count; // Opened slot
 	}
 
-	// 2. Find to
-	while (qbv->slots[(slot_id + 1) % qbv->slot_count].opened_prios[vlan_prio] == true) {
-		slot_id = (slot_id + 1) % qbv->slot_count;
-		timestamps->to += qbv->slots[slot_id].duration_ns;
-	}
+	// 2. "to"
+	timestamps->to = timestamps->from + baked_prio->slots[slot_id].duration_ns - sending_duration;
 
 	if (consider_delay) {
-		timestamps->delay_from = timestamps->to;
-		slot_id = (slot_id + 1) % qbv->slot_count;
-		// 3. Find delay_from
-		while (qbv->slots[slot_id].opened_prios[vlan_prio] == false) {
-			timestamps->delay_from += qbv->slots[slot_id].duration_ns;
-			timestamps->to = from + qbv->slots[slot_id].duration_ns;
-			slot_id = (slot_id + 1) % qbv->slot_count;
-		}
-
-		// 3. Find delay_to
-		while (qbv->slots[(slot_id + 1) % qbv->slot_count].opened_prios[vlan_prio] == true) {
-			slot_id = (slot_id + 1) % qbv->slot_count;
-			timestamps->delay_to += qbv->slots[slot_id].duration_ns;
-		}
-	} else {
-		timestamps->delay_from = 0;
-		timestamps->delay_to = 0;
+		// 3. "delay_from"
+		timestamps->delay_from = timestamps->from + baked_prio->slots[slot_id].duration_ns;
+		slot_id = (slot_id + 1) % baked_prio->slot_count; // Closed slot
+		timestamps->delay_from += baked_prio->slots[slot_id].duration_ns;
+		slot_id = (slot_id + 1) % baked_prio->slot_count; // Opened slot
+		// 4. "delay_to"
+		timestamps->delay_to = timestamps->delay_from + baked_prio->slots[slot_id].duration_ns - sending_duration;
 	}
 
-	// Adjust by frame size
-	timestamps->to -= duration_ns;
-	if (consider_delay) {
-		timestamps->delay_to -= duration_ns;
-	}
+	return true;
 }

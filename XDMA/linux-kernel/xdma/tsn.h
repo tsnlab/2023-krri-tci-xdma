@@ -28,9 +28,21 @@ struct qbv_config {
 	struct qbv_slot slots[MAX_QBV_SLOTS];
 
 	uint32_t slot_count;
+};
 
-	// Precalculated values
-	uint64_t _cycle_ns;
+struct qbv_baked_prio_slot {
+	uint64_t duration_ns;
+	bool opened;
+};
+
+struct qbv_baked_prio {
+	struct qbv_baked_prio_slot slots[MAX_QBV_SLOTS];
+	size_t slot_count;
+};
+
+struct qbv_baked_config {
+	uint64_t cycle_ns;
+	struct qbv_baked_prio prios[VLAN_PRIO_COUNT];
 };
 
 struct qav_state {
@@ -47,6 +59,7 @@ struct qav_state {
 
 struct tsn_config {
 	struct qbv_config qbv;
+	struct qbv_baked_config qbv_baked;
 	struct qav_state qav[VLAN_PRIO_COUNT];
 	timestamp_t vlan_available_at[VLAN_PRIO_COUNT];
 	timestamp_t total_available_at;
