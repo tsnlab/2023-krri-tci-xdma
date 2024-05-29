@@ -24,7 +24,8 @@ static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint
 static bool get_timestamps(struct timestamps* timestamps, const struct tsn_config* tsn_config, timestamp_t from, uint8_t vlan_prio, uint64_t bytes, bool consider_delay);
 
 uint8_t tsn_get_vlan_prio(const uint8_t* payload) {
-	uint16_t eth_type = ntohs(*(uint16_t*)(payload + 12)); // TODO: Do better
+	struct ethhdr* eth = (struct ethhdr*)payload;
+	uint16_t eth_type = eth->h_proto;
 	if (eth_type == ETH_P_8021Q) {
 		struct vlan_hdr* vlan = (struct vlan_hdr*)(payload + ETH_HLEN);
 		return vlan->pcp;
@@ -34,7 +35,13 @@ uint8_t tsn_get_vlan_prio(const uint8_t* payload) {
 }
 
 static bool is_gptp_packet(const uint8_t* payload) {
-	uint16_t eth_type = ntohs(*(uint16_t*)(payload + 12)); // TODO: Do better
+	struct ethhdr* eth = (struct ethhdr*)payload;
+	uint16_t eth_type = eth->h_proto;
+	if (eth_type == ETH_P_8021Q) {
+		struct vlan_hdr* vlan = (struct vlan_hdr*)(eth + 1);
+		eth_type = vlan->pid;
+	}
+
 	return eth_type == ETH_P_1588;
 }
 
