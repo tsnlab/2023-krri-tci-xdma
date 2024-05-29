@@ -89,6 +89,27 @@ void tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t from, struct t
 void tsn_init_configs(struct tsn_config* config) {
 	memset(config, 0, sizeof(struct tsn_config));
 
+	// Example Qbv configuration
+	if (false) {
+		config->qbv.enabled = true;
+		config->qbv.start = 0;
+		config->qbv.slot_count = 2;
+		config->qbv.slots[0].duration_ns = 500000000; // 500ms
+		config->qbv.slots[0].opened_prios[0] = true;
+		config->qbv.slots[1].duration_ns = 500000000; // 500ms
+		config->qbv.slots[1].opened_prios[0] = false;
+	}
+
+	// Example Qav configuration
+	if (false) {
+		// 100Mbps on 1Gbps link
+		config->qav[0].enabled = true;
+		config->qav[0].hi_credit = +1000000;
+		config->qav[0].lo_credit = -1000000;
+		config->qav[0].idle_slope = 10;
+		config->qav[0].send_slope = -90;
+	}
+
 	bake_qbv_config(config);
 }
 
