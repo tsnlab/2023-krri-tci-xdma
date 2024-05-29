@@ -119,6 +119,16 @@ static void bake_qbv_config(struct tsn_config* config) {
 			}
 		}
 	}
+
+	// Adjust slot counts to be even number. Because we need to have open-close pairs
+	for (vlan_prio = 0; vlan_prio < VLAN_PRIO_COUNT; vlan_prio += 1) {
+		struct qbv_baked_prio* prio = &baked->prios[vlan_prio];
+		if (prio->slot_count % 2 == 1) {
+			prio->slots[prio->slot_count].opened = !prio->slots[prio->slot_count - 1].opened;
+			prio->slots[prio->slot_count].duration_ns = 0;
+			prio->slot_count += 1;
+		}
+	}
 }
 
 static uint64_t bytes_to_ns(uint64_t bytes) {
