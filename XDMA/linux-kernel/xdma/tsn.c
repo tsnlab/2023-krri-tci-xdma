@@ -134,13 +134,13 @@ static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint
 		return;
 	}
 
-	if (at < qav->last_update || at < qav->available_at_ns) {
+	if (at < qav->last_update || at < qav->available_at) {
 		// Invalid
 		pr_err("Invalid timestamp Qav spending");
 		return;
 	}
 
-	uint64_t elapsed_from_last = at - qav->last_update;
+	uint64_t elapsed_from_last_update = at - qav->last_update;
 	double earned_credit = (double)elapsed_from_last_update * qav->idle_slope;
 	qav->credit += earned_credit;
 	if (qav->credit > qav->hi_credit) {
@@ -156,7 +156,7 @@ static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint
 
 	// Calulate next available time
 	timestamp_t send_end = at + sending_duration;
-	qav->updated_at = send_end;
+	qav->last_update = send_end;
 	if (qav->credit < 0) {
 		qav->available_at = send_end + -(qav->credit / qav->idle_slope);
 	} else {
