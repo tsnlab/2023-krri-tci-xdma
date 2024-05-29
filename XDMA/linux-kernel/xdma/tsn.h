@@ -1,8 +1,5 @@
 #pragma once
 
-#include <stdbool.h>
-#include <stdint.h>
-
 #include "alinx_ptp.h"
 
 #define VLAN_PRIO_COUNT 8
@@ -54,7 +51,7 @@ struct qav_state {
 	int32_t send_slope; // credits/ns
 	int32_t hi_credit;
 	int32_t lo_credit;
-	
+
 	int32_t credit;
 	timestamp_t last_update;
 	timestamp_t available_at;
@@ -76,5 +73,5 @@ struct vlan_hdr {
 } __attribute__((packed, scalar_storage_order("big-endian")));
 
 uint8_t tsn_get_vlan_prio(const uint8_t* payload);
-void tsn_fill_metadata(struct struct tsn_cofnig, tx_buffer* tx_buf);
+void tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t from, struct tx_buffer* tx_buf);
 void tsn_init_configs(struct tsn_config* config);

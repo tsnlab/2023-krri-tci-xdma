@@ -1408,7 +1408,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 #endif
 		spin_lock_irqsave(&priv->rx_lock, flag);
 		engine_status_read(engine, 1, 0);
-		skb_len = rx_buffer->metadata.frame_length - CRC_SIZE;
+		skb_len = rx_buffer->metadata.frame_length - CRC_LEN;
 		if (skb_len < 0) {
 			pr_err("Invalid skb_len\n");
 			return IRQ_NONE;
