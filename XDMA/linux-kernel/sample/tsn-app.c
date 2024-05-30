@@ -77,8 +77,8 @@ struct reginfo reg_tx[] = {
     {"tx output packet counter", REG_TX_OUTPUT_PACKET_COUNT},
     {"tx buffer full drop packet count", REG_TX_BUFFER_FULL_DROP_PACKET_COUNT},
 #ifdef ONE_QUEUE_TSN
-    {"Tx AXIS FIFO Status1 Register", REG_TX_AXIS_FIFO_STATUS1},
-    {"Tx AXIS FIFO Status Register", REG_TX_AXIS_FIFO_STATUS},
+    {"Tx PCIe AXIS FIFO Status1 Register", REG_TX_AXIS_FIFO_STATUS1},
+    {"Tx TMAC AXIS FIFO Status Register", REG_TX_AXIS_FIFO_STATUS},
     {"Tx AXIS Buffer Status Register", REG_TX_AXIS_BUFFER_STATUS},
     {"Tx Debug Register", REG_TX_DEBUG},
     {"normal timeout count Register", REG_NORMAL_TIMEOUT_COUNT},

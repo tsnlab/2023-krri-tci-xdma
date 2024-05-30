@@ -862,9 +862,9 @@ void show_n_store_tx_register() {
     printf("tx buffer full drop packet count: 0x%x( %d)\n", uint32_var, uint32_var);
 
     uint32_var = get_register(REG_TX_AXIS_FIFO_STATUS1);
-    printf("Tx AXIS FIFO Status1 Register: 0x%x\n", uint32_var);
+    printf("Tx PCIe AXIS FIFO Status1 Register: 0x%x\n", uint32_var);
     uint32_var = get_register(REG_TX_AXIS_FIFO_STATUS);
-    printf("Tx AXIS FIFO Status Register: 0x%x\n", uint32_var);
+    printf("Tx TMAC AXIS FIFO Status Register: 0x%x\n", uint32_var);
     uint32_var = get_register(REG_TX_AXIS_BUFFER_STATUS);
     printf("Tx AXIS Buffer Status Register: 0x%x\n", uint32_var);
     uint32_var = get_register(REG_TX_DEBUG);
