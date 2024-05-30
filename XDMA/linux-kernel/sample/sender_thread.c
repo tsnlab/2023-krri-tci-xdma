@@ -894,6 +894,16 @@ void show_n_store_tx_register() {
     uint32_var = get_register(REG_TO_OVERFLOW_TIMEOUT_COUNT);
     printf("to_overflow_timeout_count: 0x%x( %d)\n", uint32_var, uint32_var);
     to_overflow_timeout_count = uint32_var;
+
+    uint32_var = get_register(REG_TIMEOUT_DROP_FROM);
+    uint32_var = (uint32_var >> 3) & 0x1FFFFFFF;
+    printf("timeout_drop_from tick: 0x%x( %d)\n", uint32_var, uint32_var);
+    uint32_var = get_register(REG_TIMEOUT_DROP_TO);
+    uint32_var = (uint32_var >> 3) & 0x1FFFFFFF;
+    printf("timeout_drop_to tick: 0x%x( %d)\n", uint32_var, uint32_var);
+    uint32_var = get_register(REG_TIMEOUT_DROP_SYS);
+    uint32_var = uint32_var & 0x1FFFFFFF;
+    printf("timeout_drop_sys tick: 0x%x( %d)\n", uint32_var, uint32_var);
 }
 
 void dump_buffer(unsigned char* buffer, int len) {
@@ -1357,7 +1367,7 @@ int long_test_with_burst(int count, int burst_count) {
         uint64_t now = get_sys_count();
         for(int burst_idx = 0; burst_idx <burst_count; burst_idx++) {
             tx_metadata->from.tick = (uint32_t)((now + burst_idx * (TOTAL_PKT_LEN + 100) + 0) & 0x1FFFFFFF);
-            tx_metadata->to.tick = (uint32_t)((now + burst_idx * (TOTAL_PKT_LEN + 100) + 29100) & 0x1FFFFFFF);
+            tx_metadata->to.tick = (uint32_t)((now + burst_idx * (TOTAL_PKT_LEN + 100) + 49100) & 0x1FFFFFFF);
 
             transmit_tsn_packet_no_free(&packet);
 
@@ -1394,9 +1404,9 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
     gettimeofday(&start_time, NULL);
 
     /* Uncomment the test case you want to test.i */
-//    long_test_with_burst(50000000, 16);
-    long_test_with_burst(800000, 1);
-//    test_with_n_packets(ip_address, from_tick, margin);
+//    long_test_with_burst(50000, 16);
+//    long_test_with_burst(800000, 1);
+    test_with_n_packets(ip_address, from_tick, margin);
 //    test_two_packets_before_n_after_carry_occurrence(ip_address, from_tick, margin);
 //    test_with_variable_length_packets_buffer(3000);
 //    find_tick_count_of_spare_space_between_packets(10000);

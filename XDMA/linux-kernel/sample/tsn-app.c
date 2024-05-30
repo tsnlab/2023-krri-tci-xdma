@@ -84,6 +84,9 @@ struct reginfo reg_tx[] = {
     {"normal timeout count Register", REG_NORMAL_TIMEOUT_COUNT},
     {"to overflow popped count Register", REG_TO_OVERFLOW_POPPED_COUNT},
     {"to overflow timeout count Register", REG_TO_OVERFLOW_TIMEOUT_COUNT},
+    {"timeout_drop_from tick Register", REG_TIMEOUT_DROP_FROM},
+    {"timeout_drop_to tick Register", REG_TIMEOUT_DROP_TO},
+    {"timeout_drop_sys tick Register", REG_TIMEOUT_DROP_SYS},
 #else
     {"TASB FIFO status", REG_TASB_FIFO_STATUS},
     {"TPPB FIFO status", REG_TPPB_FIFO_STATUS},

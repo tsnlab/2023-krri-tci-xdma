@@ -90,6 +90,9 @@ typedef uintptr_t UINTPTR;
 #define REG_NORMAL_TIMEOUT_COUNT                    0x041c
 #define REG_TO_OVERFLOW_POPPED_COUNT                0x0420
 #define REG_TO_OVERFLOW_TIMEOUT_COUNT               0x0424
+#define REG_TIMEOUT_DROP_FROM                       0x0428
+#define REG_TIMEOUT_DROP_TO                         0x042c
+#define REG_TIMEOUT_DROP_SYS                        0x0434
 #endif
 
 
