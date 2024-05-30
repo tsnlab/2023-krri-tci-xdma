@@ -352,7 +352,9 @@ static int process_send_packet(struct tsn_rx_buffer* rx) {
     tx_metadata->reserved2 = 0;
 
     uint64_t now = get_sys_count();
-    tsn_fill_metadata(&tsn_config, now * 8, tx);
+    if (!tsn_fill_metadata(&tsn_config, now * 8, tx)) {
+        return XST_FAILURE;
+    }
 
 #else
     uint8_t *buffer =(uint8_t *)rx;

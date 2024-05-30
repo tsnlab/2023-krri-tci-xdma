@@ -11,6 +11,11 @@
 #define NS_IN_1S 1000000000
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
+#define HW_QUEUE_SIZE (128)
+#define TSN_QUEUE_SIZE_NS (1000000000) // 1s
+#define BE_QUEUE_SIZE_NS (1500 * HW_QUEUE_SIZE * 0.8)  // 80% of the queue size to be safe
+// #define TICK_DONTCARE ((1 << 29) - 1)
+
 #define _DEFAULT_FROM_MARGIN_ 500
 #define _DEFAULT_TO_MARGIN_ 19100
 
@@ -48,12 +53,11 @@ static bool is_gptp_packet(const uint8_t* payload) {
 	return eth_type == ETH_P_1588;
 }
 
-void tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t from, struct tsn_tx_buffer* tx_buf) {
+bool tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t now, struct tsn_tx_buffer* tx_buf) {
 	struct tx_metadata* metadata = (struct tx_metadata*)&(tx_buf->metadata);
 
 	uint8_t vlan_prio = tsn_get_prio(tx_buf->data);
 	bool is_gptp = is_gptp_packet(tx_buf->data);
-	memset(metadata, 0, sizeof(struct tx_metadata));
 
 	enum tsn_prio queue_prio;
 	if (is_gptp) {
@@ -63,31 +67,55 @@ void tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t from, struct t
 	} else {
 		queue_prio = TSN_PRIO_BE;
 	}
+	bool consider_delay = (queue_prio != TSN_PRIO_BE);
 
 	struct timestamps timestamps;
+	timestamp_t from = now;
 
 	uint64_t duration_ns = bytes_to_ns(metadata->frame_length);
 
 	if (tsn_config->qbv.enabled == false && tsn_config->qav[vlan_prio].enabled == false) {
 		// Don't care. Just fill in the metadata
 		timestamps.from = tsn_config->total_available_at;
+		// timestamps.to = TICK_DONTCARE;
 		timestamps.to = from + _DEFAULT_TO_MARGIN_;
 		metadata->fail_policy = TSN_FAIL_POLICY_DROP;
 	} else {
 		if (tsn_config->qav[vlan_prio].enabled == true && tsn_config->qav[vlan_prio].available_at > from) {
-			// printf("qav av %lu fr %lu\n", tsn_config->qav[vlan_prio].available_at, from);
 			from = tsn_config->qav[vlan_prio].available_at;
 		}
-		bool consider_delay = (vlan_prio > 0 || is_gptp);
-		if (!consider_delay) {
+		if (consider_delay) {
+			if (from > now + TSN_QUEUE_SIZE_NS) {
+				return false;
+			}
+		} else {
 			// Best effort
 			from = max(from, tsn_config->total_available_at);
+			if (from > now + BE_QUEUE_SIZE_NS) {
+				// Queue is almost full. Drop the frame
+				return false;
+			}
 		}
 
 		get_timestamps(&timestamps, tsn_config, from, vlan_prio, metadata->frame_length, consider_delay);
 		metadata->fail_policy = consider_delay ? TSN_FAIL_POLICY_RETRY : TSN_FAIL_POLICY_DROP;
 	}
 
+	// Check if the calculated from is still valid
+	// TODO?: Check if TICK_DONTCARE
+	if (consider_delay) {
+		// Check if queue is available
+		if (from > now + TSN_QUEUE_SIZE_NS) {
+			return false;
+		}
+	} else {
+		// Best effort
+		from = max(from, tsn_config->total_available_at);
+		if (from > now + BE_QUEUE_SIZE_NS) {
+			// Queue is almost full. Drop the frame
+			return false;
+		}
+	}
 
 	// TODO: Convert ns to sysclock
 	metadata->from.tick = timestamp_to_sysclock(timestamps.from);
@@ -103,6 +131,8 @@ void tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t from, struct t
 	spend_qav_credit(tsn_config, from, vlan_prio, metadata->frame_length);
 	tsn_config->queue_available_at[queue_prio] += duration_ns;
 	tsn_config->total_available_at += duration_ns;
+
+	return true;
 }
 
 void tsn_init_configs2(struct tsn_config* config) {
@@ -120,13 +150,13 @@ void tsn_init_configs2(struct tsn_config* config) {
 	}
 
 	// Example Qav configuration
-	if (false) {
+	if (true) {
 		// 100Mbps on 1Gbps link
 		config->qav[0].enabled = true;
 		config->qav[0].hi_credit = +1000000;
 		config->qav[0].lo_credit = -1000000;
-		config->qav[0].idle_slope = 5;
-		config->qav[0].send_slope = -95;
+		config->qav[0].idle_slope = 50;
+		config->qav[0].send_slope = -50;
 	}
 
 	bake_qbv_config(config);
@@ -178,8 +208,8 @@ static void bake_qbv_config(struct tsn_config* config) {
 
 static uint64_t bytes_to_ns(uint64_t bytes) {
 	// TODO: Get link speed
-	// uint64_t link_speed = 1000000000; // Assume 1Gbps
-	uint64_t link_speed = 20000000; // Assume 1Gbps
+	uint64_t link_speed = 1000000000; // Assume 1Gbps
+	// uint64_t link_speed = 20000000; // Assume 1Gbps
 	return bytes * 8 * NS_IN_1S / link_speed;
 }
 
@@ -198,21 +228,21 @@ static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint
 
 	uint64_t elapsed_from_last_update = at - qav->last_update;
 	double earned_credit = (double)elapsed_from_last_update * qav->idle_slope;
-	// printf("%d %lu, %lf\n", qav->credit, elapsed_from_last_update, earned_credit);
 	qav->credit += earned_credit;
 	if (qav->credit > qav->hi_credit) {
 		qav->credit = qav->hi_credit;
 	}
-	// printf("%d\n", qav->credit);
 
 	uint64_t sending_duration = bytes_to_ns(bytes);
 	double spending_credit = (double)sending_duration * qav->send_slope;
-	// printf("%d %lu %lu %d -> %lf\n", qav->credit, bytes, sending_duration, qav->send_slope, spending_credit);
 	qav->credit += spending_credit;
 	if (qav->credit < qav->lo_credit) {
 		qav->credit = qav->lo_credit;
 	}
-	// printf("%d\n", qav->credit);
+
+	printf("at: %lu, last_update: %lu, elapsed: %lu\n", at, qav->last_update, elapsed_from_last_update);
+	printf("available_at: %lu, bytes: %lu, earned_credit: %lf, spending_credit: %lf\n", qav->available_at, bytes, earned_credit, spending_credit);
+	printf("=================================================\n");
 
 	// Calulate next available time
 	timestamp_t send_end = at + sending_duration;
