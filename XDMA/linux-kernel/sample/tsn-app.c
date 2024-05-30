@@ -81,6 +81,9 @@ struct reginfo reg_tx[] = {
     {"Tx AXIS FIFO Status Register", REG_TX_AXIS_FIFO_STATUS},
     {"Tx AXIS Buffer Status Register", REG_TX_AXIS_BUFFER_STATUS},
     {"Tx Debug Register", REG_TX_DEBUG},
+    {"normal timeout count Register", REG_NORMAL_TIMEOUT_COUNT},
+    {"to overflow popped count Register", REG_TO_OVERFLOW_POPPED_COUNT},
+    {"to overflow timeout count Register", REG_TO_OVERFLOW_TIMEOUT_COUNT},
 #else
     {"TASB FIFO status", REG_TASB_FIFO_STATUS},
     {"TPPB FIFO status", REG_TPPB_FIFO_STATUS},
@@ -88,8 +91,8 @@ struct reginfo reg_tx[] = {
 #endif
     {"TEMAC tx statistics", REG_TEMAC_TX_STAT},
 #ifdef ONE_QUEUE_TSN
-    {"tx_fail_packets", REG_TX_FAIL_PACKETS},
-    {"@tx_fail_bytes", REG_TX_FAIL_BYTES_MSB},
+    {"tx_not_send_packets", REG_TX_FAIL_PACKETS},
+    {"@tx_not_send_bytes", REG_TX_FAIL_BYTES_MSB},
     {"tx_delay_packets", REG_TX_DELAY_PACKETS},
     {"@tx_delay_bytes", REG_TX_DELAY_BYTES_MSB},
 #endif

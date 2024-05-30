@@ -86,6 +86,12 @@ typedef uintptr_t UINTPTR;
 #define REG_TX_INPUT_PACKET_COUNT                   0x0410
 #define REG_TX_OUTPUT_PACKET_COUNT                  0x0414
 #define REG_TX_BUFFER_FULL_DROP_PACKET_COUNT        0x0418
+#ifdef ONE_QUEUE_TSN
+#define REG_NORMAL_TIMEOUT_COUNT                    0x041c
+#define REG_TO_OVERFLOW_POPPED_COUNT                0x0420
+#define REG_TO_OVERFLOW_TIMEOUT_COUNT               0x0424
+#endif
+
 
 #define REG_RPPB_FIFO_STATUS                        0x0470
 #define REG_RASB_FIFO_STATUS                        0x0474
