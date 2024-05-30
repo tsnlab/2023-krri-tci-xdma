@@ -552,7 +552,7 @@ struct reginfo reg_h2c_sgdma[] = {
 #define C2H_SGDMA_DESCRIPTOR_HIGH_ADDRESS_0X84 (0x5000 + 0x84)
 #define C2H_SGDMA_DESCRIPTOR_ADJACENT_0X88     (0x5000 + 0x88)
 #define C2H_SGDMA_DESCRIPTOR_CREDITS_0X8C      (0x5000 + 0x8C)
-  
+
 struct reginfo reg_c2h_sgdma[] = {
     {"C2H SGDMA Identifier (0x00)",              C2H_SGDMA_IDENTIFIER_0X00},
     {"C2H SGDMA Descriptor Low Address (0x80)",  C2H_SGDMA_DESCRIPTOR_LOW_ADDRESS_0X80},
@@ -884,7 +884,7 @@ int fn_set_registerArgument(int argc, const char *argv[]) {
     return ERR_INVALID_PARAMETER;
 }
 
-int process_main_showCmd(int argc, const char *argv[], 
+int process_main_showCmd(int argc, const char *argv[],
                              menu_command_t *menu_tbl) {
 
     if(argc <= 1) {
@@ -902,7 +902,7 @@ int process_main_showCmd(int argc, const char *argv[],
     return ERR_INVALID_PARAMETER;
 }
 
-int process_main_setCmd(int argc, const char *argv[], 
+int process_main_setCmd(int argc, const char *argv[],
                              menu_command_t *menu_tbl) {
 
     if(argc <= 3) {

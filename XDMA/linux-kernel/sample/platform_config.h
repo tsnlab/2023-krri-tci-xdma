@@ -33,7 +33,7 @@ typedef uintptr_t UINTPTR;
  *                  Add 1 second interval interrupt handler
  *     0x2305170B : Added an example function(int32_t transmit_arp_paket()) to send
  *                  a packet to the src/tsn/packet_handler.c file
- *     0x2305260C : Added P2P protocol function 
+ *     0x2305260C : Added P2P protocol function
  *     0x2309180D : PCIe version
  */
 
@@ -132,6 +132,7 @@ typedef uintptr_t UINTPTR;
 
 struct rx_metadata {
     uint64_t timestamp;
+    /*
 #ifndef ONE_QUEUE_TSN
     union {
         uint16_t vlan_tag;
@@ -143,6 +144,7 @@ struct rx_metadata {
     };
     uint32_t checksum;
 #endif
+*/
     uint16_t frame_length;
 } __attribute__((packed, scalar_storage_order("big-endian")));
 

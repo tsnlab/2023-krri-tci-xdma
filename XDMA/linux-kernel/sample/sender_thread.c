@@ -34,6 +34,7 @@
 
 #include "util.h"
 #include "tsn.h"
+#include "qabv.h"
 
 #include "../libxdma/api_xdma.h"
 #include "buffer_handler.h"
@@ -59,6 +60,9 @@ extern int tx_thread_run;
 char* g_tx_buffer;
 #endif
 
+// XXX
+struct tsn_config tsn_config;
+
 static struct tsn_tx_buffer* dequeue() {
     timestamp_t now = gptp_get_timestamp(get_sys_count());
     int queue_index = tsn_select_queue(now);
@@ -82,6 +86,15 @@ static int transmit_tsn_packet_no_free(struct tsn_tx_buffer* packet) {
 
     status = xdma_api_write_from_buffer_with_fd(tx_devname, tx_fd, (char *)packet,
                                        mem_len, &bytes_tr);
+	// uint32_t to_overflow_popped_count = 0;
+	// uint32_t to_overflow_timeout_count = 0;
+	// int err1, err2;
+    // err1 = xdma_api_rd_register("/dev/xdma0_user", 0x420, 'w', &to_overflow_popped_count);
+    // err2 = xdma_api_rd_register("/dev/xdma0_user", 0x424, 'w', &to_overflow_timeout_count);
+	// if (err1 || err2) {
+	// 	printf("Read error\n");
+	// }
+	// printf("seq %u from %u to %u popped %u timeout %u\n", ((uint32_t)packet->data[0x28] << 8) + packet->data[0x29], packet->metadata.from.tick, packet->metadata.to.tick, to_overflow_popped_count, to_overflow_timeout_count);
 
     if(status != XST_SUCCESS) {
         tx_stats.txErrors++;
@@ -339,10 +352,7 @@ static int process_send_packet(struct tsn_rx_buffer* rx) {
     tx_metadata->reserved2 = 0;
 
     uint64_t now = get_sys_count();
-    tx_metadata->from.tick = (uint32_t)((now + XDMA_SECTION_TAKEN_TICKS) & 0x1FFFFFFF);
-    tx_metadata->to.tick = (uint32_t)((now + XDMA_SECTION_TAKEN_TICKS + XDMA_SECTION_TICKS_MARGIN) & 0x1FFFFFFF);
-//    tx_metadata->delay_from.tick = (uint32_t)((now + DELAY_TICKS) & 0x1FFFFFFF);
-//    tx_metadata->delay_to.tick = (uint32_t)((now + DELAY_TICKS + DELAY_TICKS_MARGIN) & 0x1FFFFFFF);
+    tsn_fill_metadata(&tsn_config, now * 8, tx);
 
 #else
     uint8_t *buffer =(uint8_t *)rx;
@@ -450,7 +460,7 @@ static int process_send_packet(struct tsn_rx_buffer* rx) {
     }
 #endif
     tx_metadata->frame_length = tx_len;
-    transmit_tsn_packet_no_free(tx); 
+    transmit_tsn_packet_no_free(tx);
     return XST_SUCCESS;
 }
 
@@ -599,6 +609,8 @@ static void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
     memset(g_tx_buffer, 0, MAX_BUFFER_LENGTH);
 #endif
 
+    tsn_init_configs2(&tsn_config);
+
     while (tx_thread_run) {
         buffer = NULL;
         buffer = xbuffer_dequeue();
@@ -719,8 +731,8 @@ void* sender_thread(void* arg) {
 
     tx_thread_arg_t* p_arg = (tx_thread_arg_t*)arg;
 
-    printf(">>> %s(devname: %s, fn: %s, mode: %d, size: %d)\n", 
-               __func__, p_arg->devname, p_arg->fn, 
+    printf(">>> %s(devname: %s, fn: %s, mode: %d, size: %d)\n",
+               __func__, p_arg->devname, p_arg->fn,
                p_arg->mode, p_arg->size);
 
     memset(tx_devname, 0, MAX_DEVICE_NAME);
@@ -855,11 +867,11 @@ void dump_buffer(unsigned char* buffer, int len) {
 
 void dump_tsn_tx_buffer(struct tsn_tx_buffer* packet, int len) {
 
-    printf(" 0x%08x  0x%08x ", 
+    printf(" 0x%08x  0x%08x ",
         packet->metadata.from.tick, packet->metadata.to.tick);
-    printf("   0x%08x  0x%08x ", 
+    printf("   0x%08x  0x%08x ",
         packet->metadata.delay_from.tick, packet->metadata.delay_to.tick);
-    printf("   %4d        %1d ", 
+    printf("   %4d        %1d ",
         packet->metadata.frame_length, packet->metadata.fail_policy);
 }
 
@@ -956,7 +968,7 @@ int simple_test_case_with_id(char* ip_address, uint32_t from_tick, uint32_t marg
     return tr_packet_dump_buffer(&packet);
 }
 
-void fill_tx_metadata_except_from_to(struct tsn_tx_buffer* packet, uint8_t stuff, 
+void fill_tx_metadata_except_from_to(struct tsn_tx_buffer* packet, uint8_t stuff,
              uint16_t frame_length, uint16_t timestamp_id, uint8_t fail_policy) {
     struct tx_metadata* tx_metadata = &packet->metadata;
 
@@ -1067,7 +1079,7 @@ int test_from_bigger_than_to(uint32_t count) {
 
 int make_packet_transmit_count(uint32_t count, int32_t from, int32_t to,
                                int32_t delay_from, int32_t delay_to,
-                               uint16_t frame_length, uint16_t timestamp_id, 
+                               uint16_t frame_length, uint16_t timestamp_id,
                                uint8_t fail_policy) {
     struct tsn_tx_buffer packet;
     struct tx_metadata* tx_metadata = &packet.metadata;
@@ -1153,8 +1165,8 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
     tx_output_packet_counter1 = tx_output_packet_counter;
 
     set_register(REG_TSN_CONTROL, 1);
-    printf("\n[sys_count] [from.tick] [  to.tick] [d_from.tick] [d_to.tick] "); 
-    printf("[length] [policy] [tx packets] [tx input packet] [tx output packet]\n");  
+    printf("\n[sys_count] [from.tick] [  to.tick] [d_from.tick] [d_to.tick] ");
+    printf("[length] [policy] [tx packets] [tx input packet] [tx output packet]\n");
     struct timeval start_time, end_time;
     gettimeofday(&start_time, NULL);
 
@@ -1172,7 +1184,7 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
     long microseconds = end_time.tv_usec - start_time.tv_usec;
     double elapsed_time = seconds + (microseconds / 1000000.0);
 
-    printf("\nElapsed time: %f seconds\nfrom_bigger_than_to_count: %d, tx_packets_zero_count: %d\n\n", 
+    printf("\nElapsed time: %f seconds\nfrom_bigger_than_to_count: %d, tx_packets_zero_count: %d\n\n",
              elapsed_time, from_bigger_than_to_count, tx_packets_zero_count);
 
     printf("\n");
@@ -1185,12 +1197,12 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
     tx_input_packet_counter2 = tx_input_packet_counter;
     tx_output_packet_counter2 = tx_output_packet_counter;
 
-    printf("\n tx_input_packet_counter2: %12d,  tx_input_packet_counter1: %12d\n", 
+    printf("\n tx_input_packet_counter2: %12d,  tx_input_packet_counter1: %12d\n",
              tx_input_packet_counter2, tx_input_packet_counter1);
-    printf("tx_output_packet_counter2: %12d, tx_output_packet_counter1: %12d\n", 
+    printf("tx_output_packet_counter2: %12d, tx_output_packet_counter1: %12d\n",
              tx_output_packet_counter2, tx_output_packet_counter1);
-    printf("     tx_input_packet_diff: %12d,     tx_output_packet_diff: %12d\n\n", 
-             (tx_input_packet_counter2-tx_input_packet_counter1), 
+    printf("     tx_input_packet_diff: %12d,     tx_output_packet_diff: %12d\n\n",
+             (tx_input_packet_counter2-tx_input_packet_counter1),
              (tx_output_packet_counter2-tx_output_packet_counter1));
 
     return XST_SUCCESS;

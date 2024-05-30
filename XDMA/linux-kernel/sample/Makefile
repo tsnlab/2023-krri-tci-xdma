@@ -1,5 +1,5 @@
 #
-# TSNv1 XDMA : 
+# TSNv1 XDMA :
 # -------------------------------------------------------------------------------
 # Copyrights (c) 2023 TSN Lab. All rights reserved.
 # Programmed by hounjoung@tsnlab.com
@@ -11,9 +11,10 @@
 
 include $(TOPDIR)/Makefile.inc
 
-#APP_TSNV1_XDMA_OBJS = receiver_thread.o  sender_thread.o  stats_thread.o  buffer_handler.o tsn-app.o 
-APP_TSNV1_XDMA_OBJS = receiver_thread.o  stats_thread.o  buffer_handler.o tsn-app.o 
+#APP_TSNV1_XDMA_OBJS = receiver_thread.o  sender_thread.o  stats_thread.o  buffer_handler.o tsn-app.o
+APP_TSNV1_XDMA_OBJS = receiver_thread.o  stats_thread.o  buffer_handler.o tsn-app.o
 APP_TSNV1_XDMA_OBJS += gptp.o icmp.o tsn.o
+APP_TSNV1_XDMA_OBJS += qabv.o
 
 OBJS = $(APP_TSNV1_XDMA_OBJS)
 
@@ -30,7 +31,7 @@ tsn-app: .depend $(LIBS) $(APP_TSNV1_XDMA_OBJS)
 
 clean:
 	rm -rf *.o *~ core .depend
-	rm -rf tsn-app 
+	rm -rf tsn-app
 
 #########################################################################
 
