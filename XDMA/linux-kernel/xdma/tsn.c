@@ -8,11 +8,6 @@
 #define NS_IN_1S 1000000000
 #define max(a, b) ((a) > (b) ? (a) : (b))
 
-#define HW_QUEUE_SIZE (128)
-#define TSN_QUEUE_SIZE_NS (1000000000) // 1s
-#define BE_QUEUE_SIZE_NS (1500 * HW_QUEUE_SIZE * 0.8)  // 80% of the queue size to be safe
-#define TICK_DONTCARE ((1 << 29) - 1)
-
 struct timestamps {
 	timestamp_t from;
 	timestamp_t to;
@@ -27,6 +22,10 @@ static void bake_qbv_config(struct tsn_config* config);
 static uint64_t bytes_to_ns(uint64_t bytes);
 static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint8_t vlan_prio, uint64_t bytes);
 static bool get_timestamps(struct timestamps* timestamps, const struct tsn_config* tsn_config, timestamp_t from, uint8_t vlan_prio, uint64_t bytes, bool consider_delay);
+
+// HW Buffer tracker
+static void append_buffer_track(struct buffer_tracker* tracker, sysclock_t free_at);
+static void cleanup_buffer_track(struct buffer_tracker* tracker, sysclock_t now);
 
 uint8_t tsn_get_vlan_prio(const uint8_t* payload) {
 	struct ethhdr* eth = (struct ethhdr*)payload;
@@ -59,6 +58,9 @@ static bool is_gptp_packet(const uint8_t* payload) {
  */
 bool tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t now, struct tx_buffer* tx_buf) {
 	struct tx_metadata* metadata = (struct tx_metadata*)&tx_buf->metadata;
+	struct buffer_tracker* buffer_tracker = &tsn_config->buffer_tracker;
+
+	cleanup_buffer_track(buffer_tracker, timestamp_to_sysclock(now));
 
 	uint8_t vlan_prio = tsn_get_vlan_prio(tx_buf->data);
 	bool is_gptp = is_gptp_packet(tx_buf->data);
@@ -81,7 +83,7 @@ bool tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t now, struct tx
 	if (tsn_config->qbv.enabled == false && tsn_config->qav[vlan_prio].enabled == false) {
 		// Don't care. Just fill in the metadata
 		timestamps.from = tsn_config->total_available_at;
-		timestamps.to = TICK_DONTCARE;
+		timestamps.to = timestamps.from + _DEFAULT_TO_MARGIN_;
 		metadata->fail_policy = TSN_FAIL_POLICY_DROP;
 	} else {
 		if (tsn_config->qav[vlan_prio].enabled == true && tsn_config->qav[vlan_prio].available_at > from) {
@@ -89,36 +91,17 @@ bool tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t now, struct tx
 		}
 		if (consider_delay) {
 			// Check if queue is available
-			if (from > now + TSN_QUEUE_SIZE_NS) {
+			if (buffer_tracker->count >= TSN_QUEUE_SIZE) {
 				return false;
 			}
 		} else {
 			// Best effort
+			if (buffer_tracker->count >= BE_QUEUE_SIZE)
 			from = max(from, tsn_config->total_available_at);
-			if (from > now + BE_QUEUE_SIZE_NS) {
-				// Queue is almost full. Drop the frame
-				return false;
-			}
 		}
 
 		get_timestamps(&timestamps, tsn_config, from, vlan_prio, metadata->frame_length, consider_delay);
 		metadata->fail_policy = consider_delay ? TSN_FAIL_POLICY_RETRY : TSN_FAIL_POLICY_DROP;
-	}
-
-	// Check if the calculated from is still valid
-	// TODO?: Check if TICK_DONTCARE
-	if (consider_delay) {
-		// Check if queue is available
-		if (from > now + TSN_QUEUE_SIZE_NS) {
-			return false;
-		}
-	} else {
-		// Best effort
-		from = max(from, tsn_config->total_available_at);
-		if (from > now + BE_QUEUE_SIZE_NS) {
-			// Queue is almost full. Drop the frame
-			return false;
-		}
 	}
 
 	// TODO: Convert ns to sysclock
@@ -135,6 +118,8 @@ bool tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t now, struct tx
 	spend_qav_credit(tsn_config, from, vlan_prio, metadata->frame_length);
 	tsn_config->queue_available_at[queue_prio] += duration_ns;
 	tsn_config->total_available_at += duration_ns;
+
+	append_buffer_track(buffer_tracker, timestamp_to_sysclock(tsn_config->total_available_at));
 
 	return true;
 }
@@ -337,4 +322,17 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 	}
 
 	return true;
+}
+
+static void append_buffer_track(struct buffer_tracker* tracker, sysclock_t free_at) {
+	tracker->free_at[tracker->head] = free_at;
+	tracker->head = (tracker->head + 1) % HW_QUEUE_SIZE;
+	tracker->count += 1;
+}
+
+static void cleanup_buffer_track(struct buffer_tracker* tracker, sysclock_t now) {
+	while (tracker->count > 0 && tracker->free_at[tracker->tail] < now) {
+		tracker->tail = (tracker->tail + 1) % HW_QUEUE_SIZE;
+		tracker->count -= 1;
+	}
 }

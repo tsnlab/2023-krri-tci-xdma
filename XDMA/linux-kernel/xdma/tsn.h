@@ -2,6 +2,10 @@
 
 #include "alinx_ptp.h"
 
+#define HW_QUEUE_SIZE (128)
+#define BE_QUEUE_SIZE (HW_QUEUE_SIZE - 20)
+#define TSN_QUEUE_SIZE (HW_QUEUE_SIZE - 2)
+
 #define VLAN_PRIO_COUNT 8
 #define TSN_PRIO_COUNT 8
 #define MAX_QBV_SLOTS 20
@@ -57,10 +61,18 @@ struct qav_state {
 	timestamp_t available_at;
 };
 
+struct buffer_tracker {
+	sysclock_t free_at[HW_QUEUE_SIZE];
+	int head; // Insert
+	int tail; // Remove
+	int count;
+}
+
 struct tsn_config {
 	struct qbv_config qbv;
 	struct qbv_baked_config qbv_baked;
 	struct qav_state qav[VLAN_PRIO_COUNT];
+	struct buffer_tracker buffer_tracker;
 	timestamp_t queue_available_at[TSN_PRIO_COUNT];
 	timestamp_t total_available_at;
 };
