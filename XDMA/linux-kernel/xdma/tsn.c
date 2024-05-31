@@ -119,7 +119,8 @@ bool tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t now, struct tx
 	tsn_config->queue_available_at[queue_prio] += duration_ns;
 	tsn_config->total_available_at += duration_ns;
 
-	append_buffer_track(buffer_tracker, timestamp_to_sysclock(tsn_config->total_available_at));
+	timestamp_t free_at = max(timestamps.to + duration_ns, tsn_config->total_available_at);
+	append_buffer_track(buffer_tracker, timestamp_to_sysclock(free_at));
 
 	return true;
 }
