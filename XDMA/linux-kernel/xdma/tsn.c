@@ -198,7 +198,7 @@ static void bake_qbv_config(struct tsn_config* config) {
 static uint64_t bytes_to_ns(uint64_t bytes) {
 	// TODO: Get link speed
 	uint64_t link_speed = 1000000000; // Assume 1Gbps
-	return bytes * 8 * NS_IN_1S / link_speed;
+	return max(bytes, MIN_FRAME_SIZE) * 8 * NS_IN_1S / link_speed;
 }
 
 static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint8_t vlan_prio, uint64_t bytes) {

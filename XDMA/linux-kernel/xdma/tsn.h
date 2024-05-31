@@ -10,6 +10,8 @@
 #define TSN_PRIO_COUNT 8
 #define MAX_QBV_SLOTS 20
 
+#define MIN_FRAME_SIZE (8 + ETH_ZLEN + 4 + 12) // 8 bytes preamble, 60 bytes payload, 4 bytes FCS, 12 bytes interpacket gap
+
 enum tsn_prio {
 	TSN_PRIO_GPTP = 3,
 	TSN_PRIO_VLAN = 5,
