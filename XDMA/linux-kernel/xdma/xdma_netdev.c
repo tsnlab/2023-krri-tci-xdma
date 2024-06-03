@@ -170,8 +170,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         sys_count_low = (uint32_t)(ioread32(xdev->bar[0] + 0x0384) & 0x1FFFFFFF);
 
         /* Set the fromtick & to_tick values based on the lower 29 bits of the system count */
-        tx_metadata->from.tick = (uint32_t)((sys_count_low + _DEFAULT_FROM_MARGIN_) & 0x1FFFFFFF);
-        tx_metadata->to.tick = (uint32_t)((sys_count_low + _DEFAULT_TO_MARGIN_) & 0x1FFFFFFF);
+        tsn_fill_metadata(&xdev->tsn_config, sys_count_low * 8, skb);  // TODO: get CLOCK_1S from ptp
 
 #if DEBUG_ONE_QUEUE_TSN_
         pr_err("0x%08x  0x%08x  0x%08x  %4d  %1d",
