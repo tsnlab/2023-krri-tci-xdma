@@ -1410,11 +1410,19 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		engine_status_read(engine, 1, 0);
 		skb_len = rx_buffer->metadata.frame_length - CRC_LEN;
 		if (skb_len < 0) {
+			iowrite32(DMA_ENGINE_STOP, &engine->regs->control);
+			channel_interrupts_enable(engine->xdev, engine->irq_bitmask);
+			iowrite32(DMA_ENGINE_START, &engine->regs->control);
+			spin_unlock_irqrestore(&priv->rx_lock, flag);
 			pr_err("Invalid skb_len\n");
 			return IRQ_NONE;
 		}
 		skb = dev_alloc_skb(skb_len);
 		if (!skb) {
+			iowrite32(DMA_ENGINE_STOP, &engine->regs->control);
+			channel_interrupts_enable(engine->xdev, engine->irq_bitmask);
+			iowrite32(DMA_ENGINE_START, &engine->regs->control);
+			spin_unlock_irqrestore(&priv->rx_lock, flag);
 			pr_err("Failed to allocate skb\n");
 			return IRQ_NONE;
 		}
