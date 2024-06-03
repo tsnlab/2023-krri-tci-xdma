@@ -1,7 +1,7 @@
-#include <arpa/inet.h>
 #include <linux/if_ether.h>
 #include <linux/string.h>
 
+#include "alinx_ptp.h"
 #include "xdma_netdev.h"
 #include "tsn.h"
 
@@ -15,8 +15,6 @@ struct timestamps {
 	timestamp_t delay_to;
 };
 
-static struct tsn_config tsn_config;
-
 static bool is_gptp_packet(const uint8_t* payload);
 static void bake_qbv_config(struct tsn_config* config);
 static uint64_t bytes_to_ns(uint64_t bytes);
@@ -26,6 +24,11 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 // HW Buffer tracker
 static void append_buffer_track(struct buffer_tracker* tracker, sysclock_t free_at);
 static void cleanup_buffer_track(struct buffer_tracker* tracker, sysclock_t now);
+
+static sysclock_t timestamp_to_sysclock(timestamp_t timestamp) {
+	// TODO: Read CLOCK_1S from register
+	return timestamp / 8;
+}
 
 uint8_t tsn_get_vlan_prio(const uint8_t* payload) {
 	struct ethhdr* eth = (struct ethhdr*)payload;
@@ -56,7 +59,8 @@ static bool is_gptp_packet(const uint8_t* payload) {
  * @param tx_buf: The frame to be sent
  * @return: true if the frame reserves timestamps, false is for drop
  */
-bool tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t now, struct tx_buffer* tx_buf) {
+bool tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t now, struct sk_buff* skb) {
+	struct tx_buffer* tx_buf = (struct tx_buffer*)skb->data;
 	struct tx_metadata* metadata = (struct tx_metadata*)&tx_buf->metadata;
 	struct buffer_tracker* buffer_tracker = &tsn_config->buffer_tracker;
 

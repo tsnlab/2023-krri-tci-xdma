@@ -2,7 +2,7 @@
 #define ALINX_PTP_H
 
 #include <linux/ptp_clock_kernel.h>
-#include "xdma_mod.h"
+// #include "xdma_mod.h"
 #include "libxdma.h"
 
 #define REG_NEXT_PULSE_AT_HI 0x002c

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "alinx_ptp.h"
+#include <linux/skbuff.h>
 
 #define HW_QUEUE_SIZE (128)
 #define BE_QUEUE_SIZE (HW_QUEUE_SIZE - 20)
@@ -11,6 +11,9 @@
 #define MAX_QBV_SLOTS 20
 
 #define MIN_FRAME_SIZE (8 + ETH_ZLEN + 4 + 12) // 8 bytes preamble, 60 bytes payload, 4 bytes FCS, 12 bytes interpacket gap
+
+typedef uint64_t timestamp_t;
+typedef uint64_t sysclock_t;
 
 enum tsn_prio {
 	TSN_PRIO_GPTP = 3,
@@ -68,7 +71,7 @@ struct buffer_tracker {
 	int head; // Insert
 	int tail; // Remove
 	int count;
-}
+};
 
 struct tsn_config {
 	struct qbv_config qbv;
@@ -87,5 +90,5 @@ struct vlan_hdr {
 } __attribute__((packed, scalar_storage_order("big-endian")));
 
 uint8_t tsn_get_vlan_prio(const uint8_t* payload);
-bool tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t now, struct tx_buffer* tx_buf);
+bool tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t now, struct sk_buff* skb);
 void tsn_init_configs(struct tsn_config* config);
