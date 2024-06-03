@@ -86,31 +86,25 @@ int xdma_netdev_close(struct net_device *ndev)
 #if DEBUG_ONE_QUEUE_TSN_
 void dump_buffer(unsigned char* buffer, int len)
 {
+        char pbuffer[16 * 3];
         int i = 0;
         pr_err("[Buffer]");
-        pr_err("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
-        buffer[i+0] & 0xFF, buffer[i+1] & 0xFF, buffer[i+2] & 0xFF, buffer[i+3] & 0xFF,
-        buffer[i+4] & 0xFF, buffer[i+5] & 0xFF, buffer[i+6] & 0xFF, buffer[i+7] & 0xFF,
-        buffer[i+8] & 0xFF, buffer[i+9] & 0xFF, buffer[i+10] & 0xFF, buffer[i+11] & 0xFF,
-        buffer[i+11] & 0xFF, buffer[i+13] & 0xFF, buffer[i+14] & 0xFF, buffer[i+15] & 0xFF);
-
-        i = 16;
-        pr_err("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
-        buffer[i+0] & 0xFF, buffer[i+1] & 0xFF, buffer[i+2] & 0xFF, buffer[i+3] & 0xFF,
-        buffer[i+4] & 0xFF, buffer[i+5] & 0xFF, buffer[i+6] & 0xFF, buffer[i+7] & 0xFF,
-        buffer[i+8] & 0xFF, buffer[i+9] & 0xFF, buffer[i+10] & 0xFF, buffer[i+11] & 0xFF,
-        buffer[i+11] & 0xFF, buffer[i+13] & 0xFF, buffer[i+14] & 0xFF, buffer[i+15] & 0xFF);
-
-        i = 32;
-        pr_err("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
-        buffer[i+0] & 0xFF, buffer[i+1] & 0xFF, buffer[i+2] & 0xFF, buffer[i+3] & 0xFF,
-        buffer[i+4] & 0xFF, buffer[i+5] & 0xFF, buffer[i+6] & 0xFF, buffer[i+7] & 0xFF,
-        buffer[i+8] & 0xFF, buffer[i+9] & 0xFF, buffer[i+10] & 0xFF, buffer[i+11] & 0xFF,
-        buffer[i+11] & 0xFF, buffer[i+13] & 0xFF, buffer[i+14] & 0xFF, buffer[i+15] & 0xFF);
-
+        while (i < len) {
+                int j = 0;
+                memset(pbuffer, 0, sizeof(pbuffer));
+                while (j < 16) {
+                        if (i + j >= len) {
+                                break;
+                        }
+                        sprintf(pbuffer + (j * 3), "%02x ", buffer[i + j] & 0xFF);
+                        j++;
+                }
+                pr_err("%s", pbuffer);
+                i += 16;
+        }
         pr_err("\n");
 }
-#endif
+#endif // DEBUG_ONE_QUEUE_TSN_
 
 netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                 struct net_device *ndev)
@@ -163,10 +157,10 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         tx_metadata = (struct tx_metadata*)skb->data;
         tx_metadata->frame_length = frame_length;
         //tx_metadata->timestamp_id = 0;
-        //tx_metadata->fail_policy = 0;
+        //tx_metadata->fail_policy = no_delay_allowed;
 
         /* Reads the lower 29 bits of the system count. */
-        sys_count_low = (uint32_t)(ioread32(xdev->bar[0] + 0x0384) & 0x1FFFFFFF);
+        sys_count_low = (uint32_t)(ioread32(xdev->bar[0] + REG_SYS_COUNT_LOW) & 0x1FFFFFFF);
 
         /* Set the fromtick & to_tick values based on the lower 29 bits of the system count */
         tx_metadata->from.tick = (uint32_t)((sys_count_low + _DEFAULT_FROM_MARGIN_) & 0x1FFFFFFF);

@@ -19,6 +19,8 @@
 #define DESC_REG_LO_RX (SGDMA_OFFSET_FROM_CHANNEL_RX + 0x80)
 #define DESC_REG_HI_RX (SGDMA_OFFSET_FROM_CHANNEL_RX + 0x84)
 
+#define REG_SYS_COUNT_LOW 0x0384
+
 #define DMA_ENGINE_START 16268831
 #define DMA_ENGINE_STOP 16268830
 
@@ -57,8 +59,14 @@ struct xdma_private {
 };
 
 #define DEBUG_ONE_QUEUE_TSN_ 0
-#define _DEFAULT_FROM_MARGIN_ (500)
-#define _DEFAULT_TO_MARGIN_ (19100)
+#define _DEFAULT_FROM_MARGIN_ (500) // tick(1/125MHz), system count
+#define _DEFAULT_TO_MARGIN_ (19100) // tick(1/125MHz), system count
+
+enum e_fail_policy {
+    no_delay_allowed = 0,
+    delay_allowed = 1,
+};
+
 struct tick_count {
         uint32_t tick:29;
         uint32_t priority:3;
