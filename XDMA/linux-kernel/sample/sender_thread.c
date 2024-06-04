@@ -488,7 +488,7 @@ static int process_send_packet(struct tsn_rx_buffer* rx) {
 #endif
     tx_metadata->frame_length = tx_len;
     transmit_tsn_packet_no_free(tx); 
-    dump_buffer_to_file((char *)tx->data, tx_len);
+//    dump_buffer_to_file((char *)tx->data, tx_len);
     return XST_SUCCESS;
 }
 
