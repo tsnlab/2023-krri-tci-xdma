@@ -20,6 +20,8 @@
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/aer.h>
+#include <linux/ethtool.h>
+#include <uapi/linux/net_tstamp.h>
 /* include early, to verify it depends only on the headers above */
 #include "libxdma_api.h"
 #include "libxdma.h"
@@ -155,6 +157,33 @@ static const struct net_device_ops xdma_netdev_ops = {
 	.ndo_setup_tc = xdma_netdev_setup_tc,
 };
 
+static int xdma_ethtool_get_ts_info(struct net_device * ndev, struct ethtool_ts_info * info) {
+	struct xdma_private *priv = netdev_priv(ndev);
+	struct xdma_dev *xdev = priv->xdev;
+	struct xdma_pci_dev *xpdev = dev_get_drvdata(&priv->pdev->dev);
+
+	info->phc_index = ptp_clock_index(xpdev->ptp->ptp_clock);
+
+	// TODO: put correct values
+	info->so_timestamping = SOF_TIMESTAMPING_TX_SOFTWARE |
+							SOF_TIMESTAMPING_RX_SOFTWARE |
+							SOF_TIMESTAMPING_SOFTWARE |
+							SOF_TIMESTAMPING_TX_HARDWARE |
+							SOF_TIMESTAMPING_RX_HARDWARE |
+							SOF_TIMESTAMPING_RAW_HARDWARE;
+
+	info->tx_types = BIT(HWTSTAMP_TX_OFF) | BIT(HWTSTAMP_TX_ON);
+
+	info->rx_filters = BIT(HWTSTAMP_FILTER_NONE);
+	info->rx_filters |= BIT(HWTSTAMP_FILTER_ALL);
+
+	return 0;
+}
+
+static const struct ethtool_ops xdma_ethtool_ops = {
+	.get_ts_info = xdma_ethtool_get_ts_info,
+};
+
 static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	int rv = 0;
@@ -244,7 +273,8 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	iowrite32(0x10, xdev->bar[0] + 0x620);
 
 	/* Allocate the network device */
-	ndev = alloc_etherdev(sizeof(struct xdma_private));
+	// ndev = alloc_etherdev(sizeof(struct xdma_private));
+	ndev = alloc_etherdev_mq(sizeof(struct xdma_private), 4);
 	if (!ndev) {
 		pr_err("alloc_etherdev failed\n");
 		rv = -ENOMEM;
@@ -256,6 +286,7 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	/* Set up the network interface */
 	ndev->netdev_ops = &xdma_netdev_ops;
+	ndev->ethtool_ops = &xdma_ethtool_ops;
 	SET_NETDEV_DEV(ndev, &pdev->dev);
 	priv = netdev_priv(ndev);
 	memset(priv, 0, sizeof(struct xdma_private));
