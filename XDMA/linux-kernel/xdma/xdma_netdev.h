@@ -126,4 +126,13 @@ int xdma_netdev_close(struct net_device *netdev);
  */
 netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                                    struct net_device *netdev);
+
+/*
+ * xdma_netdev_setup_tc - TC config handler
+ * @dev: Pointer to the network device
+ * @type: Tc setup type
+ * @type_data: parameters passed to the tc command
+ */
+int xdma_netdev_setup_tc(struct net_device *ndev, enum tc_setup_type type, void *type_data);
+
 #endif

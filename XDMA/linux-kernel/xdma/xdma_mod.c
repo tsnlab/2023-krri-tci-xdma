@@ -152,6 +152,7 @@ static const struct net_device_ops xdma_netdev_ops = {
 	.ndo_open = xdma_netdev_open,
 	.ndo_stop = xdma_netdev_close,
 	.ndo_start_xmit = xdma_netdev_start_xmit,
+	.ndo_setup_tc = xdma_netdev_setup_tc,
 };
 
 static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)

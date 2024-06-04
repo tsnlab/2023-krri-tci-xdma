@@ -1,7 +1,10 @@
+#include <net/pkt_sched.h>
+
 #include "xdma_netdev.h"
 #include "xdma_mod.h"
 #include "cdev_sgdma.h"
 #include "libxdma.h"
+#include "tsn.h"
 
 static void tx_desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len)
 {
@@ -197,4 +200,20 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
 
         iowrite32(DMA_ENGINE_START, &priv->tx_engine->regs->control);
         return NETDEV_TX_OK;
+}
+
+int xdma_netdev_setup_tc(struct net_device *ndev, enum tc_setup_type type, void *type_data) {
+        struct xdma_private *priv = netdev_priv(ndev);
+        struct xdma_dev *xdev = priv->xdev;
+
+        switch (type) {
+        case TC_SETUP_QDISC_CBS:
+                return tsn_set_qav(&xdev->tsn_config, (struct tc_cbs_qopt_offload*)type_data);
+        case TC_SETUP_QDISC_TAPRIO:
+                return tsn_set_qbv(&xdev->tsn_config, (struct tc_taprio_qopt_offload*)type_data);
+        default:
+                return -ENOTSUPP;
+        }
+
+	return 0;
 }

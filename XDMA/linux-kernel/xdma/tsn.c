@@ -341,3 +341,45 @@ static void cleanup_buffer_track(struct buffer_tracker* tracker, sysclock_t now)
 		tracker->count -= 1;
 	}
 }
+
+int tsn_set_qav(struct tsn_config* config, struct tc_cbs_qopt_offload* qopt) {
+	if (qopt->queue != 0) {
+		return -EINVAL;
+	}
+
+	config->qav[qopt->queue].enabled = qopt->enable;
+	config->qav[qopt->queue].hi_credit = qopt->hicredit;
+	config->qav[qopt->queue].lo_credit = qopt->locredit;
+	config->qav[qopt->queue].idle_slope = qopt->idleslope;
+	config->qav[qopt->queue].send_slope = qopt->sendslope;
+
+	return 0;
+}
+
+int tsn_set_qbv(struct tsn_config* config, struct tc_taprio_qopt_offload* qopt) {
+	u32 i, j;
+
+	if (!qopt->enable) {
+		return 0;
+	}
+
+	if (qopt->num_entries > MAX_QBV_SLOTS) {
+		return -EINVAL;
+	}
+
+	config->qbv.enabled = qopt->enable;
+	config->qbv.start = qopt->base_time;
+	config->qbv.slot_count = qopt->num_entries;
+
+	for (i = 0; i < config->qbv.slot_count; i++) {
+		// TODO: handle qopt->entries[i].command
+		config->qbv.slots[i].duration_ns = qopt->entries[i].interval;
+		for (j = 0; j < VLAN_PRIO_COUNT; j++) {
+			config->qbv.slots[i].opened_prios[j] = (qopt->entries[i].gate_mask & (1 << j));
+		}
+	}
+
+	bake_qbv_config(config);
+
+	return 0;
+}

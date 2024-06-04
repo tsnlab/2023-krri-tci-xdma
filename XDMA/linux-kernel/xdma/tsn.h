@@ -1,6 +1,7 @@
 #pragma once
 
 #include <linux/skbuff.h>
+#include <net/pkt_sched.h>
 
 #define HW_QUEUE_SIZE (128)
 #define BE_QUEUE_SIZE (HW_QUEUE_SIZE - 20)
@@ -92,3 +93,5 @@ struct tsn_vlan_hdr {
 uint8_t tsn_get_vlan_prio(const uint8_t* payload);
 bool tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t now, struct sk_buff* skb);
 void tsn_init_configs(struct tsn_config* config);
+int tsn_set_qav(struct tsn_config* config, struct tc_cbs_qopt_offload* qopt);
+int tsn_set_qbv(struct tsn_config* config, struct tc_taprio_qopt_offload* qopt);
