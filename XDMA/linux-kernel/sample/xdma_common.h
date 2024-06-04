@@ -5,7 +5,7 @@
 #define MAX_PACKET_LENGTH (0x800)
 #define MAX_PACKET_BURST  (1)    /* 16 Iterate over the userspace buffer, taking at most 255 * PAGE_SIZE bytes for each DMA transfer. */
 #define MAX_BUFFER_LENGTH (MAX_PACKET_LENGTH * MAX_PACKET_BURST)
-#define NUMBER_OF_BUFFER  (640) // (2048)
+#define NUMBER_OF_BUFFER  (2048) // (2048)
 #define NUMBER_OF_POOL_BUFFER (NUMBER_OF_BUFFER + 1)
 #define NUMBER_OF_RESERVED_BUFFER (4)
 #define ENGINE_NUMBER_OF_BUFFER  (NUMBER_OF_BUFFER/2)

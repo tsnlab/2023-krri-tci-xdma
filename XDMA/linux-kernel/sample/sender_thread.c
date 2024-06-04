@@ -239,6 +239,40 @@ static int process_packet(struct tsn_rx_buffer* rx) {
 #ifdef ONE_QUEUE_TSN
 char* g_tx_buffer;
 #endif
+
+static void dump_buffer_to_file(unsigned char* buffer, int len) {
+
+    FILE *fp;
+    char *filename = "./dump_packet.txt";
+    char pbuffer[16 * 3];
+
+    fp = fopen(filename, "a+");
+    if (fp == NULL) {
+        printf("%s 파일을 열 수 없습니다.\n", filename);
+        return;
+    }
+
+    int i = 0;
+    fprintf(fp, "[Buffer]\n");
+
+    while (i < len) {
+        int j = 0;
+        memset(pbuffer, 0, sizeof(pbuffer));
+        while (j < 16) {
+            if (i + j >= len) {
+                break;
+            }
+            sprintf(pbuffer + (j * 3), "%02x ", buffer[i + j] & 0xFF);
+            j++;
+        }
+        fprintf(fp, "%s\n", pbuffer);
+        i += 16;
+    }
+    fprintf(fp, "\n");
+
+    fclose(fp);
+}
+
 static int process_send_packet(struct tsn_rx_buffer* rx) {
 
 #ifdef ONE_QUEUE_TSN
@@ -328,6 +362,7 @@ static int process_send_packet(struct tsn_rx_buffer* rx) {
         break;
     default:
         printf_debug("Unknown type: %04x\n", rx_eth->type);
+        //printf("Unknown type: %04x\n", rx_eth->type);
         return XST_FAILURE;
     }
 
@@ -339,8 +374,10 @@ static int process_send_packet(struct tsn_rx_buffer* rx) {
     tx_metadata->reserved2 = 0;
 
     uint64_t now = get_sys_count();
-    tx_metadata->from.tick = (uint32_t)((now + XDMA_SECTION_TAKEN_TICKS) & 0x1FFFFFFF);
-    tx_metadata->to.tick = (uint32_t)((now + XDMA_SECTION_TAKEN_TICKS + XDMA_SECTION_TICKS_MARGIN) & 0x1FFFFFFF);
+    tx_metadata->from.tick = (uint32_t)(0);
+    tx_metadata->to.tick = (uint32_t)(0x1FFFFFFF);
+//    tx_metadata->from.tick = (uint32_t)((now + XDMA_SECTION_TAKEN_TICKS) & 0x1FFFFFFF);
+//    tx_metadata->to.tick = (uint32_t)((now + XDMA_SECTION_TAKEN_TICKS + XDMA_SECTION_TICKS_MARGIN) & 0x1FFFFFFF);
 //    tx_metadata->delay_from.tick = (uint32_t)((now + DELAY_TICKS) & 0x1FFFFFFF);
 //    tx_metadata->delay_to.tick = (uint32_t)((now + DELAY_TICKS + DELAY_TICKS_MARGIN) & 0x1FFFFFFF);
 
@@ -451,6 +488,7 @@ static int process_send_packet(struct tsn_rx_buffer* rx) {
 #endif
     tx_metadata->frame_length = tx_len;
     transmit_tsn_packet_no_free(tx); 
+    dump_buffer_to_file((char *)tx->data, tx_len);
     return XST_SUCCESS;
 }
 
@@ -800,6 +838,9 @@ uint32_t to_overflow_timeout_count2 = 0;
 uint32_t normal_timeout_count = 0;
 uint32_t to_overflow_popped_count = 0;
 uint32_t to_overflow_timeout_count = 0;
+uint32_t timeout_drop_sys_count = 0;
+uint32_t timeout_drop_sys_count1 = 0;
+uint32_t timeout_drop_sys_count2 = 0;
 
 static buffer_stack_t* tx_stack = NULL;
 static buffer_stack_t xdma_tx_buffer_pool_stack;
@@ -904,6 +945,7 @@ void show_n_store_tx_register() {
     uint32_var = get_register(REG_TIMEOUT_DROP_SYS);
     uint32_var = uint32_var & 0x1FFFFFFF;
     printf("timeout_drop_sys tick: 0x%x( %d)\n", uint32_var, uint32_var);
+    timeout_drop_sys_count = uint32_var;
 }
 
 void dump_buffer(unsigned char* buffer, int len) {
@@ -938,12 +980,21 @@ static inline void wait_tick_count_almost_full(uint32_t h_count, uint32_t l_coun
 
 void fill_packet_data_with_default_packet(struct tsn_tx_buffer* packet, uint8_t stuff) {
 
+#if 1   // tsnlab-HW-test, 192.168.10.101, ether 7c:c2:55:82:5c:d0
+    uint8_t default_packet[DEFAULT_PKT_LEN] = {
+        0x7c, 0xc2, 0x55, 0x82, 0x5c, 0xd0, 0xd8, 0xbb, 0xc1, 0x15, 0x66, 0xc1, 0x08, 0x00, 0x45, 0x00,
+        0x00, 0x3c, 0xce, 0x38, 0x00, 0x00, 0x80, 0x01, 0x60, 0x9e, 0xc0, 0xa8, 0x0a, 0x64, 0xc0, 0xa8,
+        0x0a, 0x65, 0x08, 0x00, 0x4c, 0x75, 0x00, 0x01, 0x00, 0xe6, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66,
+        0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76,
+        0x77, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69 };
+#else
     uint8_t default_packet[DEFAULT_PKT_LEN] = {
         0xa4, 0xbf, 0x01, 0x65, 0xde, 0x83, 0xd8, 0xbb, 0xc1, 0x15, 0x66, 0xc1, 0x08, 0x00, 0x45, 0x00,
         0x00, 0x3c, 0xce, 0x38, 0x00, 0x00, 0x80, 0x01, 0x60, 0x9e, 0xc0, 0xa8, 0x0a, 0x64, 0xc0, 0xa8,
         0x45, 0x36, 0x08, 0x00, 0x4c, 0x75, 0x00, 0x01, 0x00, 0xe6, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66,
         0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76,
         0x77, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69 };
+#endif
 
     if(stuff == 0 ) {
         memcpy(packet->data, default_packet, DEFAULT_PKT_LEN);
@@ -989,6 +1040,7 @@ void fill_tx_metadata(struct tx_metadata* tx_metadata, int FP, int FT_OF, int DF
 void make_tsn_tx_buffer(struct tsn_tx_buffer* packet, uint8_t stuff) {
 
     memset(packet, 0, sizeof(struct tsn_tx_buffer));
+    //memset(packet, 0xAA, sizeof(struct tsn_tx_buffer));
     fill_packet_data_with_default_packet(packet, stuff);
 }
 
@@ -1136,10 +1188,12 @@ int test_with_variable_length_packets_buffer(uint32_t count) {
         pos = (id % 16);
         offset = (id / 16);
         frame_length = (pos + 1) * 64 + offset + 500;
+//        frame_length = 1319;
         if(frame_length > 1400) {
             frame_length = 1400;
         }
         fill_tx_metadata_except_from_to((struct tsn_tx_buffer*)tx_stack->elements[id], (uint8_t)(id & 0xFF), frame_length, 0, 0);
+        //fill_tx_metadata_except_from_to((struct tsn_tx_buffer*)tx_stack->elements[id], (uint8_t)(1 & 0xFF), frame_length, 0, 0);
     }
 
     for(id=0; id<NUMBER_OF_BUFFER; id++) {
@@ -1147,6 +1201,7 @@ int test_with_variable_length_packets_buffer(uint32_t count) {
         tx_metadata->from.tick = (uint32_t)(id * 1);
         //tx_metadata->from.tick = (uint32_t)(0 * 1);
         tx_metadata->to.tick = (uint32_t)(0x1FFFFFFF);
+        //tx_metadata->to.tick = (uint32_t)(0x10000);
     }
 
     struct timeval start_time, end_time;
@@ -1366,8 +1421,9 @@ int long_test_with_burst(int count, int burst_count) {
     for(int id = 0; id <count; id++) {
         uint64_t now = get_sys_count();
         for(int burst_idx = 0; burst_idx <burst_count; burst_idx++) {
-            tx_metadata->from.tick = (uint32_t)((now + burst_idx * (TOTAL_PKT_LEN + 100) + 0) & 0x1FFFFFFF);
-            tx_metadata->to.tick = (uint32_t)((now + burst_idx * (TOTAL_PKT_LEN + 100) + 49100) & 0x1FFFFFFF);
+            //tx_metadata->from.tick = (uint32_t)((now + burst_idx * (TOTAL_PKT_LEN + 100) + 0) & 0x1FFFFFFF);
+            tx_metadata->from.tick = (uint32_t)((now + burst_idx) & 0x1FFFFFFF);
+            tx_metadata->to.tick = (uint32_t)((now + burst_idx * (TOTAL_PKT_LEN + 200) + 49100) & 0x1FFFFFFF);
 
             transmit_tsn_packet_no_free(&packet);
 
@@ -1396,19 +1452,23 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
     normal_timeout_count1 = normal_timeout_count;
     to_overflow_popped_count1 = to_overflow_popped_count;
     to_overflow_timeout_count1 = to_overflow_timeout_count;
+    timeout_drop_sys_count1 = timeout_drop_sys_count;
 
     set_register(REG_TSN_CONTROL, 1);
+#if 0
     printf("\n[sys_count] [from.tick] [  to.tick] [d_from.tick] [d_to.tick] "); 
     printf("[length] [policy] [tx packets] [tx input packet] [tx output packet]\n");  
+#endif
     struct timeval start_time, end_time;
     gettimeofday(&start_time, NULL);
 
     /* Uncomment the test case you want to test.i */
-//    long_test_with_burst(50000, 16);
-//    long_test_with_burst(800000, 1);
-    test_with_n_packets(ip_address, from_tick, margin);
+//    long_test_with_burst(1, 16);
+//    long_test_with_burst(100000000, 1);
+//    test_with_n_packets(ip_address, from_tick, margin);
 //    test_two_packets_before_n_after_carry_occurrence(ip_address, from_tick, margin);
-//    test_with_variable_length_packets_buffer(3000);
+    test_with_variable_length_packets_buffer(1);
+//    test_with_variable_length_packets_buffer(1);
 //    find_tick_count_of_spare_space_between_packets(10000);
 //    test_priority_field(1);
 //    find_tick_count_delay(20);
@@ -1428,7 +1488,7 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
 //    simple_test_case_with_id(ip_address, from_tick, margin, 1);
 
     close(tx_fd);
-    sleep(1);
+    sleep(4);
 
     show_n_store_tx_register();
     tx_input_packet_counter2 = tx_input_packet_counter;
@@ -1436,6 +1496,7 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
     normal_timeout_count2 = normal_timeout_count;
     to_overflow_popped_count2 = to_overflow_popped_count;
     to_overflow_timeout_count2 = to_overflow_timeout_count;
+    timeout_drop_sys_count2 = timeout_drop_sys_count;
 
     printf("\n  tx_input_packet_counter2: %12d,    tx_input_packet_counter1: %12d\n", 
              tx_input_packet_counter2, tx_input_packet_counter1);
@@ -1451,6 +1512,11 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
              to_overflow_popped_count2, to_overflow_popped_count1, to_overflow_popped_count2 - to_overflow_popped_count1);
     printf("to_overflow_timeout_count2: %12d,  to_overflow_timeout_count1: %12d,     diff: %12d\n\n", 
              to_overflow_timeout_count2, to_overflow_timeout_count1, to_overflow_timeout_count2 - to_overflow_timeout_count1);
+
+    if(timeout_drop_sys_count1 != timeout_drop_sys_count2) {
+        printf("Drop occured, timeout_drop_sys_count1: 0x%8x, timeout_drop_sys_count2: 0x%8x\n\n",
+               timeout_drop_sys_count1, timeout_drop_sys_count2);
+    }
 
     return XST_SUCCESS;
 }
