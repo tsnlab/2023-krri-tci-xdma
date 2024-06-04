@@ -82,7 +82,7 @@ struct tsn_config {
 	timestamp_t total_available_at;
 };
 
-struct vlan_hdr {
+struct tsn_vlan_hdr {
 	uint16_t pid;
 	uint8_t pcp:3;
 	uint8_t dei:1;

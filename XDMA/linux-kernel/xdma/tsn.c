@@ -34,7 +34,7 @@ uint8_t tsn_get_vlan_prio(const uint8_t* payload) {
 	struct ethhdr* eth = (struct ethhdr*)payload;
 	uint16_t eth_type = eth->h_proto;
 	if (eth_type == ETH_P_8021Q) {
-		struct vlan_hdr* vlan = (struct vlan_hdr*)(payload + ETH_HLEN);
+		struct tsn_vlan_hdr* vlan = (struct tsn_vlan_hdr*)(payload + ETH_HLEN);
 		return vlan->pcp;
 	}
 	//XXX: Or you can use skb->priority;
@@ -45,7 +45,7 @@ static bool is_gptp_packet(const uint8_t* payload) {
 	struct ethhdr* eth = (struct ethhdr*)payload;
 	uint16_t eth_type = eth->h_proto;
 	if (eth_type == ETH_P_8021Q) {
-		struct vlan_hdr* vlan = (struct vlan_hdr*)(eth + 1);
+		struct tsn_vlan_hdr* vlan = (struct tsn_vlan_hdr*)(eth + 1);
 		eth_type = vlan->pid;
 	}
 
