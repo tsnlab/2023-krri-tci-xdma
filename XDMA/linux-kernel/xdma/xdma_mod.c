@@ -16,6 +16,7 @@
 
 #define pr_fmt(fmt)     KBUILD_MODNAME ":%s: " fmt, __func__
 
+#include <unistd.h>
 #include <linux/ioctl.h>
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -45,6 +46,35 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 /* SECTION: Module global variables */
 static int xpdev_cnt;
+
+static uint64_t hash(unsigned long hostid, unsigned long num) {
+	// Note that these magic numbers are well known constants for hashing
+	// See splitmix64
+	uint64_t hash = hostid;
+	hash = ((hash >> 30) ^ (hash ^ num)) * UINT64_C(0xbf58476d1ce4e5b9);
+	hash = ((hash >> 27) ^ hash) * UINT64_C(0x94d049bb133111eb);
+	hash = (hash >> 31) ^ hash;
+
+	return hash;
+}
+
+static void get_mac_address(char* mac_addr, struct pci_dev *pdev) {
+	unsigned long hostid = (unsigned long)gethostid();
+	unsigned char pcie_num = pdev->slot->number;
+	int i;
+
+	// Hashing
+	uint64_t hash = hash(hostid, pcie_num);
+
+	// Convert to MAC address
+	// Note that x2:xx:xx:xx:xx:xx is Locally Administered MAC Address
+	for (i = 0; i < ETH_ALEN; i++) {
+		mac_addr[i] = (hash >> (i * 8)) & 0xFF;
+	}
+
+	// Make addr = x2:xx:xx:xx:xx:xx
+	mac_addr[0] = mac_addr[0] & 0xf0 | 0x02;
+}
 
 static const struct pci_device_id pci_ids[] = {
 	{ PCI_DEVICE(0x10ee, 0x9048), },
@@ -334,7 +364,9 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	spin_lock_init(&priv->rx_lock);
 
 	/* Set the MAC address */
-	memcpy(ndev->dev_addr, "\xca\x11\x22\x3a\x44\x55", ETH_ALEN);
+	unsigned char mac_addr[ETH_ALEN];
+	get_mac_address(mac_addr, pdev);
+	memcpy(ndev->dev_addr, mac_addr, ETH_ALEN);
 
 	priv->rx_buffer = kmalloc(XDMA_BUFFER_SIZE, GFP_KERNEL);
 	if (!priv->rx_buffer) {
