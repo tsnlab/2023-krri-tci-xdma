@@ -16,7 +16,7 @@
 
 #define pr_fmt(fmt)     KBUILD_MODNAME ":%s: " fmt, __func__
 
-#include <unistd.h>
+#include <linux/fs.h>
 #include <linux/ioctl.h>
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -47,6 +47,31 @@ MODULE_LICENSE("Dual BSD/GPL");
 /* SECTION: Module global variables */
 static int xpdev_cnt;
 
+static ssize_t read_file(char* filename, void* buffer, size_t size) {
+	struct file* f;
+	mm_segment_t old_fs;
+	ssize_t bytes_read = 0;
+	loff_t offset = 0;
+
+	f = filp_open(filename, O_RDONLY, 0);
+	if (!f) {
+		pr_err("Failed to open file %s\n", filename);
+		return -ENOENT;
+	}
+
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+	{
+		bytes_read = vfs_read(f, buffer, size, &offset);
+	}
+	set_fs(old_fs);
+
+	filp_close(f, NULL);
+
+	return bytes_read;
+}
+
 static uint64_t hash(unsigned long hostid, unsigned long num) {
 	// Note that these magic numbers are well known constants for hashing
 	// See splitmix64
@@ -59,12 +84,16 @@ static uint64_t hash(unsigned long hostid, unsigned long num) {
 }
 
 static void get_mac_address(char* mac_addr, struct pci_dev *pdev) {
-	unsigned long hostid = (unsigned long)gethostid();
-	unsigned char pcie_num = pdev->slot->number;
 	int i;
+	char machine_id_str[33];
+	unsigned long long machine_id;
+	unsigned char pcie_num = pdev->slot->number;
+
+	read_file("/etc/machine-id", machine_id_str, 33);
+	kstrtoull(machine_id_str, 16, &machine_id)
 
 	// Hashing
-	uint64_t hash = hash(hostid, pcie_num);
+	uint64_t hash = hash(machine_id, pcie_num);
 
 	// Convert to MAC address
 	// Note that x2:xx:xx:xx:xx:xx is Locally Administered MAC Address
