@@ -61,6 +61,9 @@ enum {
     RUN_MODE_LOOPBACK,
     RUN_MODE_PERFORMANCE,
     RUN_MODE_DEBUG,
+#ifdef ONE_QUEUE_TSN
+    RUN_MODE_PCAP,
+#endif
 
     RUN_MODE_CNT,
 };

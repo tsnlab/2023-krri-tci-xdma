@@ -17,8 +17,8 @@
 #include <fcntl.h>
 #include <time.h>
 
-#include "xdma_common.h"
 #include "platform_config.h"
+#include "xdma_common.h"
 #include "buffer_handler.h"
 
 #include "../libxdma/api_xdma.h"
@@ -177,6 +177,83 @@ static void receiver_in_normal_mode(char* devname, int fd, uint64_t size) {
     }
     set_register(REG_TSN_CONTROL, 0);
 }
+
+#ifdef ONE_QUEUE_TSN
+static void dump_rx_packet_to_file(unsigned char* buffer, int len) {
+
+    FILE *fp;
+    char *filename = "./rx_packet.txt";
+    char pbuffer[16 * 3];
+
+    fp = fopen(filename, "a+");
+    if (fp == NULL) {
+        printf("%s 파일을 열 수 없습니다.\n", filename);
+        return;
+    }
+
+    int i = 0;
+    fprintf(fp, "[Buffer]\n");
+
+    while (i < len) {
+        int j = 0;
+        memset(pbuffer, 0, sizeof(pbuffer));
+        while (j < 16) {
+            if (i + j >= len) {
+                break;
+            }
+            sprintf(pbuffer + (j * 3), "%02x ", buffer[i + j] & 0xFF);
+            j++;
+        }
+        fprintf(fp, "%s\n", pbuffer);
+        i += 16;
+    }
+    fprintf(fp, "\n");
+
+    fclose(fp);
+}
+
+static void receiver_in_pcap_mode(char* devname, int fd, uint64_t size) {
+
+    BUF_POINTER buffer;
+    int bytes_rcv;
+    struct tsn_rx_buffer* rx;
+
+    set_register(REG_TSN_CONTROL, 1);
+    while (rx_thread_run) {
+        buffer = buffer_pool_alloc();
+        if(buffer == NULL) {
+            debug_printf("FAILURE: Could not buffer_pool_alloc.\n");
+            rx_stats.rxNoBuffer++;
+            continue;
+        }
+
+        bytes_rcv = 0;
+        if(xdma_api_read_to_buffer_with_fd(devname, fd, buffer, 
+                                           size, &bytes_rcv)) {
+            if(buffer_pool_free(buffer)) {
+                debug_printf("FAILURE: Could not buffer_pool_free.\n");
+            }
+            rx_stats.rxErrors++;
+            continue;
+        }
+        if(bytes_rcv > MAX_BUFFER_LENGTH) {
+            if(buffer_pool_free(buffer)) {
+                debug_printf("FAILURE: Could not buffer_pool_free.\n");
+            }
+            rx_stats.rxErrors++;
+            continue;
+        }
+        rx_stats.rxPackets++;
+        rx_stats.rxBytes += bytes_rcv;
+
+        rx = (struct tsn_rx_buffer*)buffer;
+        dump_rx_packet_to_file((unsigned char*)rx->data, rx->metadata.frame_length);
+
+        xbuffer_enqueue((QueueElement)buffer);
+    }
+    set_register(REG_TSN_CONTROL, 0);
+}
+#endif
 
 void receiver_in_loopback_mode(char* devname, int fd, char *fn, uint64_t size) {
 
@@ -340,6 +417,11 @@ void* receiver_thread(void* arg) {
     case RUN_MODE_DEBUG:
         receiver_in_debug_mode(p_arg->devname, fd, p_arg->fn, p_arg->size);
     break;
+#ifdef ONE_QUEUE_TSN
+    case RUN_MODE_PCAP:
+        receiver_in_pcap_mode(p_arg->devname, fd, p_arg->size);
+    break;
+#endif
     default:
         printf("%s - Unknown mode(%d)\n", __func__, p_arg->mode);
     break;

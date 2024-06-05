@@ -775,6 +775,7 @@ void* sender_thread(void* arg) {
     switch(p_arg->mode) {
 #ifdef ONE_QUEUE_TSN
     case RUN_MODE_NORMAL:
+    case RUN_MODE_PCAP:
         sender_in_normal_mode(p_arg->devname, tx_fd, p_arg->size);
     break;
 #else
