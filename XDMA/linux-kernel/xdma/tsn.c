@@ -359,10 +359,6 @@ int tsn_set_qav(struct tsn_config* config, struct tc_cbs_qopt_offload* qopt) {
 int tsn_set_qbv(struct tsn_config* config, struct tc_taprio_qopt_offload* qopt) {
 	u32 i, j;
 
-	if (!qopt->enable) {
-		return 0;
-	}
-
 	if (qopt->num_entries > MAX_QBV_SLOTS) {
 		return -EINVAL;
 	}
