@@ -115,6 +115,7 @@ typedef uintptr_t UINTPTR;
 #define REG_TEMAC_STATUS                            0x0500
 #define REG_TEMAC_RX_STAT                           0x0510
 #define REG_TEMAC_TX_STAT                           0x0514
+#define REG_TEMAC_FCS_COUNT                         0x0520
 
 #define TSCB_ADDRESS                            (0x44C00000)
 

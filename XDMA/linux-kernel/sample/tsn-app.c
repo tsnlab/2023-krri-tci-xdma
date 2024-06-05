@@ -60,6 +60,7 @@ struct reginfo reg_rx[] = {
     {"MRIB debug", REG_MRIB_DEBUG},
 #endif
     {"TEMAC rx statistics", REG_TEMAC_RX_STAT},
+    {"TEMAC FCS error count", REG_TEMAC_FCS_COUNT},
     {"", -1}
 };
 
