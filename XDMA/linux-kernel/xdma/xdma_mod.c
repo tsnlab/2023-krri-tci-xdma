@@ -63,7 +63,14 @@ static bool get_host_id(uint64_t* hostid) {
 		goto end;
 	}
 
-	kstrtoull(buf, 16, hostid);
+	// Cut it to 64-bit
+	((char*)buf)[16] = '\0';
+
+	if (ret = kstrtoull(buf, 16, hostid)) {
+		pr_err("Failed to convert machine-id to uint64_t: %d\n", ret);
+		ret = false;
+		goto end;
+	}
 	ret = true;
 
 end:
