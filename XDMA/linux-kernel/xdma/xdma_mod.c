@@ -96,13 +96,13 @@ static void get_mac_address(char* mac_addr, struct pci_dev *pdev) {
 	uint64_t hash = hash(machine_id, pcie_num);
 
 	// Convert to MAC address
-	// Note that x2:xx:xx:xx:xx:xx is Locally Administered MAC Address
 	for (i = 0; i < ETH_ALEN; i++) {
 		mac_addr[i] = (hash >> (i * 8)) & 0xFF;
 	}
 
-	// Make addr = x2:xx:xx:xx:xx:xx
-	mac_addr[0] = mac_addr[0] & 0xf0 | 0x02;
+	// Adjust U/L, I/G bits
+	mac_addr[0] &= ~0x1; // Unicast
+	mac_addr[0] &= ~0x2; // Global
 }
 
 static const struct pci_device_id pci_ids[] = {
