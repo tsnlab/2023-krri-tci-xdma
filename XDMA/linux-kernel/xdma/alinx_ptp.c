@@ -56,6 +56,10 @@ static void set_cycle_1s(struct ptp_device_data *ptp_data, u32 cycle_1s) {
         set_pps_cycle_1s(ptp_data->xdev, cycle_1s);
 }
 
+u32 ptp_get_cycle_1s(struct ptp_device_data *ptp) {
+        return read32(ptp->xdev->bar[0] + REG_CYCLE_1S);
+}
+
 static int alinx_ptp_gettimex(struct ptp_clock_info *ptp, struct timespec64 *ts,
 			  struct ptp_system_timestamp *sts)
 {

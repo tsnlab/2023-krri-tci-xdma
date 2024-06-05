@@ -2,7 +2,6 @@
 #define ALINX_PTP_H
 
 #include <linux/ptp_clock_kernel.h>
-// #include "xdma_mod.h"
 #include "libxdma.h"
 
 #define REG_NEXT_PULSE_AT_HI 0x002c
@@ -34,5 +33,7 @@ struct ptp_device_data {
 
 struct ptp_device_data *ptp_device_init(struct device *dev, struct xdma_dev *xdev);
 void ptp_device_destroy(struct ptp_device_data *ptp);
+
+u32 ptp_get_cycle_1s(struct ptp_device_data *ptp);
 
 #endif /* ALINX_PTP_H */
