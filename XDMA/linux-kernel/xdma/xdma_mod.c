@@ -47,37 +47,36 @@ MODULE_LICENSE("Dual BSD/GPL");
 /* SECTION: Module global variables */
 static int xpdev_cnt;
 
-static ssize_t read_file(char* filename, void* buffer, size_t size) {
-	struct file* f;
-	mm_segment_t old_fs;
-	ssize_t bytes_read = 0;
-	loff_t offset = 0;
-
-	f = filp_open(filename, O_RDONLY, 0);
-	if (!f) {
-		pr_err("Failed to open file %s\n", filename);
-		return -ENOENT;
+static bool get_host_id(uint64_t* hostid) {
+	void* buf = NULL;
+	loff_t offsize;
+	int ret;
+	ret = kernel_read_file_from_path("/etc/machine-id", &buf, &offsize, INT_MAX, READING_UNKNOWN);
+	if (ret < 0) {
+		pr_err("Failed to read machine-id\n");
+		return false;
 	}
 
-
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
-	{
-		bytes_read = vfs_read(f, buffer, size, &offset);
+	if (offsize != 33) {
+		pr_err("Invalid machine-id\n");
+		ret = false;
+		goto end;
 	}
-	set_fs(old_fs);
 
-	filp_close(f, NULL);
+	kstrtoull(buf, 16, hostid);
+	ret = true;
 
-	return bytes_read;
+end:
+	vfree(buf);
+	return ret;
 }
 
 static uint64_t hash(unsigned long hostid, unsigned long num) {
 	// Note that these magic numbers are well known constants for hashing
 	// See splitmix64
 	uint64_t hash = hostid;
-	hash = ((hash >> 30) ^ (hash ^ num)) * UINT64_C(0xbf58476d1ce4e5b9);
-	hash = ((hash >> 27) ^ hash) * UINT64_C(0x94d049bb133111eb);
+	hash = ((hash >> 30) ^ (hash ^ num)) * U64_C(0xbf58476d1ce4e5b9);
+	hash = ((hash >> 27) ^ hash) * U64_C(0x94d049bb133111eb);
 	hash = (hash >> 31) ^ hash;
 
 	return hash;
@@ -85,19 +84,20 @@ static uint64_t hash(unsigned long hostid, unsigned long num) {
 
 static void get_mac_address(char* mac_addr, struct pci_dev *pdev) {
 	int i;
-	char machine_id_str[33];
+	void* data = NULL;
 	unsigned long long machine_id;
 	unsigned char pcie_num = pdev->slot->number;
 
-	read_file("/etc/machine-id", machine_id_str, 33);
-	kstrtoull(machine_id_str, 16, &machine_id)
+	if (get_host_id(&machine_id) == false) {
+		machine_id = 0; // Fallback value
+	}
 
 	// Hashing
-	uint64_t hash = hash(machine_id, pcie_num);
+	uint64_t hashed_num = hash(machine_id, pcie_num);
 
 	// Convert to MAC address
 	for (i = 0; i < ETH_ALEN; i++) {
-		mac_addr[i] = (hash >> (i * 8)) & 0xFF;
+		mac_addr[i] = (hashed_num >> (i * 8)) & 0xFF;
 	}
 
 	// Adjust U/L, I/G bits
