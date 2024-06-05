@@ -375,6 +375,7 @@ int tsn_set_qbv(struct tsn_config* config, struct tc_taprio_qopt_offload* qopt) 
 		}
 	}
 
+	memset(&config->qbv_baked, 0, sizeof(struct qbv_baked_config));
 	bake_qbv_config(config);
 
 	return 0;
