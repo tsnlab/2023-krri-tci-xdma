@@ -120,6 +120,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
 {
         struct xdma_private *priv = netdev_priv(ndev);
         struct xdma_dev *xdev = priv->xdev;
+        struct xdma_pci_dev *xpdev = dev_get_drvdata(&priv->pdev->dev);
         int padding = 0;
         u32 w;
         u32 sys_count_low;
@@ -173,7 +174,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         sys_count_low = (uint32_t)(ioread32(xdev->bar[0] + 0x0384) & 0x1FFFFFFF);
 
         /* Set the fromtick & to_tick values based on the lower 29 bits of the system count */
-        tsn_fill_metadata(&xdev->tsn_config, sys_count_low * 8, skb);  // TODO: get CLOCK_1S from ptp
+        tsn_fill_metadata(&xdev->tsn_config, sys_count_low * 8, ptp_get_cycle_1s(xpdev->ptp), skb);
 
 #if DEBUG_ONE_QUEUE_TSN_
         pr_err("0x%08x  0x%08x  0x%08x  %4d  %1d",
