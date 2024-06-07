@@ -56,3 +56,20 @@ u32 alinx_get_cycle_1s(struct pci_dev *pdev) {
         u32 ret = read32(xdev->bar[0] + REG_CYCLE_1S);
         return ret ? ret : RESERVED_CYCLE;
 }
+
+timestamp_t alinx_read_tx_timestamp(struct pci_dev* pdev, int tx_id) {
+        struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+
+        switch (tx_id) {
+        case 1:
+                return ((timestamp_t)read32(xdev->bar[0] + REG_TX_TIMESTAMP1_HIGH) << 32 | read32(xdev->bar[0] + REG_TX_TIMESTAMP1_LOW));
+        case 2:
+                return ((timestamp_t)read32(xdev->bar[0] + REG_TX_TIMESTAMP2_HIGH) << 32 | read32(xdev->bar[0] + REG_TX_TIMESTAMP2_LOW));
+        case 3:
+                return ((timestamp_t)read32(xdev->bar[0] + REG_TX_TIMESTAMP3_HIGH) << 32 | read32(xdev->bar[0] + REG_TX_TIMESTAMP3_LOW));
+        case 4:
+                return ((timestamp_t)read32(xdev->bar[0] + REG_TX_TIMESTAMP4_HIGH) << 32 | read32(xdev->bar[0] + REG_TX_TIMESTAMP4_LOW));
+        default:
+                return 0;
+        }
+}

@@ -7,4 +7,9 @@
 struct ptp_device_data *ptp_device_init(struct device *dev, struct xdma_dev *xdev);
 void ptp_device_destroy(struct ptp_device_data *ptp);
 
+sysclock_t alinx_timestamp_to_sysclock(struct pci_dev* pdev, timestamp_t timestamp);
+timestamp_t alinx_sysclock_to_timestamp(struct pci_dev* pdev, sysclock_t sysclock);
+timestamp_t alinx_get_rx_timestamp(struct pci_dev* pdev, sysclock_t sysclock);
+timestamp_t alinx_get_tx_timestamp(struct pci_dev* pdev, int tx_id);
+
 #endif /* ALINX_PTP_H */

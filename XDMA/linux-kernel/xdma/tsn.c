@@ -27,11 +27,6 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 static void append_buffer_track(struct buffer_tracker* tracker, sysclock_t free_at);
 static void cleanup_buffer_track(struct buffer_tracker* tracker, sysclock_t now);
 
-static sysclock_t timestamp_to_sysclock(timestamp_t timestamp, uint64_t cycle_1s) {
-	double ticks_scale = (double)NS_IN_1S / cycle_1s;
-	return timestamp / ticks_scale;
-}
-
 uint8_t tsn_get_vlan_prio(const uint8_t* payload) {
 	struct ethhdr* eth = (struct ethhdr*)payload;
 	uint16_t eth_type = eth->h_proto;
@@ -61,14 +56,14 @@ static bool is_gptp_packet(const uint8_t* payload) {
  * @param tx_buf: The frame to be sent
  * @return: true if the frame reserves timestamps, false is for drop
  */
-bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, uint64_t cycle_1s, struct sk_buff* skb) {
+bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* skb) {
 	struct tx_buffer* tx_buf = (struct tx_buffer*)skb->data;
 	struct tx_metadata* metadata = (struct tx_metadata*)&tx_buf->metadata;
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct tsn_config* tsn_config = &xdev->tsn_config;
 	struct buffer_tracker* buffer_tracker = &tsn_config->buffer_tracker;
 
-	cleanup_buffer_track(buffer_tracker, timestamp_to_sysclock(now, cycle_1s));
+	cleanup_buffer_track(buffer_tracker, alinx_timestamp_to_sysclock(pdev, now));
 
 	uint8_t vlan_prio = tsn_get_vlan_prio(tx_buf->data);
 	bool is_gptp = is_gptp_packet(tx_buf->data);
@@ -113,13 +108,13 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, uint64_t cycle_1s,
 	}
 
 	// TODO: Convert ns to sysclock
-	metadata->from.tick = timestamp_to_sysclock(timestamps.from, cycle_1s);
+	metadata->from.tick = alinx_timestamp_to_sysclock(pdev, timestamps.from);
 	metadata->from.priority = queue_prio;
-	metadata->to.tick = timestamp_to_sysclock(timestamps.to, cycle_1s);
+	metadata->to.tick = alinx_timestamp_to_sysclock(pdev, timestamps.to);
 	metadata->to.priority = queue_prio;
-	metadata->delay_from.tick = timestamp_to_sysclock(timestamps.delay_from, cycle_1s);
+	metadata->delay_from.tick = alinx_timestamp_to_sysclock(pdev, timestamps.delay_from);
 	metadata->delay_from.priority = queue_prio;
-	metadata->delay_to.tick = timestamp_to_sysclock(timestamps.delay_to, cycle_1s);
+	metadata->delay_to.tick = alinx_timestamp_to_sysclock(pdev, timestamps.delay_to);
 	metadata->delay_to.priority = queue_prio;
 
 	// Update available_ats
@@ -128,7 +123,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, uint64_t cycle_1s,
 	tsn_config->total_available_at += duration_ns;
 
 	timestamp_t free_at = max(timestamps.to + duration_ns, tsn_config->total_available_at);
-	append_buffer_track(buffer_tracker, timestamp_to_sysclock(free_at, cycle_1s));
+	append_buffer_track(buffer_tracker, alinx_timestamp_to_sysclock(pdev, free_at));
 
 	return true;
 }

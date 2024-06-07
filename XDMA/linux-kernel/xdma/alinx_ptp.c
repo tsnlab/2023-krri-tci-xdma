@@ -11,6 +11,8 @@
 #define xdma_debug(...) {}
 #endif  // __LIBXDMA_DEBUG__
 
+#define NS_IN_1S 1000000000
+
 static timestamp_t alinx_get_timestamp(u64 sys_count, double ticks_scale, u64 offset) {
         timestamp_t timestamp = ticks_scale * sys_count;
 
@@ -22,7 +24,7 @@ static void set_pulse_at(struct ptp_device_data *ptp_data, sysclock_t sys_count)
         sysclock_t next_pulse_sysclock;
         struct xdma_dev *xdev = ptp_data->xdev;
 
-        current_ns = alinx_get_timestamp(sys_count, ptp_data->ticks_scale, ptp_data->offset);;
+        current_ns = alinx_get_timestamp(sys_count, ptp_data->ticks_scale, ptp_data->offset);
         next_pulse_ns = current_ns - (current_ns % 1000000000) + 1000000000;
         next_pulse_sysclock = ((double)(next_pulse_ns - ptp_data->offset) / ptp_data->ticks_scale);
         xdma_debug("ptp%u: %s sys_count=%llu, current_ns=%llu, next_pulse_ns=%llu, next_pulse_sysclock=%llu",
@@ -34,6 +36,38 @@ static void set_pulse_at(struct ptp_device_data *ptp_data, sysclock_t sys_count)
 static void set_cycle_1s(struct ptp_device_data *ptp_data, u32 cycle_1s) {
         xdma_debug("ptp%u: %s cycle_1s=%u", ptp_data->ptp_id, __func__, cycle_1s);
         alinx_set_cycle_1s(ptp_data->xdev->pdev, cycle_1s);
+}
+
+sysclock_t alinx_timestamp_to_sysclock(struct pci_dev* pdev, timestamp_t timestamp) {
+        struct xdma_pci_dev *xpdev = dev_get_drvdata(&pdev->dev);
+        struct ptp_device_data* ptp_data = xpdev->ptp;
+
+        double ticks_scale = (double)NS_IN_1S / alinx_get_cycle_1s(pdev);
+        u64 offset = ptp_data->offset;
+
+        return (timestamp - offset) / ticks_scale;
+}
+
+timestamp_t alinx_sysclock_to_timestamp(struct pci_dev* pdev, sysclock_t sysclock) {
+        struct xdma_pci_dev *xpdev = dev_get_drvdata(&pdev->dev);
+        struct ptp_device_data* ptp_data = xpdev->ptp;
+
+        double ticks_scale = (double)NS_IN_1S / alinx_get_cycle_1s(pdev);
+        u64 offset = ptp_data->offset;
+
+        return alinx_get_timestamp(sysclock, ticks_scale, offset);
+}
+
+timestamp_t alinx_get_rx_timestamp(struct pci_dev* pdev, sysclock_t sysclock) {
+        int64_t adjustment = 0; // TODO: Use exact value
+
+        return alinx_sysclock_to_timestamp(pdev, sysclock) + adjustment;
+}
+
+timestamp_t alinx_get_tx_timestamp(struct pci_dev* pdev, int tx_id) {
+        int64_t adjustment = 0; // TODO: Use exact value
+
+        return alinx_read_tx_timestamp(pdev, tx_id) + adjustment;
 }
 
 static int alinx_ptp_gettimex(struct ptp_clock_info *ptp, struct timespec64 *ts,

@@ -18,6 +18,16 @@ typedef uint32_t u32
 #define REG_SYS_CLOCK_HI 0x0380
 #define REG_SYS_CLOCK_LO 0x0384
 
+#define REG_TX_TIMESTAMP_COUNT 0x0300
+#define REG_TX_TIMESTAMP1_HIGH 0x0310
+#define REG_TX_TIMESTAMP1_LOW 0x0314
+#define REG_TX_TIMESTAMP2_HIGH 0x0320
+#define REG_TX_TIMESTAMP2_LOW 0x0324
+#define REG_TX_TIMESTAMP3_HIGH 0x0330
+#define REG_TX_TIMESTAMP3_LOW 0x0334
+#define REG_TX_TIMESTAMP4_HIGH 0x0340
+#define REG_TX_TIMESTAMP4_LOW 0x0344
+
 /* 125 MHz */
 #define TICKS_SCALE 8.0
 #define RESERVED_CYCLE 125000000
@@ -111,5 +121,6 @@ void alinx_set_pulse_at(struct pci_dev *pdev, sysclock_t time);
 sysclock_t alinx_get_sys_clock(struct pci_dev *pdev);
 void alinx_set_cycle_1s(struct pci_dev *pdev, u32 cycle_1s);
 u32 alinx_get_cycle_1s(struct pci_dev *pdev);
+timestamp_t alinx_read_tx_timestamp(struct pci_dev *pdev, int tx_id);
 
 #endif  /* ALINX_ARCH_H */
