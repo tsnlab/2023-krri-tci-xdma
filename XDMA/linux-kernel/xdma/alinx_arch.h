@@ -11,6 +11,7 @@ typedef uint32_t u32
 
 #include <linux/pci.h>
 #include <linux/ptp_clock_kernel.h>
+#include <net/pkt_sched.h>
 
 #define REG_NEXT_PULSE_AT_HI 0x002c
 #define REG_NEXT_PULSE_AT_LO 0x0030
@@ -27,6 +28,8 @@ typedef uint32_t u32
 #define REG_TX_TIMESTAMP3_LOW 0x0334
 #define REG_TX_TIMESTAMP4_HIGH 0x0340
 #define REG_TX_TIMESTAMP4_LOW 0x0344
+
+#define TX_QUEUE_COUNT 3
 
 /* 125 MHz */
 #define TICKS_SCALE 8.0
@@ -56,6 +59,15 @@ struct ptp_device_data {
 #ifdef __LIBXDMA_DEBUG__
         u32 ptp_id;
 #endif
+};
+
+struct mqprio_config {
+	bool enabled;
+	u8 num_tc;
+	u8 prio_tc_map[TC_QOPT_BITMASK + 1];
+	u16 count[TC_QOPT_MAX_QUEUE];
+	// Ignore offsets
+	// u16 offset[TC_QOPT_MAX_QUEUE];
 };
 
 struct qbv_slot {
@@ -109,6 +121,7 @@ struct tsn_config {
 	struct qbv_config qbv;
 	struct qbv_baked_config qbv_baked;
 	struct qav_state qav[VLAN_PRIO_COUNT];
+	struct mqprio_config mqprio;
 	struct buffer_tracker buffer_tracker;
 	timestamp_t queue_available_at[TSN_PRIO_COUNT];
 	timestamp_t total_available_at;

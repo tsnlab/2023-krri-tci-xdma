@@ -1,4 +1,6 @@
 #include <net/pkt_sched.h>
+#include <net/pkt_cls.h>
+#include <net/flow_offload.h>
 
 #include "xdma_netdev.h"
 #include "xdma_mod.h"
@@ -204,14 +206,25 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         return NETDEV_TX_OK;
 }
 
+static LIST_HEAD(xdma_block_cb_list);
+
+static int xdma_setup_tc_block_cb(enum tc_setup_type type, void *type_data, void *cb_priv) {
+        // If mqprio is only used for queue mapping this should not be called
+        return -EOPNOTSUPP;
+}
+
 int xdma_netdev_setup_tc(struct net_device *ndev, enum tc_setup_type type, void *type_data) {
         struct xdma_private *priv = netdev_priv(ndev);
 
         switch (type) {
+        case TC_SETUP_QDISC_MQPRIO:
+                return tsn_set_mqprio(priv->pdev, (struct tc_mqprio_qopt_offload*)type_data);
         case TC_SETUP_QDISC_CBS:
                 return tsn_set_qav(priv->pdev, (struct tc_cbs_qopt_offload*)type_data);
         case TC_SETUP_QDISC_TAPRIO:
                 return tsn_set_qbv(priv->pdev, (struct tc_taprio_qopt_offload*)type_data);
+        case TC_SETUP_BLOCK:
+                return flow_block_cb_setup_simple(type_data, &xdma_block_cb_list, xdma_setup_tc_block_cb, priv, priv, true);
         default:
                 return -ENOTSUPP;
         }

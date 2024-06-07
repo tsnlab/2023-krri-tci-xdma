@@ -27,12 +27,15 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 static void append_buffer_track(struct buffer_tracker* tracker, sysclock_t free_at);
 static void cleanup_buffer_track(struct buffer_tracker* tracker, sysclock_t now);
 
-uint8_t tsn_get_vlan_prio(const uint8_t* payload) {
-	struct ethhdr* eth = (struct ethhdr*)payload;
+static uint8_t tsn_get_vlan_prio(struct tsn_config* tsn_config, struct sk_buff* skb) {
+	struct tx_buffer* tx_buf = (struct tx_buffer*)skb->data;
+	struct ethhdr* eth = (struct ethhdr*)(tx_buf->data);
 	uint16_t eth_type = eth->h_proto;
 	if (eth_type == ETH_P_8021Q) {
-		struct tsn_vlan_hdr* vlan = (struct tsn_vlan_hdr*)(payload + ETH_HLEN);
+		struct tsn_vlan_hdr* vlan = (struct tsn_vlan_hdr*)(tx_buf->data + ETH_HLEN);
 		return vlan->pcp;
+	} else if (tsn_config->mqprio.enabled) {
+		return tsn_config->mqprio.count[tsn_config->mqprio.prio_tc_map[skb->priority]];
 	}
 	//XXX: Or you can use skb->priority;
 	return 0;
@@ -65,7 +68,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 
 	cleanup_buffer_track(buffer_tracker, alinx_timestamp_to_sysclock(pdev, now));
 
-	uint8_t vlan_prio = tsn_get_vlan_prio(tx_buf->data);
+	uint8_t vlan_prio = tsn_get_vlan_prio(tsn_config, skb);
 	bool is_gptp = is_gptp_packet(tx_buf->data);
 
 	enum tsn_prio queue_prio;
@@ -344,10 +347,43 @@ static void cleanup_buffer_track(struct buffer_tracker* tracker, sysclock_t now)
 	}
 }
 
+int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* qopt) {
+	u8 i;
+
+	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+	struct tsn_config* config = &xdev->tsn_config;
+	struct mqprio_config mqprio;
+	memset(&mqprio, 0, sizeof(struct mqprio_config));
+
+	if (qopt->mode != TC_MQPRIO_MODE_DCB) {
+		// TODO: shaper, min_rate, max_rate parameters
+		return -ENOTSUPP;
+	}
+
+	mqprio.enabled = true;
+	mqprio.num_tc = qopt->qopt.num_tc;
+
+	for (i = 0; i < TC_QOPT_BITMASK; i++) {
+		// TC filters prio_tc_map[i] > num_tc
+		mqprio.prio_tc_map[i] = qopt->qopt.prio_tc_map[i];
+	}
+
+	for (i = 0; i < mqprio.num_tc; i++) {
+		if (mqprio.count[i] >= VLAN_PRIO_COUNT) {
+			return -EINVAL;
+		}
+		mqprio.count[i] = qopt->qopt.prio_tc_map[i];
+	}
+
+	memcpy(&config->mqprio, &mqprio, sizeof(struct mqprio_config));
+
+	return 0;
+}
+
 int tsn_set_qav(struct pci_dev* pdev, struct tc_cbs_qopt_offload* qopt) {
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct tsn_config* config = &xdev->tsn_config;
-	if (qopt->queue != 0) {
+	if (qopt->queue < 0 || qopt->queue >= VLAN_PRIO_COUNT) {
 		return -EINVAL;
 	}
 

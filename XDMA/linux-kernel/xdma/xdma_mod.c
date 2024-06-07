@@ -274,8 +274,7 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	iowrite32(0x10, xdev->bar[0] + 0x620);
 
 	/* Allocate the network device */
-	// ndev = alloc_etherdev(sizeof(struct xdma_private));
-	ndev = alloc_etherdev_mq(sizeof(struct xdma_private), 4);
+	ndev = alloc_etherdev_mq(sizeof(struct xdma_private), TX_QUEUE_COUNT);
 	if (!ndev) {
 		pr_err("alloc_etherdev failed\n");
 		rv = -ENOMEM;

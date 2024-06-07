@@ -3,6 +3,7 @@
 #include <linux/skbuff.h>
 #include <linux/pci.h>
 #include <net/pkt_sched.h>
+#include <net/pkt_cls.h>
 
 typedef uint64_t timestamp_t;
 typedef uint64_t sysclock_t;
@@ -25,8 +26,9 @@ struct tsn_vlan_hdr {
 	uint16_t vid:12;
 } __attribute__((packed, scalar_storage_order("big-endian")));
 
-uint8_t tsn_get_vlan_prio(const uint8_t* payload);
 bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* skb);
 void tsn_init_configs(struct pci_dev* config);
+
+int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* qopt);
 int tsn_set_qav(struct pci_dev* config, struct tc_cbs_qopt_offload* qopt);
 int tsn_set_qbv(struct pci_dev* config, struct tc_taprio_qopt_offload* qopt);
