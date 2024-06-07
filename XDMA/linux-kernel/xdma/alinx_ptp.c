@@ -11,29 +11,13 @@
 #define xdma_debug(...) {}
 #endif  // __LIBXDMA_DEBUG__
 
-static void set_pps_pulse_at(struct xdma_dev *xdev, sysclock_t time) {
-        write32((u32)(time >> 32), xdev->bar[0] + REG_NEXT_PULSE_AT_HI);
-        write32((u32)time, xdev->bar[0] + REG_NEXT_PULSE_AT_LO);
-}
-
-static sysclock_t get_sys_clock(struct xdma_dev *xdev)
-{
-        timestamp_t clock;
-        clock = ((u64)read32(xdev->bar[0] + REG_SYS_CLOCK_HI) << 32) |
-                read32(xdev->bar[0] + REG_SYS_CLOCK_LO);
-
-        return clock;
-}
-
-static timestamp_t alinx_get_timestamp(u64 sys_count, double ticks_scale, u64 offset)
-{
+static timestamp_t alinx_get_timestamp(u64 sys_count, double ticks_scale, u64 offset) {
         timestamp_t timestamp = ticks_scale * sys_count;
 
         return timestamp + offset;
 }
 
-static void set_pulse_at(struct ptp_device_data *ptp_data, sysclock_t sys_count)
-{
+static void set_pulse_at(struct ptp_device_data *ptp_data, sysclock_t sys_count) {
         timestamp_t current_ns, next_pulse_ns;
         sysclock_t next_pulse_sysclock;
         struct xdma_dev *xdev = ptp_data->xdev;
@@ -44,21 +28,12 @@ static void set_pulse_at(struct ptp_device_data *ptp_data, sysclock_t sys_count)
         xdma_debug("ptp%u: %s sys_count=%llu, current_ns=%llu, next_pulse_ns=%llu, next_pulse_sysclock=%llu",
                    ptp_data->ptp_id, __func__, sys_count, current_ns, next_pulse_ns, next_pulse_sysclock);
 
-        set_pps_pulse_at(xdev, next_pulse_sysclock);
-}
-
-static void set_pps_cycle_1s(struct xdma_dev *xdev, u32 cycle_1s) {
-        write32(cycle_1s, xdev->bar[0] + REG_CYCLE_1S);
+        alinx_set_pulse_at(xdev->pdev, next_pulse_sysclock);
 }
 
 static void set_cycle_1s(struct ptp_device_data *ptp_data, u32 cycle_1s) {
         xdma_debug("ptp%u: %s cycle_1s=%u", ptp_data->ptp_id, __func__, cycle_1s);
-        set_pps_cycle_1s(ptp_data->xdev, cycle_1s);
-}
-
-u32 ptp_get_cycle_1s(struct ptp_device_data *ptp) {
-        u32 ret = read32(ptp->xdev->bar[0] + REG_CYCLE_1S);
-        return ret ? ret : RESERVED_CYCLE;
+        alinx_set_cycle_1s(ptp_data->xdev->pdev, cycle_1s);
 }
 
 static int alinx_ptp_gettimex(struct ptp_clock_info *ptp, struct timespec64 *ts,
@@ -75,7 +50,7 @@ static int alinx_ptp_gettimex(struct ptp_clock_info *ptp, struct timespec64 *ts,
         spin_lock_irqsave(&ptp_data->lock, flags);
 
         ptp_read_system_prets(sts);
-        clock = get_sys_clock(ptp_data->xdev);
+        clock = alinx_get_sys_clock(ptp_data->xdev->pdev);
         ptp_read_system_postts(sts);
 
         timestamp = alinx_get_timestamp(clock, ptp_data->ticks_scale, ptp_data->offset);
@@ -109,7 +84,7 @@ static int alinx_ptp_settime(struct ptp_clock_info *ptp, const struct timespec64
 
         ptp_data->ticks_scale = TICKS_SCALE;
 
-        sys_clock = get_sys_clock(xdev);
+        sys_clock = alinx_get_sys_clock(xdev->pdev);
         hw_timestamp = alinx_get_timestamp(sys_clock, ptp_data->ticks_scale, ptp_data->offset);
 
         ptp_data->offset = host_timestamp - hw_timestamp;
@@ -140,7 +115,7 @@ static int alinx_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
         ptp_data->offset += delta;
 
         /* Set pulse_at */
-        sys_clock = get_sys_clock(ptp_data->xdev);
+        sys_clock = alinx_get_sys_clock(ptp_data->xdev->pdev);
         set_pulse_at(ptp_data, sys_clock);
 
         spin_unlock_irqrestore(&ptp_data->lock, flags);
@@ -167,7 +142,7 @@ static int alinx_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 
         spin_lock_irqsave(&ptp_data->lock, flags);
 
-        sys_clock = get_sys_clock(xdev);
+        sys_clock = alinx_get_sys_clock(xdev->pdev);
 
         if (scaled_ppm == 0) {
                 goto exit;
@@ -193,7 +168,7 @@ static int alinx_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
         set_cycle_1s(ptp_data, cycle_1s);
 
         /* Set pulse_at */
-        sys_clock = get_sys_clock(xdev);
+        sys_clock = alinx_get_sys_clock(xdev->pdev);
         set_pulse_at(ptp_data, sys_clock);
 
         xdma_debug("ptp%u: %s scaled_ppm=%ld, offset=%llu, ticks_scale:%lf",

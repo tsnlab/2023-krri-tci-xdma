@@ -30,6 +30,7 @@
 #include "version.h"
 #include "xdma_netdev.h"
 #include "alinx_ptp.h"
+#include "alinx_arch.h"
 
 #define DRV_MODULE_NAME		"xdma"
 #define DRV_MODULE_DESC		"Xilinx XDMA Reference Driver"

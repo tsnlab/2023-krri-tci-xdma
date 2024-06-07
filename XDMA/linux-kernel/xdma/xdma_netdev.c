@@ -5,6 +5,7 @@
 #include "cdev_sgdma.h"
 #include "libxdma.h"
 #include "tsn.h"
+#include "alinx_arch.h"
 
 static void tx_desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len)
 {
@@ -174,7 +175,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         sys_count_low = (uint32_t)(ioread32(xdev->bar[0] + 0x0384) & 0x1FFFFFFF);
 
         /* Set the fromtick & to_tick values based on the lower 29 bits of the system count */
-        tsn_fill_metadata(&xdev->tsn_config, sys_count_low * 8, ptp_get_cycle_1s(xpdev->ptp), skb);
+        tsn_fill_metadata(&xdev->tsn_config, sys_count_low * 8, alinx_get_cycle_1s(xdev->pdev), skb);
 
 #if DEBUG_ONE_QUEUE_TSN_
         pr_err("0x%08x  0x%08x  0x%08x  %4d  %1d",
