@@ -2,7 +2,9 @@
 #include <linux/string.h>
 
 #include "alinx_ptp.h"
+#include "alinx_arch.h"
 #include "xdma_netdev.h"
+#include "libxdma.h"
 #include "tsn.h"
 
 #define NS_IN_1S 1000000000
@@ -59,9 +61,11 @@ static bool is_gptp_packet(const uint8_t* payload) {
  * @param tx_buf: The frame to be sent
  * @return: true if the frame reserves timestamps, false is for drop
  */
-bool tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t now, uint64_t cycle_1s, struct sk_buff* skb) {
+bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, uint64_t cycle_1s, struct sk_buff* skb) {
 	struct tx_buffer* tx_buf = (struct tx_buffer*)skb->data;
 	struct tx_metadata* metadata = (struct tx_metadata*)&tx_buf->metadata;
+	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+	struct tsn_config* tsn_config = &xdev->tsn_config;
 	struct buffer_tracker* buffer_tracker = &tsn_config->buffer_tracker;
 
 	cleanup_buffer_track(buffer_tracker, timestamp_to_sysclock(now, cycle_1s));
@@ -129,7 +133,9 @@ bool tsn_fill_metadata(struct tsn_config* tsn_config, timestamp_t now, uint64_t 
 	return true;
 }
 
-void tsn_init_configs(struct tsn_config* config) {
+void tsn_init_configs(struct pci_dev* pdev) {
+	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+	struct tsn_config* config = &xdev->tsn_config;
 	memset(config, 0, sizeof(struct tsn_config));
 
 	// Example Qbv configuration
@@ -343,7 +349,9 @@ static void cleanup_buffer_track(struct buffer_tracker* tracker, sysclock_t now)
 	}
 }
 
-int tsn_set_qav(struct tsn_config* config, struct tc_cbs_qopt_offload* qopt) {
+int tsn_set_qav(struct pci_dev* pdev, struct tc_cbs_qopt_offload* qopt) {
+	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+	struct tsn_config* config = &xdev->tsn_config;
 	if (qopt->queue != 0) {
 		return -EINVAL;
 	}
@@ -357,8 +365,10 @@ int tsn_set_qav(struct tsn_config* config, struct tc_cbs_qopt_offload* qopt) {
 	return 0;
 }
 
-int tsn_set_qbv(struct tsn_config* config, struct tc_taprio_qopt_offload* qopt) {
+int tsn_set_qbv(struct pci_dev* pdev, struct tc_taprio_qopt_offload* qopt) {
 	u32 i, j;
+	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+	struct tsn_config* config = &xdev->tsn_config;
 
 	if (qopt->num_entries > MAX_QBV_SLOTS) {
 		return -EINVAL;

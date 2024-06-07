@@ -32,7 +32,7 @@
 #include <linux/workqueue.h>
 #include <linux/netdevice.h>
 
-#include "tsn.h"
+#include "alinx_arch.h"
 
 /* Add compatibility checking for RHEL versions */
 #if defined(RHEL_RELEASE_CODE)

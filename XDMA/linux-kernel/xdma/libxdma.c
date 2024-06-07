@@ -4636,7 +4636,7 @@ void *xdma_device_open(const char *mname, struct pci_dev *pdev, int *user_max,
 	*c2h_channel_max = xdev->c2h_channel_max;
 
 	// Initialise TSN QoS
-	tsn_init_configs(&xdev->tsn_config);
+	tsn_init_configs(pdev);
 
 	xdma_device_flag_clear(xdev, XDEV_FLAG_OFFLINE);
 	return (void *)xdev;

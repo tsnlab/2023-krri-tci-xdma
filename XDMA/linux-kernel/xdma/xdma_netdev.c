@@ -175,7 +175,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         sys_count_low = (uint32_t)(ioread32(xdev->bar[0] + 0x0384) & 0x1FFFFFFF);
 
         /* Set the fromtick & to_tick values based on the lower 29 bits of the system count */
-        tsn_fill_metadata(&xdev->tsn_config, sys_count_low * 8, alinx_get_cycle_1s(xdev->pdev), skb);
+        tsn_fill_metadata(xdev->pdev, sys_count_low * 8, alinx_get_cycle_1s(xdev->pdev), skb);
 
 #if DEBUG_ONE_QUEUE_TSN_
         pr_err("0x%08x  0x%08x  0x%08x  %4d  %1d",
@@ -206,13 +206,12 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
 
 int xdma_netdev_setup_tc(struct net_device *ndev, enum tc_setup_type type, void *type_data) {
         struct xdma_private *priv = netdev_priv(ndev);
-        struct xdma_dev *xdev = priv->xdev;
 
         switch (type) {
         case TC_SETUP_QDISC_CBS:
-                return tsn_set_qav(&xdev->tsn_config, (struct tc_cbs_qopt_offload*)type_data);
+                return tsn_set_qav(priv->pdev, (struct tc_cbs_qopt_offload*)type_data);
         case TC_SETUP_QDISC_TAPRIO:
-                return tsn_set_qbv(&xdev->tsn_config, (struct tc_taprio_qopt_offload*)type_data);
+                return tsn_set_qbv(priv->pdev, (struct tc_taprio_qopt_offload*)type_data);
         default:
                 return -ENOTSUPP;
         }
