@@ -170,8 +170,6 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         /* Fill in the metadata */
         tx_metadata = (struct tx_metadata*)&tx_buffer->metadata;
         tx_metadata->frame_length = frame_length;
-        //tx_metadata->timestamp_id = 0;
-        //tx_metadata->fail_policy = 0;
 
         /* Reads the lower 29 bits of the system count. */
         sys_count_low = (uint32_t)alinx_get_sys_clock(priv->pdev) & 0x1FFFFFFF;

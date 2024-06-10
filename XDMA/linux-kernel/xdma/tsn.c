@@ -34,7 +34,7 @@ static uint8_t tsn_get_vlan_prio(struct tsn_config* tsn_config, struct sk_buff* 
 	if (eth_type == ETH_P_8021Q) {
 		struct tsn_vlan_hdr* vlan = (struct tsn_vlan_hdr*)(tx_buf->data + ETH_HLEN - ETH_TLEN);  // eth->h_proto == vlan->pid
 		return vlan->pcp;
-	} else if (tsn_config->mqprio.enabled) {
+	} else if (tsn_config->mqprio.enabled && tsn_config->mqprio.num_tc > 0) {
 		return tsn_config->mqprio.count[tsn_config->mqprio.prio_tc_map[skb->priority]];
 	}
 	//XXX: Or you can use skb->priority;
@@ -356,7 +356,6 @@ int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* qopt) {
 	memset(&mqprio, 0, sizeof(struct mqprio_config));
 
 	if (qopt->mode != TC_MQPRIO_MODE_DCB) {
-		// TODO: shaper, min_rate, max_rate parameters
 		return -ENOTSUPP;
 	}
 
