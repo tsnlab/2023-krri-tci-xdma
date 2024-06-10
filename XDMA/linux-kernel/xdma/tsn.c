@@ -30,9 +30,9 @@ static void cleanup_buffer_track(struct buffer_tracker* tracker, sysclock_t now)
 static uint8_t tsn_get_vlan_prio(struct tsn_config* tsn_config, struct sk_buff* skb) {
 	struct tx_buffer* tx_buf = (struct tx_buffer*)skb->data;
 	struct ethhdr* eth = (struct ethhdr*)(tx_buf->data);
-	uint16_t eth_type = eth->h_proto;
+	uint16_t eth_type = ntohs(eth->h_proto);
 	if (eth_type == ETH_P_8021Q) {
-		struct tsn_vlan_hdr* vlan = (struct tsn_vlan_hdr*)(tx_buf->data + ETH_HLEN);
+		struct tsn_vlan_hdr* vlan = (struct tsn_vlan_hdr*)(tx_buf->data + ETH_HLEN - ETH_TLEN);  // eth->h_proto == vlan->pid
 		return vlan->pcp;
 	} else if (tsn_config->mqprio.enabled) {
 		return tsn_config->mqprio.count[tsn_config->mqprio.prio_tc_map[skb->priority]];
@@ -43,7 +43,7 @@ static uint8_t tsn_get_vlan_prio(struct tsn_config* tsn_config, struct sk_buff* 
 
 static bool is_gptp_packet(const uint8_t* payload) {
 	struct ethhdr* eth = (struct ethhdr*)payload;
-	uint16_t eth_type = eth->h_proto;
+	uint16_t eth_type = ntohs(eth->h_proto);
 	if (eth_type == ETH_P_8021Q) {
 		struct tsn_vlan_hdr* vlan = (struct tsn_vlan_hdr*)(eth + 1);
 		eth_type = vlan->pid;
