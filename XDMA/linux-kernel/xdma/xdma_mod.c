@@ -175,8 +175,10 @@ static int xdma_ethtool_get_ts_info(struct net_device * ndev, struct ethtool_ts_
 
 	info->tx_types = BIT(HWTSTAMP_TX_OFF) | BIT(HWTSTAMP_TX_ON);
 
-	info->rx_filters = BIT(HWTSTAMP_FILTER_NONE);
-	info->rx_filters |= BIT(HWTSTAMP_FILTER_ALL);
+	info->rx_filters = BIT(HWTSTAMP_FILTER_NONE)
+	                 | BIT(HWTSTAMP_FILTER_ALL)
+	                 | BIT(HWTSTAMP_FILTER_PTP_V1_L4_EVENT)
+	                 | BIT(HWTSTAMP_FILTER_PTP_V2_EVENT);
 
 	return 0;
 }
