@@ -34,6 +34,15 @@
 #include "xdma_netdev.h"
 
 
+#ifdef __LIBXDMA_DEBUG__
+#define dbg_info(fmt, arg...) pr_info(fmt, ##arg)
+#define assert_eq(a, b) if ((a) != (b)) pr_err("assertion failed: %s != %s\n", #a, #b)
+#else
+#define dbg_info(fmt, arg...) {}
+#define assert_eq(a, b) {}
+#endif
+
+
 /* Module Parameters */
 static unsigned int poll_mode;
 module_param(poll_mode, uint, 0644);
@@ -1345,9 +1354,15 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 {
 	u32 ch_irq;
 	u32 mask;
-	struct xdma_dev *xdev;
-	struct net_device *ndev;
+	int skb_len;
+	unsigned long flag;
 	struct interrupt_regs *irq_regs;
+	struct net_device *ndev;
+	struct sk_buff *skb;
+	struct xdma_dev *xdev;
+	struct xdma_engine *engine;
+	struct xdma_private *priv;
+	struct xdma_result *result;
 
 	dbg_irq("(irq=%d, dev 0x%p) <<<< ISR.\n", irq, dev_id);
 	if (!dev_id) {
@@ -1385,22 +1400,32 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 
 	mask = ch_irq & xdev->mask_irq_c2h;
 	if (mask) {
-		struct xdma_engine *engine = &xdev->engine_c2h[0];
-		struct xdma_private *priv = netdev_priv(ndev);
-		struct xdma_result *result = priv->res;
-		struct sk_buff *skb;
-		int skb_len;
-		unsigned long flag;
+		dbg_info("xdma_isr c2h");
+		engine = &xdev->engine_c2h[0];
+		priv = netdev_priv(ndev);
+		result = priv->res;
 
+#ifdef __LIBXDMA_DEBUG__
+		assert_eq(rx_buffer->metadata.frame_length, result->length - RX_METADATA_SIZE);
+#endif
 		spin_lock_irqsave(&priv->rx_lock, flag);
 		engine_status_read(engine, 1, 0);
+		// skb_len = rx_buffer->metadata.frame_length - CRC_LEN;
 		skb_len = result->length - RX_METADATA_SIZE - CRC_LEN;
 		if (skb_len < 0) {
+			iowrite32(DMA_ENGINE_STOP, &engine->regs->control);
+			channel_interrupts_enable(engine->xdev, engine->irq_bitmask);
+			iowrite32(DMA_ENGINE_START, &engine->regs->control);
+			spin_unlock_irqrestore(&priv->rx_lock, flag);
 			pr_err("Invalid skb_len\n");
 			return IRQ_NONE;
 		}
 		skb = dev_alloc_skb(skb_len);
 		if (!skb) {
+			iowrite32(DMA_ENGINE_STOP, &engine->regs->control);
+			channel_interrupts_enable(engine->xdev, engine->irq_bitmask);
+			iowrite32(DMA_ENGINE_START, &engine->regs->control);
+			spin_unlock_irqrestore(&priv->rx_lock, flag);
 			pr_err("Failed to allocate skb\n");
 			return IRQ_NONE;
 		}
@@ -1410,6 +1435,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 			skb_len);
 		skb->dev = ndev;
 		skb->protocol = eth_type_trans(skb, ndev);
+		// TODO: skb->tstamp = alinx_get_timestamp(rx_buffer->metadata.timestamp); // TODO: change to get_rx_timestamp
 
 		/* Transfer the skb to the Linux network stack */
 		netif_rx(skb);
@@ -1425,8 +1451,8 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 
 	mask = ch_irq & xdev->mask_irq_h2c;
 	if (mask) {
-		struct xdma_private *priv = netdev_priv(ndev);
-		struct xdma_engine *engine = &xdev->engine_h2c[0];
+		dbg_info("xdma_isr h2c");
+		engine = &xdev->engine_h2c[0];
 
 		engine_status_read(engine, 1, 0);
 
@@ -4609,6 +4635,9 @@ void *xdma_device_open(const char *mname, struct pci_dev *pdev, int *user_max,
 	*user_max = xdev->user_max;
 	*h2c_channel_max = xdev->h2c_channel_max;
 	*c2h_channel_max = xdev->c2h_channel_max;
+
+	// Initialise TSN QoS
+	tsn_init_configs(pdev);
 
 	xdma_device_flag_clear(xdev, XDEV_FLAG_OFFLINE);
 	return (void *)xdev;

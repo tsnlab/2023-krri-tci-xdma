@@ -10,9 +10,6 @@
 
 #include "xdma_mod.h"
 
-#define RX_METADATA_SIZE 16
-#define TX_METADATA_SIZE 8
-
 #define DESC_REG_LO (SGDMA_OFFSET_FROM_CHANNEL + 0x80)
 #define DESC_REG_HI (SGDMA_OFFSET_FROM_CHANNEL + 0x84)
 
@@ -56,6 +53,44 @@ struct xdma_private {
         int rx_count;
 };
 
+#define _DEFAULT_FROM_MARGIN_ (500)
+#define _DEFAULT_TO_MARGIN_ (19100)
+struct tick_count {
+        uint32_t tick:29;
+        uint32_t priority:3;
+} __attribute__((packed, scalar_storage_order("big-endian")));
+
+struct tx_metadata {
+        struct tick_count from;
+        struct tick_count to;
+        struct tick_count delay_from;
+        struct tick_count delay_to;
+        uint16_t frame_length;
+        uint16_t timestamp_id;
+        uint8_t fail_policy;
+        uint8_t reserved0[3];
+        uint32_t reserved1;
+        uint32_t reserved2;
+} __attribute__((packed, scalar_storage_order("big-endian")));
+
+struct tx_buffer {
+        struct tx_metadata metadata;
+        uint8_t data[0];
+} __attribute__((packed, scalar_storage_order("big-endian")));
+
+struct rx_metadata {
+    uint64_t timestamp;
+    uint16_t frame_length;
+} __attribute__((packed, scalar_storage_order("big-endian")));
+
+struct rx_buffer {
+    struct rx_metadata metadata;
+    uint8_t data[0];
+} __attribute__((packed, scalar_storage_order("big-endian")));
+
+#define RX_METADATA_SIZE (sizeof(struct rx_metadata))
+#define TX_METADATA_SIZE (sizeof(struct tx_metadata))
+
 void rx_desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len);
 
 /*
@@ -90,4 +125,13 @@ int xdma_netdev_close(struct net_device *netdev);
  */
 netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                                    struct net_device *netdev);
+
+/*
+ * xdma_netdev_setup_tc - TC config handler
+ * @dev: Pointer to the network device
+ * @type: Tc setup type
+ * @type_data: parameters passed to the tc command
+ */
+int xdma_netdev_setup_tc(struct net_device *ndev, enum tc_setup_type type, void *type_data);
+
 #endif

@@ -86,7 +86,7 @@ struct xdma_pci_dev {
 	struct pci_dev *pdev;	/* pci device struct from probe() */
 	struct xdma_dev *xdev;
 	struct net_device *ndev;
-        struct ptp_device_data *ptp;
+	struct ptp_device_data *ptp;
 	int major;		/* major number */
 	int instance;		/* instance number */
 	int user_max;
