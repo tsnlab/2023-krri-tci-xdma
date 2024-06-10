@@ -4,6 +4,12 @@
 #include "libxdma.h"
 #include "tsn.h"
 
+#ifdef __LIBXDMA_DEBUG__
+#define xdma_debug(...) pr_debug(__VA_ARGS__)
+#else
+#define xdma_debug(...) {}
+#endif  // __LIBXDMA_DEBUG__
+
 struct ptp_device_data *ptp_device_init(struct device *dev, struct xdma_dev *xdev);
 void ptp_device_destroy(struct ptp_device_data *ptp);
 

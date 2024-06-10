@@ -136,4 +136,6 @@ void alinx_set_cycle_1s(struct pci_dev *pdev, u32 cycle_1s);
 u32 alinx_get_cycle_1s(struct pci_dev *pdev);
 timestamp_t alinx_read_tx_timestamp(struct pci_dev *pdev, int tx_id);
 
+void dump_buffer(unsigned char* buffer, int len);
+
 #endif  /* ALINX_ARCH_H */

@@ -5,12 +5,6 @@
 #include "alinx_ptp.h"
 #include "alinx_arch.h"
 
-#ifdef __LIBXDMA_DEBUG__
-#define xdma_debug(...) pr_debug(__VA_ARGS__)
-#else
-#define xdma_debug(...) {}
-#endif  // __LIBXDMA_DEBUG__
-
 #define NS_IN_1S 1000000000
 
 static timestamp_t alinx_get_timestamp(u64 sys_count, double ticks_scale, u64 offset) {

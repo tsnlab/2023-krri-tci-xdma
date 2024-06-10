@@ -53,7 +53,6 @@ struct xdma_private {
         int rx_count;
 };
 
-#define DEBUG_ONE_QUEUE_TSN_ 0
 #define _DEFAULT_FROM_MARGIN_ (500)
 #define _DEFAULT_TO_MARGIN_ (19100)
 struct tick_count {
