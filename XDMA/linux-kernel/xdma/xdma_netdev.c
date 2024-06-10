@@ -124,7 +124,6 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         struct xdma_private *priv = netdev_priv(ndev);
         struct xdma_dev *xdev = priv->xdev;
         struct xdma_pci_dev *xpdev = dev_get_drvdata(&priv->pdev->dev);
-        int padding = 0;
         u32 w;
         u32 sys_count_low;
         u16 frame_length;
@@ -136,8 +135,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
 #if DEBUG_ONE_QUEUE_TSN_
         pr_err("xdma_netdev_start_xmit(skb->len : %d)\n", skb->len);
 #endif
-        padding = (skb->len < ETH_ZLEN) ? (ETH_ZLEN - skb->len) : 0;
-        skb->len += padding;
+        skb->len = (skb->len < ETH_ZLEN) ? (ETH_ZLEN - skb->len) : 0;
         if (skb_padto(skb, skb->len)) {
                 pr_err("skb_padto failed\n");
                 dev_kfree_skb(skb);
