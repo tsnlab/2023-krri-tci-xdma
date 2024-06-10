@@ -94,11 +94,11 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
 {
         struct xdma_private *priv = netdev_priv(ndev);
         struct xdma_dev *xdev = priv->xdev;
-        struct xdma_pci_dev *xpdev = dev_get_drvdata(&priv->pdev->dev);
         u32 w;
         u32 sys_count_low;
         u16 frame_length;
         dma_addr_t dma_addr;
+        struct tx_buffer* tx_buffer;
         struct tx_metadata* tx_metadata;
 
         /* Check desc count */
@@ -131,7 +131,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         memset(skb->data, 0, TX_METADATA_SIZE);
 
         xdma_debug("skb->len : %d\n", skb->len);
-        struct tx_buffer* tx_buffer = (struct tx_buffer*)skb->data;
+        tx_buffer = (struct tx_buffer*)skb->data;
         /* Fill in the metadata */
         tx_metadata = (struct tx_metadata*)&tx_buffer->metadata;
         tx_metadata->frame_length = frame_length;

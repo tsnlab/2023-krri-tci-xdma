@@ -8,7 +8,6 @@
 #include "tsn.h"
 
 #define NS_IN_1S 1000000000
-#define max(a, b) ((a) > (b) ? (a) : (b))
 
 struct timestamps {
 	timestamp_t from;
@@ -60,6 +59,12 @@ static bool is_gptp_packet(const uint8_t* payload) {
  * @return: true if the frame reserves timestamps, false is for drop
  */
 bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* skb) {
+	uint8_t vlan_prio;
+	uint64_t duration_ns;
+	bool is_gptp, consider_delay;
+	timestamp_t from, free_at;
+	enum tsn_prio queue_prio;
+	struct timestamps timestamps;
 	struct tx_buffer* tx_buf = (struct tx_buffer*)skb->data;
 	struct tx_metadata* metadata = (struct tx_metadata*)&tx_buf->metadata;
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
@@ -68,10 +73,9 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 
 	cleanup_buffer_track(buffer_tracker, alinx_timestamp_to_sysclock(pdev, now));
 
-	uint8_t vlan_prio = tsn_get_vlan_prio(tsn_config, skb);
-	bool is_gptp = is_gptp_packet(tx_buf->data);
+	vlan_prio = tsn_get_vlan_prio(tsn_config, skb);
+	is_gptp = is_gptp_packet(tx_buf->data);
 
-	enum tsn_prio queue_prio;
 	if (is_gptp) {
 		queue_prio = TSN_PRIO_GPTP;
 	} else if (vlan_prio > 0) {
@@ -79,12 +83,11 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	} else {
 		queue_prio = TSN_PRIO_BE;
 	}
-	bool consider_delay = (queue_prio != TSN_PRIO_BE);
+	consider_delay = (queue_prio != TSN_PRIO_BE);
 
-	struct timestamps timestamps;
-	timestamp_t from = now;
+	from = now;
 
-	uint64_t duration_ns = bytes_to_ns(metadata->frame_length);
+	duration_ns = bytes_to_ns(metadata->frame_length);
 
 	if (tsn_config->qbv.enabled == false && tsn_config->qav[vlan_prio].enabled == false) {
 		// Don't care. Just fill in the metadata
@@ -125,7 +128,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	tsn_config->queue_available_at[queue_prio] += duration_ns;
 	tsn_config->total_available_at += duration_ns;
 
-	timestamp_t free_at = max(timestamps.to + duration_ns, tsn_config->total_available_at);
+	free_at = max(timestamps.to + duration_ns, tsn_config->total_available_at);
 	append_buffer_track(buffer_tracker, alinx_timestamp_to_sysclock(pdev, free_at));
 
 	return true;
@@ -161,12 +164,13 @@ void tsn_init_configs(struct pci_dev* pdev) {
 }
 
 static void bake_qbv_config(struct tsn_config* config) {
+	int slot_id, vlan_prio; // Iterators
+	struct qbv_baked_config* baked;
 	if (config->qbv.enabled == false) {
 		return;
 	}
 
-	int slot_id, vlan_prio; // Iterators
-	struct qbv_baked_config* baked = &config->qbv_baked;
+	baked = &config->qbv_baked;
 	memset(baked, 0, sizeof(struct qbv_baked_config));
 
 	baked->cycle_ns = 0;
@@ -208,10 +212,13 @@ static void bake_qbv_config(struct tsn_config* config) {
 static uint64_t bytes_to_ns(uint64_t bytes) {
 	// TODO: Get link speed
 	uint64_t link_speed = 1000000000; // Assume 1Gbps
-	return max(bytes, MIN_FRAME_SIZE) * 8 * NS_IN_1S / link_speed;
+	return max(bytes, (uint64_t)MIN_FRAME_SIZE) * 8 * NS_IN_1S / link_speed;
 }
 
 static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint8_t vlan_prio, uint64_t bytes) {
+	uint64_t elapsed_from_last_update, sending_duration;
+	double earned_credit, spending_credit;
+	timestamp_t send_end;
 	struct qav_state* qav = &tsn_config->qav[vlan_prio];
 
 	if (qav->enabled == false) {
@@ -224,22 +231,22 @@ static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint
 		return;
 	}
 
-	uint64_t elapsed_from_last_update = at - qav->last_update;
-	double earned_credit = (double)elapsed_from_last_update * qav->idle_slope;
+	elapsed_from_last_update = at - qav->last_update;
+	earned_credit = (double)elapsed_from_last_update * qav->idle_slope;
 	qav->credit += earned_credit;
 	if (qav->credit > qav->hi_credit) {
 		qav->credit = qav->hi_credit;
 	}
 
-	uint64_t sending_duration = bytes_to_ns(bytes);
-	double spending_credit = (double)sending_duration * qav->send_slope;
+	sending_duration = bytes_to_ns(bytes);
+	spending_credit = (double)sending_duration * qav->send_slope;
 	qav->credit += spending_credit;
 	if (qav->credit < qav->lo_credit) {
 		qav->credit = qav->lo_credit;
 	}
 
 	// Calulate next available time
-	timestamp_t send_end = at + sending_duration;
+	send_end = at + sending_duration;
 	qav->last_update = send_end;
 	if (qav->credit < 0) {
 		qav->available_at = send_end + -(qav->credit / qav->idle_slope);
@@ -259,8 +266,12 @@ static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint
  * @return: true if the frame reserves timestamps, false is for drop
  */
 static bool get_timestamps(struct timestamps* timestamps, const struct tsn_config* tsn_config, timestamp_t from, uint8_t vlan_prio, uint64_t bytes, bool consider_delay) {
+	int slot_id, slot_count;
+	uint64_t sending_duration, remainder;
+	const struct qbv_baked_config* baked;
+	const struct qbv_baked_prio* baked_prio;
+	const struct qbv_config* qbv = &tsn_config->qbv;
 	memset(timestamps, 0, sizeof(struct timestamps));
-	struct qbv_config* qbv = &tsn_config->qbv;
 
 	if (qbv->enabled == false) {
 		// No Qbv. Just return the current time
@@ -272,15 +283,15 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 		return true;
 	}
 
-	const struct qbv_baked_config* baked = &tsn_config->qbv_baked;
-	const struct qbv_baked_prio* baked_prio = &baked->prios[vlan_prio];
-	uint64_t sending_duration = bytes_to_ns(bytes);
+	baked = &tsn_config->qbv_baked;
+	baked_prio = &baked->prios[vlan_prio];
+	sending_duration = bytes_to_ns(bytes);
 
 	// TODO: Need to check if the slot is big enough to fit the frame. But, That is a user fault. Don't mind for now
 
-	uint64_t remainder = (from - qbv->start) % baked->cycle_ns;
-	int slot_id = 0;
-	int slot_count = baked_prio->slot_count;
+	remainder = (from - qbv->start) % baked->cycle_ns;
+	slot_id = 0;
+	slot_count = baked_prio->slot_count;
 
 	// Check if vlan_prio is always open or always closed
 	if (slot_count == 1) {

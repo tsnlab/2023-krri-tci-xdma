@@ -1354,9 +1354,15 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 {
 	u32 ch_irq;
 	u32 mask;
-	struct xdma_dev *xdev;
-	struct net_device *ndev;
+	int skb_len;
+	unsigned long flag;
 	struct interrupt_regs *irq_regs;
+	struct net_device *ndev;
+	struct sk_buff *skb;
+	struct xdma_dev *xdev;
+	struct xdma_engine *engine;
+	struct xdma_private *priv;
+	struct xdma_result *result;
 
 	dbg_irq("(irq=%d, dev 0x%p) <<<< ISR.\n", irq, dev_id);
 	if (!dev_id) {
@@ -1395,16 +1401,12 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 	mask = ch_irq & xdev->mask_irq_c2h;
 	if (mask) {
 		dbg_info("xdma_isr c2h");
-		struct xdma_engine *engine = &xdev->engine_c2h[0];
-		struct xdma_private *priv = netdev_priv(ndev);
-		struct xdma_result *result = priv->res;
-		struct sk_buff *skb;
-		int skb_len;
-		unsigned long flag;
+		engine = &xdev->engine_c2h[0];
+		priv = netdev_priv(ndev);
+		result = priv->res;
 
-		struct rx_buffer* rx_buffer = (struct rx_buffer*)&priv->rx_buffer;
 #ifdef __LIBXDMA_DEBUG__
-		assert_eq(rx_buffer->metadata.frame_length == result->length - RX_METADATA_SIZE);
+		assert_eq(rx_buffer->metadata.frame_length, result->length - RX_METADATA_SIZE);
 #endif
 		spin_lock_irqsave(&priv->rx_lock, flag);
 		engine_status_read(engine, 1, 0);
@@ -1450,8 +1452,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 	mask = ch_irq & xdev->mask_irq_h2c;
 	if (mask) {
 		dbg_info("xdma_isr h2c");
-		struct xdma_private *priv = netdev_priv(ndev);
-		struct xdma_engine *engine = &xdev->engine_h2c[0];
+		engine = &xdev->engine_h2c[0];
 
 		engine_status_read(engine, 1, 0);
 

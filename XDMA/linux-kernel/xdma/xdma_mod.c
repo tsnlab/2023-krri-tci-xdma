@@ -160,7 +160,6 @@ static const struct net_device_ops xdma_netdev_ops = {
 
 static int xdma_ethtool_get_ts_info(struct net_device * ndev, struct ethtool_ts_info * info) {
 	struct xdma_private *priv = netdev_priv(ndev);
-	struct xdma_dev *xdev = priv->xdev;
 	struct xdma_pci_dev *xpdev = dev_get_drvdata(&priv->pdev->dev);
 
 	info->phc_index = ptp_clock_index(xpdev->ptp->ptp_clock);
