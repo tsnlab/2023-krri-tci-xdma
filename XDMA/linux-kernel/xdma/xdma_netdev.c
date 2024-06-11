@@ -88,15 +88,16 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
 {
         struct xdma_private *priv = netdev_priv(ndev);
         struct xdma_dev *xdev = priv->xdev;
-        int padding = 0;
         u32 w;
+        u16 frame_length;
         dma_addr_t dma_addr;
+        struct tx_buffer* tx_buffer;
+        struct tx_metadata* tx_metadata;
 
         /* Check desc count */
         netif_stop_queue(ndev);
-        pr_err("xdma_netdev_start_xmit\n");
-        padding = (skb->len < ETH_ZLEN) ? (ETH_ZLEN - skb->len) : 0;
-        skb->len += padding;
+        //xdma_debug("xdma_netdev_start_xmit(skb->len : %d)\n", skb->len);
+        skb->len = (skb->len < ETH_ZLEN) ? (ETH_ZLEN - skb->len) : 0;
         if (skb_padto(skb, skb->len)) {
                 pr_err("skb_padto failed\n");
                 dev_kfree_skb(skb);
@@ -110,6 +111,9 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                 return NETDEV_TX_OK;
         }
 
+        /* Store packet length */
+        frame_length = skb->len;
+
         /* Add metadata to the skb */
         if (pskb_expand_head(skb, TX_METADATA_SIZE, 0, GFP_ATOMIC) != 0) {
                 pr_err("pskb_expand_head failed\n");
@@ -118,6 +122,23 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         }
         skb_push(skb, TX_METADATA_SIZE);
         memset(skb->data, 0, TX_METADATA_SIZE);
+
+        //xdma_debug("skb->len : %d\n", skb->len);
+        tx_buffer = (struct tx_buffer*)skb->data;
+        /* Fill in the metadata */
+        tx_metadata = (struct tx_metadata*)&tx_buffer->metadata;
+        tx_metadata->frame_length = frame_length;
+        tx_metadata->from.tick = 0;
+        tx_metadata->to.tick = 0x1FFFFFFF;
+        tx_metadata->fail_policy = 0;
+
+#if 0
+        xdma_debug("0x%08x  0x%08x  %4d  %1d",
+                tx_metadata->from.tick, tx_metadata->to.tick,
+                tx_metadata->frame_length, tx_metadata->fail_policy);
+        dump_buffer((unsigned char*)tx_metadata, (int)(sizeof(struct tx_metadata) + skb->len));
+#endif
+
 
         dma_addr = dma_map_single(&xdev->pdev->dev, skb->data, skb->len, DMA_TO_DEVICE);
         if (unlikely(dma_mapping_error(&xdev->pdev->dev, dma_addr))) {
