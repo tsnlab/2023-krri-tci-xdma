@@ -1398,11 +1398,11 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		return IRQ_NONE;
 	}
 
+	priv = netdev_priv(ndev);
 	mask = ch_irq & xdev->mask_irq_c2h;
 	if (mask) {
 		dbg_info("xdma_isr c2h");
 		engine = &xdev->engine_c2h[0];
-		priv = netdev_priv(ndev);
 		result = priv->res;
 
 #ifdef __LIBXDMA_DEBUG__
