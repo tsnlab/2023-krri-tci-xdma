@@ -406,11 +406,14 @@ void* receiver_thread(void* arg) {
     switch(p_arg->mode) {
     case RUN_MODE_TSN:
     case RUN_MODE_NORMAL:
+    case RUN_MODE_LOOPBACK:
         receiver_in_normal_mode(p_arg->devname, fd, p_arg->size);
     break;
+#if 0
     case RUN_MODE_LOOPBACK:
         receiver_in_loopback_mode(p_arg->devname, fd, p_arg->fn, p_arg->size);
     break;
+#endif
     case RUN_MODE_PERFORMANCE:
         receiver_in_performance_mode(p_arg->devname, fd, p_arg->fn, p_arg->size);
     break;

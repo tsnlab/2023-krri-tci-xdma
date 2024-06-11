@@ -361,19 +361,19 @@ static int process_send_packet(struct tsn_rx_buffer* rx) {
         }
         break;
     default:
-        printf_debug("Unknown type: %04x\n", rx_eth->type);
-        //printf("Unknown type: %04x\n", rx_eth->type);
+        //printf_debug("Unknown type: %04x\n", rx_eth->type);
+        printf("Unknown type: %04x\n", rx_eth->type);
         return XST_FAILURE;
     }
 
     // make tx metadata
-    tx_metadata->timestamp_id = 0;
+//    tx_metadata->timestamp_id = 0;
     tx_metadata->fail_policy = 0;
-    memset(tx_metadata->reserved0, 0, 3);
-    tx_metadata->reserved1 = 0;
-    tx_metadata->reserved2 = 0;
+//    memset(tx_metadata->reserved0, 0, 3);
+//    tx_metadata->reserved1 = 0;
+//    tx_metadata->reserved2 = 0;
 
-    uint64_t now = get_sys_count();
+//    uint64_t now = get_sys_count();
     tx_metadata->from.tick = (uint32_t)(0);
     tx_metadata->to.tick = (uint32_t)(0x1FFFFFFF);
 //    tx_metadata->from.tick = (uint32_t)((now + XDMA_SECTION_TAKEN_TICKS) & 0x1FFFFFFF);
@@ -659,6 +659,52 @@ static void sender_in_normal_mode(char* devname, int fd, uint64_t size) {
 #endif
 }
 
+#ifdef ONE_QUEUE_TSN
+static void sender_in_loopback_mode(char* devname, int fd, uint64_t size) {
+
+    struct tsn_rx_buffer* rx;
+    struct tsn_tx_buffer* tx;
+    struct tx_metadata* tx_metadata;
+    struct rx_metadata* rx_metadata;
+    uint8_t* rx_frame;
+    uint8_t* tx_frame;
+
+    g_tx_buffer = NULL;
+    if(posix_memalign((void **)&g_tx_buffer, BUFFER_ALIGNMENT /*alignment */, MAX_BUFFER_LENGTH + BUFFER_ALIGNMENT)) {
+        fprintf(stderr, "%s - OOM %u.\n", __func__, MAX_BUFFER_LENGTH + BUFFER_ALIGNMENT);
+        return;
+    }
+    memset(g_tx_buffer, 0, MAX_BUFFER_LENGTH);
+
+    tx = (struct tsn_tx_buffer*)(g_tx_buffer);
+    tx_metadata = &tx->metadata;
+    tx_frame = (uint8_t*)&tx->data;
+    tx_metadata->from.tick = 0;
+    tx_metadata->to.tick = 0x1fffffff;
+
+    while (tx_thread_run) {
+        rx = NULL;
+        rx = (struct tsn_rx_buffer*)xbuffer_dequeue();
+        if(rx == NULL) {
+            continue;
+        }
+
+        rx_metadata = &rx->metadata;
+        rx_frame = (uint8_t*)&rx->data;
+        tx_metadata->frame_length = rx_metadata->frame_length;
+        memcpy(tx_frame, rx_frame, tx_metadata->frame_length);
+
+        transmit_tsn_packet_no_free(tx); 
+
+        buffer_pool_free((BUF_POINTER)rx);
+    }
+
+    if(g_tx_buffer != NULL) {
+        free(g_tx_buffer);
+    }
+}
+#endif
+
 #ifndef ONE_QUEUE_TSN
 static void sender_in_performance_mode(char* devname, int fd, char *fn, uint64_t size) {
 
@@ -777,6 +823,9 @@ void* sender_thread(void* arg) {
     case RUN_MODE_NORMAL:
     case RUN_MODE_PCAP:
         sender_in_normal_mode(p_arg->devname, tx_fd, p_arg->size);
+    break;
+    case RUN_MODE_LOOPBACK:
+        sender_in_loopback_mode(p_arg->devname, tx_fd, p_arg->size);
     break;
 #else
     case RUN_MODE_TSN:
@@ -981,7 +1030,7 @@ static inline void wait_tick_count_almost_full(uint32_t h_count, uint32_t l_coun
 
 void fill_packet_data_with_default_packet(struct tsn_tx_buffer* packet, uint8_t stuff) {
 
-#if 1   // tsnlab-HW-test, 192.168.10.101, ether 7c:c2:55:82:5c:d0
+#if 1 
     uint8_t default_packet[DEFAULT_PKT_LEN] = {
         0x7c, 0xc2, 0x55, 0x82, 0x5c, 0xd0, 0xd8, 0xbb, 0xc1, 0x15, 0x66, 0xc1, 0x08, 0x00, 0x45, 0x00,
         0x00, 0x3c, 0xce, 0x38, 0x00, 0x00, 0x80, 0x01, 0x60, 0x9e, 0xc0, 0xa8, 0x0a, 0x64, 0xc0, 0xa8,
@@ -989,6 +1038,40 @@ void fill_packet_data_with_default_packet(struct tsn_tx_buffer* packet, uint8_t 
         0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76,
         0x77, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69 };
 #else
+
+// UDP Request 
+// Ethernet II, Src: HewlettP_96:5d:2c (ac:16:2d:96:5d:2c), Dst: CIMSYS_33:44:55 (00:11:22:33:44:55)
+// Internet Protocol Version 4, Src: 192.168.10.100, Dst: 192.168.10.101
+// User Datagram Protocol, Src Port: 33252, Dst Port: 7
+// Echo data: 6d7865796174687873777170736c64646e6773697770756b…
+
+    uint8_t default_packet[DEFAULT_PKT_LEN] = {
+        0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0xac, 0x16, 0x2d, 0x96, 0x5d, 0x2c, 0x08, 0x00, 0x45, 0x00,
+        0x00, 0x3c, 0x62, 0x6d, 0x40, 0x00, 0x40, 0x11, 0x42, 0x2a, 0xc0, 0xa8, 0x0a, 0x64, 0xc0, 0xa8,
+        0x0a, 0x65, 0x81, 0xe4, 0x00, 0x07, 0x00, 0x28, 0x96, 0x53, 0x6d, 0x78, 0x65, 0x79, 0x61, 0x74,
+        0x68, 0x78, 0x73, 0x77, 0x71, 0x70, 0x73, 0x6c, 0x64, 0x64, 0x6e, 0x67, 0x73, 0x69, 0x77, 0x70,
+        0x75, 0x6b, 0x6d, 0x66, 0x74, 0x61, 0x61, 0x6b, 0x6c, 0x6d };
+
+// UDP Response
+// Ethernet II, Src: CIMSYS_33:44:55 (00:11:22:33:44:55), Dst: HewlettP_96:5d:2c (ac:16:2d:96:5d:2c)
+// Internet Protocol Version 4, Src: 192.168.10.101, Dst: 192.168.10.100
+// User Datagram Protocol, Src Port: 7, Dst Port: 33252
+// Echo data: 6d7865796174687873777170736c64646e6773697770756b…
+    uint8_t default_packet[DEFAULT_PKT_LEN] = {
+        0xac, 0x16, 0x2d, 0x96, 0x5d, 0x2c, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x08, 0x00, 0x45, 0x00,
+        0x00, 0x3c, 0x62, 0x6d, 0x40, 0x00, 0x40, 0x11, 0x42, 0x2a, 0xc0, 0xa8, 0x0a, 0x65, 0xc0, 0xa8,
+        0x0a, 0x64, 0x00, 0x07, 0x81, 0xe4, 0x00, 0x28, 0x00, 0x00, 0x6d, 0x78, 0x65, 0x79, 0x61, 0x74,
+        0x68, 0x78, 0x73, 0x77, 0x71, 0x70, 0x73, 0x6c, 0x64, 0x64, 0x6e, 0x67, 0x73, 0x69, 0x77, 0x70,
+        0x75, 0x6b, 0x6d, 0x66, 0x74, 0x61, 0x61, 0x6b, 0x6c, 0x6d };
+
+    // tsnlab-HW-test, 192.168.10.101, ether 7c:c2:55:82:5c:d0
+    uint8_t default_packet[DEFAULT_PKT_LEN] = {
+        0x7c, 0xc2, 0x55, 0x82, 0x5c, 0xd0, 0xd8, 0xbb, 0xc1, 0x15, 0x66, 0xc1, 0x08, 0x00, 0x45, 0x00,
+        0x00, 0x3c, 0xce, 0x38, 0x00, 0x00, 0x80, 0x01, 0x60, 0x9e, 0xc0, 0xa8, 0x0a, 0x64, 0xc0, 0xa8,
+        0x0a, 0x65, 0x08, 0x00, 0x4c, 0x75, 0x00, 0x01, 0x00, 0xe6, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66,
+        0x67, 0x68, 0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76,
+        0x77, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69 };
+
     uint8_t default_packet[DEFAULT_PKT_LEN] = {
         0xa4, 0xbf, 0x01, 0x65, 0xde, 0x83, 0xd8, 0xbb, 0xc1, 0x15, 0x66, 0xc1, 0x08, 0x00, 0x45, 0x00,
         0x00, 0x3c, 0xce, 0x38, 0x00, 0x00, 0x80, 0x01, 0x60, 0x9e, 0xc0, 0xa8, 0x0a, 0x64, 0xc0, 0xa8,
@@ -1188,19 +1271,21 @@ int test_with_variable_length_packets_buffer(uint32_t count) {
         uint16_t offset;;
         pos = (id % 16);
         offset = (id / 16);
-        frame_length = (pos + 1) * 64 + offset + 500;
+        frame_length = (pos + 1) * 64 + offset + 60;
 //        frame_length = 1319;
-        if(frame_length > 1400) {
-            frame_length = 1400;
+#if 1
+        if(frame_length > 1500) {
+            frame_length = 1500;
         }
+#endif
         fill_tx_metadata_except_from_to((struct tsn_tx_buffer*)tx_stack->elements[id], (uint8_t)(id & 0xFF), frame_length, 0, 0);
         //fill_tx_metadata_except_from_to((struct tsn_tx_buffer*)tx_stack->elements[id], (uint8_t)(1 & 0xFF), frame_length, 0, 0);
     }
 
     for(id=0; id<NUMBER_OF_BUFFER; id++) {
         tx_metadata = (struct tx_metadata*)tx_stack->elements[id];
-        tx_metadata->from.tick = (uint32_t)(id * 1);
-        //tx_metadata->from.tick = (uint32_t)(0 * 1);
+        //tx_metadata->from.tick = (uint32_t)(id * 1);
+        tx_metadata->from.tick = (uint32_t)(0 * 1);
         tx_metadata->to.tick = (uint32_t)(0x1FFFFFFF);
         //tx_metadata->to.tick = (uint32_t)(0x10000);
     }
@@ -1468,7 +1553,8 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
 //    long_test_with_burst(100000000, 1);
 //    test_with_n_packets(ip_address, from_tick, margin);
 //    test_two_packets_before_n_after_carry_occurrence(ip_address, from_tick, margin);
-    test_with_variable_length_packets_buffer(1);
+    //test_with_variable_length_packets_buffer(700000);
+    test_with_variable_length_packets_buffer(100);
 //    test_with_variable_length_packets_buffer(1);
 //    find_tick_count_of_spare_space_between_packets(10000);
 //    test_priority_field(1);
