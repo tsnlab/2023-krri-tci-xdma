@@ -104,7 +104,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         /* Check desc count */
         netif_stop_queue(ndev);
         xdma_debug("xdma_netdev_start_xmit(skb->len : %d)\n", skb->len);
-        skb->len = (skb->len < ETH_ZLEN) ? (ETH_ZLEN - skb->len) : 0;
+        skb->len += (skb->len < ETH_ZLEN) ? (ETH_ZLEN - skb->len) : 0;
         if (skb_padto(skb, skb->len)) {
                 pr_err("skb_padto failed\n");
                 dev_kfree_skb(skb);
