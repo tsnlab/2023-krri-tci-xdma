@@ -117,6 +117,7 @@ static int alinx_ptp_settime(struct ptp_clock_info *ptp, const struct timespec64
 
         ptp_data->offset = host_timestamp - hw_timestamp;
 
+        set_cycle_1s(ptp_data, RESERVED_CYCLE);
         set_pulse_at(ptp_data, sys_clock);
 
         spin_unlock_irqrestore(&ptp_data->lock, flags);
