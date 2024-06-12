@@ -89,6 +89,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         struct xdma_private *priv = netdev_priv(ndev);
         struct xdma_dev *xdev = priv->xdev;
         u32 w;
+        int padding = 0;
         u16 frame_length;
         dma_addr_t dma_addr;
         struct tx_buffer* tx_buffer;
@@ -97,7 +98,8 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         /* Check desc count */
         netif_stop_queue(ndev);
         //xdma_debug("xdma_netdev_start_xmit(skb->len : %d)\n", skb->len);
-        skb->len = (skb->len < ETH_ZLEN) ? (ETH_ZLEN - skb->len) : 0;
+        padding = (skb->len < ETH_ZLEN) ? (ETH_ZLEN - skb->len) : 0;
+        skb->len += padding;
         if (skb_padto(skb, skb->len)) {
                 pr_err("skb_padto failed\n");
                 dev_kfree_skb(skb);
