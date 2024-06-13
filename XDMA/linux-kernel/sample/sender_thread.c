@@ -1060,6 +1060,8 @@ void show_n_store_tx_register() {
     printf("Tx TMAC AXIS FIFO Status Register: 0x%x\n", uint32_var);
     uint32_var = get_register(REG_TX_AXIS_BUFFER_STATUS);
     printf("Tx AXIS Buffer Status Register: 0x%x\n", uint32_var);
+    uint32_var = get_register(REG_TX_BACK_PRESSURE_EVENT_COUNT);
+    printf("Tx back pressure event count Register: 0x%x( %d)\n", uint32_var, uint32_var);
     uint32_var = get_register(REG_TX_DEBUG);
     printf("Tx Debug Register: 0x%x\n", uint32_var);
 

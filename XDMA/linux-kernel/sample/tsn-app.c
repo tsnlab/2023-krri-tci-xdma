@@ -81,6 +81,7 @@ struct reginfo reg_tx[] = {
     {"Tx PCIe AXIS FIFO Status1 Register", REG_TX_AXIS_FIFO_STATUS1},
     {"Tx TMAC AXIS FIFO Status Register", REG_TX_AXIS_FIFO_STATUS},
     {"Tx AXIS Buffer Status Register", REG_TX_AXIS_BUFFER_STATUS},
+    {"Tx back pressure event count Register", REG_TX_BACK_PRESSURE_EVENT_COUNT},
     {"Tx Debug Register", REG_TX_DEBUG},
     {"normal timeout count Register", REG_NORMAL_TIMEOUT_COUNT},
     {"to overflow popped count Register", REG_TO_OVERFLOW_POPPED_COUNT},
