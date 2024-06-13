@@ -46,7 +46,7 @@
 
 #define RESERVED_TX_COUNT 4
 
-static const char* myMAC = "\x00\x11\x22\x33\x44\x55";
+static const char* myMAC = "\x00\x11\x22\x95\x30\x23";
 
 stats_t tx_stats;
 
@@ -276,8 +276,109 @@ static void dump_buffer_to_file(unsigned char* buffer, int len) {
 static int process_send_packet(struct tsn_rx_buffer* rx) {
 
 #ifdef ONE_QUEUE_TSN
+#if 1
+    uint8_t *buffer =(uint8_t *)rx;
+    int tx_len;
+    // Reuse RX buffer as TX
+    struct tsn_tx_buffer* tx = (struct tsn_tx_buffer*)((uint64_t)buffer & PACKET_ADDRESS_MASK);
+    struct tx_metadata* tx_metadata = &tx->metadata;
+    uint8_t* rx_frame = (uint8_t*)&rx->data;
+    uint8_t* tx_frame = (uint8_t*)&tx->data;
+    struct ethernet_header* rx_eth = (struct ethernet_header*)rx_frame;
+    struct ethernet_header* tx_eth = (struct ethernet_header*)tx_frame;
+
+    // make ethernet frame
+    memcpy(&(tx_eth->dmac), &(rx_eth->smac), 6);
+    memcpy(&(tx_eth->smac), myMAC, 6);
+    // tx_eth->type = rx_eth->type;
+
+    //printf("buffer: %p, tx: %p\n", buffer, tx);
+    tx_len = ETH_HLEN;
+
+    // do arp, udp echo, etc.
+    switch (rx_eth->type) {
+    case ETH_TYPE_ARP: // arp
+        ;
+        struct arp_header* rx_arp = (struct arp_header*)ETH_PAYLOAD(rx_frame);
+        struct arp_header* tx_arp = (struct arp_header*)ETH_PAYLOAD(tx_frame);
+        if (rx_arp->opcode != ARP_OPCODE_ARP_REQUEST) { return XST_FAILURE; }
+
+        // make arp packet
+        // tx_arp->hw_type = rx_arp->hw_type;
+        // tx_arp->proto_type = rx_arp->proto_type;
+        // tx_arp->hw_size = rx_arp->hw_size;
+        // tx_arp->proto_size = rx_arp->proto_size;
+        tx_arp->opcode = ARP_OPCODE_ARP_REPLY;
+        memcpy(tx_arp->target_hw, rx_arp->sender_hw, HW_ADDR_LEN);
+        memcpy(tx_arp->sender_hw, myMAC, HW_ADDR_LEN);
+        uint8_t sender_proto[4];
+        memcpy(sender_proto, rx_arp->sender_proto, IP_ADDR_LEN);
+        memcpy(tx_arp->sender_proto, rx_arp->target_proto, IP_ADDR_LEN);
+        memcpy(tx_arp->target_proto, sender_proto, IP_ADDR_LEN);
+
+        tx_len += ARP_HLEN;
+        break;
+    case ETH_TYPE_IPv4: // ip
+        ;
+        struct ipv4_header* rx_ipv4 = (struct ipv4_header*)ETH_PAYLOAD(rx_frame);
+        struct ipv4_header* tx_ipv4 = (struct ipv4_header*)ETH_PAYLOAD(tx_frame);
+
+        uint32_t src;
+
+        // Fill IPv4 header
+        // memcpy(tx_ipv4, rx_ipv4, IPv4_HLEN(rx_ipv4));
+        src = rx_ipv4->dst;
+        tx_ipv4->dst = rx_ipv4->src;
+        tx_ipv4->src = src;
+        tx_len += IPv4_HLEN(rx_ipv4);
+
+        if (rx_ipv4->proto == IP_PROTO_ICMP) {
+            struct icmp_header* rx_icmp = (struct icmp_header*)IPv4_PAYLOAD(rx_ipv4);
+
+            if (rx_icmp->type != ICMP_TYPE_ECHO_REQUEST) { return XST_FAILURE; }
+
+            struct icmp_header* tx_icmp = (struct icmp_header*)IPv4_PAYLOAD(tx_ipv4);
+            unsigned long icmp_len = IPv4_BODY_LEN(rx_ipv4);
+
+            // Fill ICMP header and body
+            // memcpy(tx_icmp, rx_icmp, icmp_len);
+            tx_icmp->type = ICMP_TYPE_ECHO_REPLY;
+            icmp_checksum(tx_icmp, icmp_len);
+            tx_len += icmp_len;
+
+        } else if (rx_ipv4->proto == IP_PROTO_UDP){
+            struct udp_header* rx_udp = (struct udp_header*)IPv4_PAYLOAD(rx_ipv4);
+            if (rx_udp->dstport != 7) { return XST_FAILURE; }
+
+            struct udp_header* tx_udp = IPv4_PAYLOAD(tx_ipv4);
+
+            // Fill UDP header
+            // memcpy(tx_udp, rx_udp, rx_udp->length);
+            uint16_t srcport;
+            srcport = rx_udp->dstport;
+            tx_udp->dstport = rx_udp->srcport;
+            tx_udp->srcport = srcport;
+            tx_udp->checksum = 0;
+            tx_len += rx_udp->length; // UDP.length contains header length
+        } else {
+            return XST_FAILURE;
+        }
+        break;
+    default:
+        printf_debug("Unknown type: %04x\n", rx_eth->type);
+        return XST_FAILURE;
+    }
+
+    // make tx metadata
+    tx_metadata->timestamp_id = 0;
+    tx_metadata->fail_policy = 0;
+    tx_metadata->from.tick = (uint32_t)(0);
+    tx_metadata->to.tick = (uint32_t)(0x1FFFFFFF);
+
+#else
     int tx_len;
     struct tsn_tx_buffer* tx = (struct tsn_tx_buffer*)(g_tx_buffer);
+    //struct tsn_tx_buffer* tx = (struct tsn_tx_buffer*)((uint64_t)rx & PACKET_ADDRESS_MASK);
     struct tx_metadata* tx_metadata = &tx->metadata;
     uint8_t* rx_frame = (uint8_t*)&rx->data;
     uint8_t* tx_frame = (uint8_t*)&tx->data;
@@ -380,6 +481,7 @@ static int process_send_packet(struct tsn_rx_buffer* rx) {
 //    tx_metadata->to.tick = (uint32_t)((now + XDMA_SECTION_TAKEN_TICKS + XDMA_SECTION_TICKS_MARGIN) & 0x1FFFFFFF);
 //    tx_metadata->delay_from.tick = (uint32_t)((now + DELAY_TICKS) & 0x1FFFFFFF);
 //    tx_metadata->delay_to.tick = (uint32_t)((now + DELAY_TICKS + DELAY_TICKS_MARGIN) & 0x1FFFFFFF);
+#endif
 
 #else
     uint8_t *buffer =(uint8_t *)rx;

@@ -18,6 +18,7 @@
 #include <sys/mman.h>
 #include <pthread.h>
 
+#include "platform_config.h"
 #include "xdma_common.h"
 #include "libxdma/api_xdma.h"
 
@@ -100,7 +101,12 @@ int buffer_pool_free(BUF_POINTER element) {
         }
 
         stack->top++;
+#ifdef ONE_QUEUE_TSN
+        stack->elements[stack->top] = (BUF_POINTER)((uint64_t)element + sizeof(struct tx_metadata) 
+                                                                      - sizeof(struct rx_metadata));
+#else
         stack->elements[stack->top] = element;
+#endif
 
         pthread_mutex_unlock(&stack->mutex);
     }
