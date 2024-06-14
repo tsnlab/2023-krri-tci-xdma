@@ -23,6 +23,7 @@ typedef uintptr_t UINTPTR;
 
 #define PLATFORM_DEBUG
 
+#define ONE_QUEUE_TSN
 //#define __USE_MULTI_CORE__
 
 #define SDK_VERSION                                 (0x2305260C)
@@ -41,6 +42,11 @@ typedef uintptr_t UINTPTR;
 #define REG_TSN_CONTROL                             0x0008
 #define REG_SCRATCH                                 0x0010
 
+#define REG_QBV_SLOT_STATUS                         0x0028
+#define REG_PULSE_AT_MSB                            0x002c
+#define REG_PULSE_AT_LSB                            0x0030
+#define REG_CYCLE_1S                                0x0034
+
 #define REG_RX_PACKETS                              0x0100
 #define REG_RX_BYTES_HIGH                           0x0110
 #define REG_RX_BYTES_LOW                            0x0114
@@ -54,6 +60,15 @@ typedef uintptr_t UINTPTR;
 #define REG_TX_DROP_PACKETS                         0x0220
 #define REG_TX_DROP_BYTES_HIGH                      0x0230
 #define REG_TX_DROP_BYTES_LOW                       0x0234
+
+#ifdef ONE_QUEUE_TSN
+#define REG_TX_FAIL_PACKETS                         0x0240
+#define REG_TX_FAIL_BYTES_MSB                       0x0250
+#define REG_TX_FAIL_BYTES_LSB                       0x0254
+#define REG_TX_DELAY_PACKETS                        0x0260
+#define REG_TX_DELAY_BYTES_MSB                      0x0270
+#define REG_TX_DELAY_BYTES_LSB                      0x0274
+#endif
 
 #define REG_TX_TIMESTAMP_COUNT                      0x0300
 #define REG_TX_TIMESTAMP1_HIGH                      0x0310
@@ -73,17 +88,38 @@ typedef uintptr_t UINTPTR;
 #define REG_TX_INPUT_PACKET_COUNT                   0x0410
 #define REG_TX_OUTPUT_PACKET_COUNT                  0x0414
 #define REG_TX_BUFFER_FULL_DROP_PACKET_COUNT        0x0418
+#ifdef ONE_QUEUE_TSN
+#define REG_NORMAL_TIMEOUT_COUNT                    0x041c
+#define REG_TO_OVERFLOW_POPPED_COUNT                0x0420
+#define REG_TO_OVERFLOW_TIMEOUT_COUNT               0x0424
+#define REG_TIMEOUT_DROP_FROM                       0x0428
+#define REG_TIMEOUT_DROP_TO                         0x042c
+#define REG_TIMEOUT_DROP_SYS                        0x0434
+#endif
 
 #define REG_RPPB_FIFO_STATUS                        0x0470
 #define REG_RASB_FIFO_STATUS                        0x0474
+
+#ifdef ONE_QUEUE_TSN
+#define REG_TX_AXIS_FIFO_STATUS1                    0x0480
+#define REG_TX_AXIS_FIFO_STATUS                     0x0484
+#define REG_TX_AXIS_BUFFER_STATUS                   0x0488
+#define REG_TX_BACK_PRESSURE_EVENT_COUNT            0x048c
+#define REG_RX_DEBUG                                0x04A0
+#define REG_TX_DEBUG                                0x04B0
+#else
 #define REG_TASB_FIFO_STATUS                        0x0480
 #define REG_TPPB_FIFO_STATUS                        0x0484
 #define REG_MRIB_DEBUG                              0x04A0
 #define REG_MTIB_DEBUG                              0x04B0
+#endif
 
 #define REG_TEMAC_STATUS                            0x0500
 #define REG_TEMAC_RX_STAT                           0x0510
 #define REG_TEMAC_TX_STAT                           0x0514
+#ifdef ONE_QUEUE_TSN
+#define REG_TEMAC_FCS_COUNT                         0x0520
+#endif
 
 #define TSCB_ADDRESS                            (0x44C00000)
 
