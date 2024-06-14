@@ -61,12 +61,14 @@ typedef uintptr_t UINTPTR;
 #define REG_TX_DROP_BYTES_HIGH                      0x0230
 #define REG_TX_DROP_BYTES_LOW                       0x0234
 
+#ifdef ONE_QUEUE_TSN
 #define REG_TX_FAIL_PACKETS                         0x0240
 #define REG_TX_FAIL_BYTES_MSB                       0x0250
 #define REG_TX_FAIL_BYTES_LSB                       0x0254
 #define REG_TX_DELAY_PACKETS                        0x0260
 #define REG_TX_DELAY_BYTES_MSB                      0x0270
 #define REG_TX_DELAY_BYTES_LSB                      0x0274
+#endif
 
 #define REG_TX_TIMESTAMP_COUNT                      0x0300
 #define REG_TX_TIMESTAMP1_HIGH                      0x0310
@@ -116,7 +118,9 @@ typedef uintptr_t UINTPTR;
 #define REG_TEMAC_STATUS                            0x0500
 #define REG_TEMAC_RX_STAT                           0x0510
 #define REG_TEMAC_TX_STAT                           0x0514
+#ifdef ONE_QUEUE_TSN
 #define REG_TEMAC_FCS_COUNT                         0x0520
+#endif
 
 #define TSCB_ADDRESS                            (0x44C00000)
 
