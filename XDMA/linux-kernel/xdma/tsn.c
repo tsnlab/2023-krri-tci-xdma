@@ -140,14 +140,14 @@ void tsn_init_configs(struct pci_dev* pdev) {
 	memset(config, 0, sizeof(struct tsn_config));
 
 	// Example Qbv configuration
-	if (false) {
+	if (true) {
 		config->qbv.enabled = true;
 		config->qbv.start = 0;
 		config->qbv.slot_count = 2;
 		config->qbv.slots[0].duration_ns = 500000000; // 500ms
 		config->qbv.slots[0].opened_prios[0] = true;
 		config->qbv.slots[1].duration_ns = 500000000; // 500ms
-		config->qbv.slots[1].opened_prios[0] = false;
+		config->qbv.slots[1].opened_prios[0] = true;
 	}
 
 	// Example Qav configuration
@@ -413,6 +413,19 @@ int tsn_set_qbv(struct pci_dev* pdev, struct tc_taprio_qopt_offload* qopt) {
 
 	if (qopt->num_entries > MAX_QBV_SLOTS) {
 		return -EINVAL;
+	}
+
+	if (!qopt->enable) {
+		// TODO: remove this when throughput issue without QoS gets resolved
+		config->qbv.enabled = true;
+		config->qbv.start = 0;
+		config->qbv.slot_count = 2;
+		config->qbv.slots[0].duration_ns = 500000000;
+		config->qbv.slots[0].opened_prios[0] = true;
+		config->qbv.slots[1].duration_ns = 500000000;
+		config->qbv.slots[1].opened_prios[0] = true;
+		bake_qbv_config(config);
+		return 0;
 	}
 
 	config->qbv.enabled = qopt->enable;
