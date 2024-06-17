@@ -1435,7 +1435,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 			skb_len);
 		skb->dev = ndev;
 		skb->protocol = eth_type_trans(skb, ndev);
-		// TODO: skb->tstamp = alinx_get_timestamp(rx_buffer->metadata.timestamp); // TODO: change to get_rx_timestamp
+		skb->tstamp = alinx_get_rx_timestamp(xdev->pdev, alinx_get_sys_clock(xdev->pdev));
 
 		/* Transfer the skb to the Linux network stack */
 		netif_rx(skb);
