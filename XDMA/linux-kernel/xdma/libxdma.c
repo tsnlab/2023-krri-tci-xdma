@@ -1363,6 +1363,9 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 	struct xdma_engine *engine;
 	struct xdma_private *priv;
 	struct xdma_result *result;
+#ifdef __LIBXDMA_DEBUG__
+	struct rx_buffer * rx_buffer;
+#endif
 
 	dbg_irq("(irq=%d, dev 0x%p) <<<< ISR.\n", irq, dev_id);
 	if (!dev_id) {
@@ -1406,6 +1409,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		result = priv->res;
 
 #ifdef __LIBXDMA_DEBUG__
+		rx_buffer = (struct rx_buffer*)&priv->rx_buffer;
 		assert_eq(rx_buffer->metadata.frame_length, result->length - RX_METADATA_SIZE);
 #endif
 		spin_lock_irqsave(&priv->rx_lock, flag);
