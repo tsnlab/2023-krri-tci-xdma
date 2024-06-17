@@ -1,6 +1,7 @@
 #include <net/pkt_sched.h>
 #include <net/pkt_cls.h>
 #include <net/flow_offload.h>
+#include <linux/skbuff.h>
 
 #include "xdma_netdev.h"
 #include "xdma_mod.h"
@@ -130,6 +131,15 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         skb_push(skb, TX_METADATA_SIZE);
         memset(skb->data, 0, TX_METADATA_SIZE);
 
+        if (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) {
+                if (!test_and_set_bit_lock(XDMA_TX_IN_PROGRESS, &priv->state)) {
+                        skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
+                        priv->tx_work_skb = skb_get(skb);
+                        schedule_work(&priv->tx_work);
+                }
+                // TODO: track the number of skipped packets
+        }
+
         xdma_debug("skb->len : %d\n", skb->len);
         tx_buffer = (struct tx_buffer*)skb->data;
         /* Fill in the metadata */
@@ -190,5 +200,25 @@ int xdma_netdev_setup_tc(struct net_device *ndev, enum tc_setup_type type, void 
                 return -ENOTSUPP;
         }
 
-	return 0;
+        return 0;
+}
+
+void xdma_tx_work(struct work_struct *work) {
+        struct skb_shared_hwtstamps shhwtstamps;
+        struct xdma_private *priv = container_of(work, struct xdma_private, tx_work);
+        struct sk_buff* skb = priv->tx_work_skb;
+        struct tx_buffer* tx_buf = (struct tx_buffer*)skb->data;
+        struct tx_metadata* metadata = (struct tx_metadata*)&tx_buf->metadata;
+
+        if (!priv->tx_work_skb) {
+                clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->state);
+                return;
+        }
+
+        shhwtstamps.hwtstamp = ns_to_ktime(alinx_get_tx_timestamp(priv->pdev, metadata->timestamp_id));
+
+        priv->tx_work_skb = NULL;
+        clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->state);
+        skb_tstamp_tx(skb, &shhwtstamps);
+        dev_kfree_skb_any(skb);
 }
