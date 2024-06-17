@@ -113,7 +113,6 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 		metadata->fail_policy = consider_delay ? TSN_FAIL_POLICY_RETRY : TSN_FAIL_POLICY_DROP;
 	}
 
-	// TODO: Convert ns to sysclock
 	metadata->from.tick = alinx_timestamp_to_sysclock(pdev, timestamps.from);
 	metadata->from.priority = queue_prio;
 	metadata->to.tick = alinx_timestamp_to_sysclock(pdev, timestamps.to);
@@ -122,6 +121,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	metadata->delay_from.priority = queue_prio;
 	metadata->delay_to.tick = alinx_timestamp_to_sysclock(pdev, timestamps.delay_to);
 	metadata->delay_to.priority = queue_prio;
+	metadata->timestamp_id = 1;  // TODO: Set correct timestamp_id according to packet type
 
 	// Update available_ats
 	spend_qav_credit(tsn_config, from, vlan_prio, metadata->frame_length);

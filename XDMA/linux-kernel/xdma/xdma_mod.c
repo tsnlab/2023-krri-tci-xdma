@@ -353,6 +353,8 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_out;
 	}
 
+	INIT_WORK(&priv->tx_work, xdma_tx_work);
+
 	ptp_data = ptp_device_init(&pdev->dev, xdev);
 	if (!ptp_data) {
 		pr_err("ptp_device_init failed\n");
