@@ -173,17 +173,25 @@ void tsn_init_configs(struct pci_dev* pdev) {
 
 static void bake_qos_config(struct tsn_config* config) {
 	int slot_id, vlan_prio; // Iterators
+	bool qav_disabled = true;
 	struct qbv_baked_config* baked;
 	if (config->qbv.enabled == false) {
 		// TODO: remove this when throughput issue without QoS gets resolved
-		config->qbv.enabled = true;
-		config->qbv.start = 0;
-		config->qbv.slot_count = 2;
-		config->qbv.slots[0].duration_ns = 500000000; // 500ms
-		config->qbv.slots[1].duration_ns = 500000000; // 500ms
 		for (vlan_prio = 0; vlan_prio < VLAN_PRIO_COUNT; vlan_prio++) {
-			config->qbv.slots[0].opened_prios[vlan_prio] = true;
-			config->qbv.slots[1].opened_prios[vlan_prio] = true;
+			if (config->qav[vlan_prio].enabled) {
+				qav_disabled = false;
+				break;
+			}
+		}
+
+		if (qav_disabled) {
+			config->qbv.enabled = true;
+			config->qbv.start = 0;
+			config->qbv.slot_count = 1;
+			config->qbv.slots[0].duration_ns = 1000000000; // 1s
+			for (vlan_prio = 0; vlan_prio < VLAN_PRIO_COUNT; vlan_prio++) {
+				config->qbv.slots[0].opened_prios[vlan_prio] = true;
+			}
 		}
 	}
 
