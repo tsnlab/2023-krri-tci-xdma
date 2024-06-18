@@ -145,6 +145,8 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
  */
 int xdma_netdev_setup_tc(struct net_device *ndev, enum tc_setup_type type, void *type_data);
 
+int xdma_netdev_ioctl(struct net_device *ndev, struct ifreq *ifr, int cmd);
+
 void xdma_tx_work(struct work_struct *work);
 
 #endif

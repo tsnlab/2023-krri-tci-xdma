@@ -156,6 +156,7 @@ static const struct net_device_ops xdma_netdev_ops = {
 	.ndo_stop = xdma_netdev_close,
 	.ndo_start_xmit = xdma_netdev_start_xmit,
 	.ndo_setup_tc = xdma_netdev_setup_tc,
+	.ndo_eth_ioctl = xdma_netdev_ioctl,
 };
 
 static int xdma_ethtool_get_ts_info(struct net_device * ndev, struct ethtool_ts_info * info) {

@@ -203,6 +203,38 @@ int xdma_netdev_setup_tc(struct net_device *ndev, enum tc_setup_type type, void 
         return 0;
 }
 
+static int xdma_get_ts_config(struct net_device *ndev, struct ifreq *ifr) {
+        struct xdma_private *priv = netdev_priv(ndev);
+        struct hwtstamp_config *config = &priv->tstamp_config;
+
+        return copy_to_user(ifr->ifr_data, config, sizeof(*config)) ? -EFAULT : 0;
+}
+
+static int xdma_set_ts_config(struct net_device *ndev, struct ifreq *ifr) {
+        struct xdma_private *priv = netdev_priv(ndev);
+        struct hwtstamp_config config;
+        int err;
+
+        if (copy_from_user(&config, ifr->ifr_data, sizeof(config))) {
+                return -EFAULT;
+        }
+
+        // TODO: Handle unsupported options
+
+        return 0;
+}
+
+int xdma_netdev_ioctl(struct net_device *ndev, struct ifreq *ifr, int cmd) {
+        switch (cmd) {
+        case SIOCGHWTSTAMP:
+                return xdma_get_ts_config(ndev, ifr);
+        case SIOCSHWTSTAMP:
+                return xdma_set_ts_config(ndev, ifr);
+        default:
+                return -EOPNOTSUPP;
+        }
+}
+
 void xdma_tx_work(struct work_struct *work) {
         struct skb_shared_hwtstamps shhwtstamps;
         struct xdma_private *priv = container_of(work, struct xdma_private, tx_work);
