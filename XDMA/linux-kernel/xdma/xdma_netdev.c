@@ -138,7 +138,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                         priv->tx_work_skb = skb_get(skb);
                         schedule_work(&priv->tx_work);
                 }
-                // TODO: track the number of skipped packets
+                // TODO: track the number of skipped packets for ethtool stats
         }
 
         xdma_debug("skb->len : %d\n", skb->len);
@@ -215,13 +215,7 @@ static int xdma_set_ts_config(struct net_device *ndev, struct ifreq *ifr) {
         struct xdma_private *priv = netdev_priv(ndev);
         struct hwtstamp_config *config = &priv->tstamp_config;
 
-        if (copy_from_user(config, ifr->ifr_data, sizeof(*config))) {
-                return -EFAULT;
-        }
-
-        // TODO: Handle unsupported options
-
-        return 0;
+        return copy_from_user(config, ifr->ifr_data, sizeof(*config)) ? -EFAULT : 0;
 }
 
 int xdma_netdev_ioctl(struct net_device *ndev, struct ifreq *ifr, int cmd) {
