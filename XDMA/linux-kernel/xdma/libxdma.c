@@ -26,6 +26,7 @@
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/vmalloc.h>
+#include <linux/ptp_classify.h>
 
 #include "libxdma.h"
 #include "libxdma_api.h"
@@ -1345,6 +1346,33 @@ static irqreturn_t user_irq_service(int irq, struct xdma_user_irq *user_irq)
 	return IRQ_HANDLED;
 }
 
+static bool filter_rx_timestamp(struct xdma_private *priv, struct sk_buff *skb) {
+	unsigned int ptp_class;
+	struct ptp_header* ptp;
+	u8 msg_type;
+	int rx_filter = priv->tstamp_config.rx_filter;
+	if (rx_filter == HWTSTAMP_FILTER_NONE) {
+		return false;
+	} else if (rx_filter == HWTSTAMP_FILTER_ALL) {
+		return true;
+	}
+
+	ptp_class = ptp_classify_raw(skb);
+	if (!(ptp_class & PTP_CLASS_V2_L2)) {
+		return false;
+	}
+
+	ptp = ptp_parse_header(skb, ptp_class);
+	msg_type = ptp_get_msgtype(ptp, ptp_class);
+	if (rx_filter == HWTSTAMP_FILTER_PTP_V2_L2_EVENT
+		|| (rx_filter == HWTSTAMP_FILTER_PTP_V2_L2_SYNC && msg_type == PTP_MSGTYPE_SYNC)
+		|| (rx_filter == HWTSTAMP_FILTER_PTP_V2_L2_DELAY_REQ && msg_type == PTP_MSGTYPE_DELAY_REQ)) {
+		return true;
+	}
+
+	return false;
+}
+
 /*
  * xdma_isr() - Interrupt handler
  *
@@ -1439,7 +1467,10 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 			skb_len);
 		skb->dev = ndev;
 		skb->protocol = eth_type_trans(skb, ndev);
-		skb->tstamp = alinx_get_rx_timestamp(xdev->pdev, alinx_get_sys_clock(xdev->pdev));
+		if (filter_rx_timestamp(priv, skb)) {
+			// TODO: This needs to be tested
+			skb->tstamp = alinx_get_rx_timestamp(xdev->pdev, alinx_get_sys_clock(xdev->pdev));
+		}
 
 		/* Transfer the skb to the Linux network stack */
 		netif_rx(skb);
