@@ -124,11 +124,11 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	metadata->delay_to.priority = queue_prio;
 
 	if (priv->tstamp_config.tx_type != HWTSTAMP_TX_ON) {
-		metadata->timestamp_id = 0;
+		metadata->timestamp_id = TSN_TIMESTAMP_ID_NONE;
 	} else if (is_gptp) {
-		metadata->timestamp_id = 2;
+		metadata->timestamp_id = TSN_TIMESTAMP_ID_GPTP;
 	} else {
-		metadata->timestamp_id = 1;
+		metadata->timestamp_id = TSN_TIMESTAMP_ID_NORMAL;
 	}
 
 	// Update available_ats
