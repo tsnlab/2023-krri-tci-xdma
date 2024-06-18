@@ -132,7 +132,8 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         memset(skb->data, 0, TX_METADATA_SIZE);
 
         if (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) {
-                if (!test_and_set_bit_lock(XDMA_TX_IN_PROGRESS, &priv->state)) {
+                if (priv->tstamp_config.tx_type == HWTSTAMP_TX_ON &&
+                        !test_and_set_bit_lock(XDMA_TX_IN_PROGRESS, &priv->state)) {
                         skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
                         priv->tx_work_skb = skb_get(skb);
                         schedule_work(&priv->tx_work);
@@ -212,10 +213,9 @@ static int xdma_get_ts_config(struct net_device *ndev, struct ifreq *ifr) {
 
 static int xdma_set_ts_config(struct net_device *ndev, struct ifreq *ifr) {
         struct xdma_private *priv = netdev_priv(ndev);
-        struct hwtstamp_config config;
-        int err;
+        struct hwtstamp_config *config = &priv->tstamp_config;
 
-        if (copy_from_user(&config, ifr->ifr_data, sizeof(config))) {
+        if (copy_from_user(config, ifr->ifr_data, sizeof(*config))) {
                 return -EFAULT;
         }
 

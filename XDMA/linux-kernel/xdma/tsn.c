@@ -70,6 +70,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct tsn_config* tsn_config = &xdev->tsn_config;
 	struct buffer_tracker* buffer_tracker = &tsn_config->buffer_tracker;
+	struct xdma_private* priv = netdev_priv(xdev->ndev);
 
 	cleanup_buffer_track(buffer_tracker, alinx_timestamp_to_sysclock(pdev, now));
 
@@ -121,7 +122,14 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	metadata->delay_from.priority = queue_prio;
 	metadata->delay_to.tick = alinx_timestamp_to_sysclock(pdev, timestamps.delay_to);
 	metadata->delay_to.priority = queue_prio;
-	metadata->timestamp_id = 1;  // TODO: Set correct timestamp_id according to packet type
+
+	if (priv->tstamp_config.tx_type != HWTSTAMP_TX_ON) {
+		metadata->timestamp_id = 0;
+	} else if (is_gptp) {
+		metadata->timestamp_id = 2;
+	} else {
+		metadata->timestamp_id = 1;
+	}
 
 	// Update available_ats
 	spend_qav_credit(tsn_config, from, vlan_prio, metadata->frame_length);
