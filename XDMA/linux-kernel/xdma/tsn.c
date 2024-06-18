@@ -143,6 +143,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 }
 
 void tsn_init_configs(struct pci_dev* pdev) {
+	uint8_t i;
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct tsn_config* config = &xdev->tsn_config;
 	memset(config, 0, sizeof(struct tsn_config));
@@ -153,9 +154,11 @@ void tsn_init_configs(struct pci_dev* pdev) {
 		config->qbv.start = 0;
 		config->qbv.slot_count = 2;
 		config->qbv.slots[0].duration_ns = 500000000; // 500ms
-		config->qbv.slots[0].opened_prios[0] = true;
 		config->qbv.slots[1].duration_ns = 500000000; // 500ms
-		config->qbv.slots[1].opened_prios[0] = true;
+		for (i = 0; i < VLAN_PRIO_COUNT; i++) {
+			config->qbv.slots[0].opened_prios[i] = true;
+			config->qbv.slots[1].opened_prios[i] = true;
+		}
 	}
 
 	// Example Qav configuration
@@ -428,10 +431,12 @@ int tsn_set_qbv(struct pci_dev* pdev, struct tc_taprio_qopt_offload* qopt) {
 		config->qbv.enabled = true;
 		config->qbv.start = 0;
 		config->qbv.slot_count = 2;
-		config->qbv.slots[0].duration_ns = 500000000;
-		config->qbv.slots[0].opened_prios[0] = true;
-		config->qbv.slots[1].duration_ns = 500000000;
-		config->qbv.slots[1].opened_prios[0] = true;
+		config->qbv.slots[0].duration_ns = 500000000; // 500ms
+		config->qbv.slots[1].duration_ns = 500000000; // 500ms
+		for (i = 0; i < VLAN_PRIO_COUNT; i++) {
+			config->qbv.slots[0].opened_prios[i] = true;
+			config->qbv.slots[1].opened_prios[i] = true;
+		}
 		bake_qbv_config(config);
 		return 0;
 	}
