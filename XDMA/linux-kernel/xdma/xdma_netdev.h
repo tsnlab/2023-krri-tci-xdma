@@ -65,7 +65,7 @@ struct xdma_private {
 };
 
 #define _DEFAULT_FROM_MARGIN_ (500)
-#define _DEFAULT_TO_MARGIN_ (19100)
+#define _DEFAULT_TO_MARGIN_ (50000)
 struct tick_count {
         uint32_t tick:29;
         uint32_t priority:3;
