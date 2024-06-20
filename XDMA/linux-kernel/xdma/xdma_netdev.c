@@ -83,6 +83,8 @@ int xdma_netdev_open(struct net_device *ndev)
 
 int xdma_netdev_close(struct net_device *ndev)
 {
+        struct xdma_private *priv = netdev_priv(ndev);
+        iowrite32(DMA_ENGINE_STOP, &priv->rx_engine->regs->control);
         netif_stop_queue(ndev);
         pr_info("xdma_netdev_close\n");
         netif_carrier_off(ndev);
