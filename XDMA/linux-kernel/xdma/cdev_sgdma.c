@@ -49,6 +49,7 @@ static void char_sgdma_unmap_user_buf(struct xdma_io_cb *cb, bool write);
 
 static void async_io_handler(unsigned long  cb_hndl, int err)
 {
+#ifndef __OS_DEBIAN__
 	struct xdma_cdev *xcdev;
 	struct xdma_engine *engine;
 	struct xdma_dev *xdev;
@@ -124,6 +125,7 @@ skip_dev_lock:
 	aio_complete(caio->iocb, numbytes, -EBUSY);
 #endif
 	kmem_cache_free(cdev_cache, caio);
+#endif
 }
 
 
@@ -558,6 +560,7 @@ static ssize_t cdev_aio_read(struct kiocb *iocb, const struct iovec *io,
 	return -EIOCBQUEUED;
 }
 
+#ifndef __OS_DEBIAN__
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
 static ssize_t cdev_write_iter(struct kiocb *iocb, struct iov_iter *io)
 {
@@ -568,6 +571,7 @@ static ssize_t cdev_read_iter(struct kiocb *iocb, struct iov_iter *io)
 {
 	return cdev_aio_read(iocb, io->iov, io->nr_segs, io->iov_offset);
 }
+#endif
 #endif
 
 static int ioctl_do_perf_start(struct xdma_engine *engine, unsigned long arg)
@@ -888,16 +892,20 @@ static const struct file_operations sgdma_fops = {
 	.open = char_sgdma_open,
 	.release = char_sgdma_close,
 	.write = char_sgdma_write,
+#ifndef __OS_DEBIAN__
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
 	.write_iter = cdev_write_iter,
 #else
 	.aio_write = cdev_aio_write,
 #endif
+#endif
 	.read = char_sgdma_read,
+#ifndef __OS_DEBIAN__
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0)
 	.read_iter = cdev_read_iter,
 #else
 	.aio_read = cdev_aio_read,
+#endif
 #endif
 	.unlocked_ioctl = char_sgdma_ioctl,
 	.llseek = char_sgdma_llseek,
