@@ -1625,6 +1625,80 @@ int long_test_with_burst(int count, int burst_count) {
     return XST_SUCCESS;
 }
 
+int test_timestamp_issue() {
+    uint64_t pre_sys_count = 0;
+    uint64_t pre_time_stamp = 0;
+    uint64_t sys_count;
+    uint64_t time_stamp;
+    uint32_t duration = 0;
+    uint32_t time_stamp_error = 0;
+    struct tsn_tx_buffer packet;
+    struct tx_metadata* tx_metadata = &packet.metadata;
+    uint32_t time_stamp_id;
+    uint32_t pre_time_stamp_id = 1;
+
+    while(1) {
+        time_stamp_id = (duration % 4) + 1;
+        fill_tx_metadata_except_from_to(&packet, 0x00, TOTAL_PKT_LEN, time_stamp_id, 0);
+
+        sys_count = ((uint64_t)get_register(REG_SYS_COUNT_HIGH) << 32) | get_register(REG_SYS_COUNT_LOW);
+
+        tx_metadata->from.tick = (uint32_t)((sys_count + 300) & 0x1FFFFFFF);
+        tx_metadata->to.tick = (uint32_t)((sys_count + 300 + 49100) & 0x1FFFFFFF);
+        transmit_tsn_packet_no_free(&packet);
+
+        if(tx_metadata->from.tick > tx_metadata->to.tick) {
+            from_bigger_than_to_count++;
+        }
+
+        printf("[elapsed_time %4d][error %3d] sys_count     %20ld  diff %12ld\n", duration, time_stamp_error, sys_count, sys_count - pre_sys_count);
+        pre_sys_count = sys_count;
+
+        sleep(1);
+
+        switch(pre_time_stamp_id) {
+            case 1:
+                time_stamp = ((uint64_t)get_register(REG_TX_TIMESTAMP1_HIGH) << 32) | get_register(REG_TX_TIMESTAMP1_LOW);
+            break;
+            case 2:
+                time_stamp = ((uint64_t)get_register(REG_TX_TIMESTAMP2_HIGH) << 32) | get_register(REG_TX_TIMESTAMP2_LOW);
+            break;
+            case 3:
+                time_stamp = ((uint64_t)get_register(REG_TX_TIMESTAMP3_HIGH) << 32) | get_register(REG_TX_TIMESTAMP3_LOW);
+            break;
+            case 4:
+                time_stamp = ((uint64_t)get_register(REG_TX_TIMESTAMP4_HIGH) << 32) | get_register(REG_TX_TIMESTAMP4_LOW);
+            break;
+        }
+
+        printf("[elapsed_time %4d][error %3d] time_stamp    %20ld  diff %12ld\n", duration, time_stamp_error, time_stamp, time_stamp - pre_time_stamp);
+        if(pre_time_stamp > time_stamp) {
+            time_stamp_error++;
+            switch(pre_time_stamp_id) {
+                case 1:
+                    time_stamp = ((uint64_t)get_register(REG_TX_TIMESTAMP1_HIGH) << 32) | get_register(REG_TX_TIMESTAMP1_LOW);
+                break;
+                case 2:
+                    time_stamp = ((uint64_t)get_register(REG_TX_TIMESTAMP2_HIGH) << 32) | get_register(REG_TX_TIMESTAMP2_LOW);
+                break;
+                case 3:
+                    time_stamp = ((uint64_t)get_register(REG_TX_TIMESTAMP3_HIGH) << 32) | get_register(REG_TX_TIMESTAMP3_LOW);
+                break;
+                case 4:
+                    time_stamp = ((uint64_t)get_register(REG_TX_TIMESTAMP4_HIGH) << 32) | get_register(REG_TX_TIMESTAMP4_LOW);
+                break;
+            }
+            printf("[elapsed_time %4d][error %3d] correct time_stamp    %20ld  diff %12ld\n", duration, time_stamp_error, time_stamp, time_stamp - pre_time_stamp);
+        }
+        pre_time_stamp = time_stamp;
+
+        pre_time_stamp_id = time_stamp_id;
+        duration++;
+    }
+
+    return XST_SUCCESS;
+}
+
 int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin) {
 
     memset(tx_devname, 0, MAX_DEVICE_NAME);
@@ -1658,7 +1732,7 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
 //    test_with_n_packets(ip_address, from_tick, margin);
 //    test_two_packets_before_n_after_carry_occurrence(ip_address, from_tick, margin);
     //test_with_variable_length_packets_buffer(700000);
-    test_with_variable_length_packets_buffer(100);
+//    test_with_variable_length_packets_buffer(100);
 //    test_with_variable_length_packets_buffer(1);
 //    find_tick_count_of_spare_space_between_packets(10000);
 //    test_priority_field(1);
@@ -1666,6 +1740,7 @@ int send_1queueTSN_packet(char* ip_address, uint32_t from_tick, uint32_t margin)
 //    test_normal(20);
 //    test_from_bigger_than_to(50);
 //    test_fail_policy(20);
+      test_timestamp_issue();
 
     gettimeofday(&end_time, NULL);
     long seconds = end_time.tv_sec - start_time.tv_sec;
