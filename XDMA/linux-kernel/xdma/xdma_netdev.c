@@ -156,7 +156,6 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         if (tsn_fill_metadata(xdev->pdev, alinx_sysclock_to_timestamp(priv->pdev, sys_count_low), skb) == false) {
                 // TODO: Increment SW drop stats
                 pr_err("tsn_fill_metadata failed\n");
-                dev_kfree_skb(skb);
                 return NETDEV_TX_BUSY;
         }
 
