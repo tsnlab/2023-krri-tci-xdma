@@ -386,7 +386,7 @@ static bool append_buffer_track(struct buffer_tracker* tracker, sysclock_t free_
 	tracker->free_at[tracker->head] = free_at;
 	tracker->head = (tracker->head + 1) % HW_QUEUE_SIZE;
 	tracker->count += 1;
-	return true
+	return true;
 }
 
 static bool cleanup_buffer_track(struct buffer_tracker* tracker, sysclock_t now) {
