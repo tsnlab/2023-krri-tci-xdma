@@ -98,7 +98,8 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         struct xdma_private *priv = netdev_priv(ndev);
         struct xdma_dev *xdev = priv->xdev;
         u32 w;
-        u32 sys_count_low;
+        sysclock_t sys_count;
+        timestamp_t now;
         u16 frame_length;
         dma_addr_t dma_addr;
         struct tx_buffer* tx_buffer;
@@ -149,11 +150,11 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         tx_metadata = (struct tx_metadata*)&tx_buffer->metadata;
         tx_metadata->frame_length = frame_length;
 
-        /* Reads the lower 29 bits of the system count. */
-        sys_count_low = (uint32_t)alinx_get_sys_clock(priv->pdev) & 0x1FFFFFFF;
+        sys_count = alinx_get_sys_clock(priv->pdev);
+        now = alinx_sysclock_to_timestamp(priv->pdev, sys_count);
 
         /* Set the fromtick & to_tick values based on the lower 29 bits of the system count */
-        if (tsn_fill_metadata(xdev->pdev, alinx_sysclock_to_timestamp(priv->pdev, sys_count_low), skb) == false) {
+        if (tsn_fill_metadata(xdev->pdev, now, skb) == false) {
                 // TODO: Increment SW drop stats
                 pr_err("tsn_fill_metadata failed\n");
                 return NETDEV_TX_BUSY;
