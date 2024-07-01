@@ -1,6 +1,7 @@
 #include <net/pkt_sched.h>
 #include <net/pkt_cls.h>
 #include <net/flow_offload.h>
+#include <linux/skbuff.h>
 
 #include "xdma_netdev.h"
 #include "xdma_mod.h"
@@ -82,6 +83,8 @@ int xdma_netdev_open(struct net_device *ndev)
 
 int xdma_netdev_close(struct net_device *ndev)
 {
+        struct xdma_private *priv = netdev_priv(ndev);
+        iowrite32(DMA_ENGINE_STOP, &priv->rx_engine->regs->control);
         netif_stop_queue(ndev);
         pr_info("xdma_netdev_close\n");
         netif_carrier_off(ndev);
@@ -104,7 +107,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         /* Check desc count */
         netif_stop_queue(ndev);
         xdma_debug("xdma_netdev_start_xmit(skb->len : %d)\n", skb->len);
-        skb->len = (skb->len < ETH_ZLEN) ? (ETH_ZLEN - skb->len) : 0;
+        skb->len = max((unsigned int)ETH_ZLEN, skb->len);
         if (skb_padto(skb, skb->len)) {
                 pr_err("skb_padto failed\n");
                 dev_kfree_skb(skb);
@@ -129,6 +132,16 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         }
         skb_push(skb, TX_METADATA_SIZE);
         memset(skb->data, 0, TX_METADATA_SIZE);
+
+        if (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) {
+                if (priv->tstamp_config.tx_type == HWTSTAMP_TX_ON &&
+                        !test_and_set_bit_lock(XDMA_TX_IN_PROGRESS, &priv->state)) {
+                        skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
+                        priv->tx_work_skb = skb_get(skb);
+                        schedule_work(&priv->tx_work);
+                }
+                // TODO: track the number of skipped packets for ethtool stats
+        }
 
         xdma_debug("skb->len : %d\n", skb->len);
         tx_buffer = (struct tx_buffer*)skb->data;
@@ -190,5 +203,50 @@ int xdma_netdev_setup_tc(struct net_device *ndev, enum tc_setup_type type, void 
                 return -ENOTSUPP;
         }
 
-	return 0;
+        return 0;
+}
+
+static int xdma_get_ts_config(struct net_device *ndev, struct ifreq *ifr) {
+        struct xdma_private *priv = netdev_priv(ndev);
+        struct hwtstamp_config *config = &priv->tstamp_config;
+
+        return copy_to_user(ifr->ifr_data, config, sizeof(*config)) ? -EFAULT : 0;
+}
+
+static int xdma_set_ts_config(struct net_device *ndev, struct ifreq *ifr) {
+        struct xdma_private *priv = netdev_priv(ndev);
+        struct hwtstamp_config *config = &priv->tstamp_config;
+
+        return copy_from_user(config, ifr->ifr_data, sizeof(*config)) ? -EFAULT : 0;
+}
+
+int xdma_netdev_ioctl(struct net_device *ndev, struct ifreq *ifr, int cmd) {
+        switch (cmd) {
+        case SIOCGHWTSTAMP:
+                return xdma_get_ts_config(ndev, ifr);
+        case SIOCSHWTSTAMP:
+                return xdma_set_ts_config(ndev, ifr);
+        default:
+                return -EOPNOTSUPP;
+        }
+}
+
+void xdma_tx_work(struct work_struct *work) {
+        struct skb_shared_hwtstamps shhwtstamps;
+        struct xdma_private *priv = container_of(work, struct xdma_private, tx_work);
+        struct sk_buff* skb = priv->tx_work_skb;
+        struct tx_buffer* tx_buf = (struct tx_buffer*)skb->data;
+        struct tx_metadata* metadata = (struct tx_metadata*)&tx_buf->metadata;
+
+        if (!priv->tx_work_skb) {
+                clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->state);
+                return;
+        }
+
+        shhwtstamps.hwtstamp = ns_to_ktime(alinx_get_tx_timestamp(priv->pdev, metadata->timestamp_id));
+
+        priv->tx_work_skb = NULL;
+        clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->state);
+        skb_tstamp_tx(skb, &shhwtstamps);
+        dev_kfree_skb_any(skb);
 }

@@ -156,6 +156,7 @@ static const struct net_device_ops xdma_netdev_ops = {
 	.ndo_stop = xdma_netdev_close,
 	.ndo_start_xmit = xdma_netdev_start_xmit,
 	.ndo_setup_tc = xdma_netdev_setup_tc,
+	.ndo_eth_ioctl = xdma_netdev_ioctl,
 };
 
 static int xdma_ethtool_get_ts_info(struct net_device * ndev, struct ethtool_ts_info * info) {
@@ -164,7 +165,6 @@ static int xdma_ethtool_get_ts_info(struct net_device * ndev, struct ethtool_ts_
 
 	info->phc_index = ptp_clock_index(xpdev->ptp->ptp_clock);
 
-	// TODO: put correct values
 	info->so_timestamping = SOF_TIMESTAMPING_TX_SOFTWARE |
 							SOF_TIMESTAMPING_RX_SOFTWARE |
 							SOF_TIMESTAMPING_SOFTWARE |
@@ -352,6 +352,8 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		rv = -ENOMEM;
 		goto err_out;
 	}
+
+	INIT_WORK(&priv->tx_work, xdma_tx_work);
 
 	ptp_data = ptp_device_init(&pdev->dev, xdev);
 	if (!ptp_data) {

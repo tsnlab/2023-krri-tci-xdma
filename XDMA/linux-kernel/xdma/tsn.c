@@ -17,7 +17,7 @@ struct timestamps {
 };
 
 static bool is_gptp_packet(const uint8_t* payload);
-static void bake_qbv_config(struct tsn_config* config);
+static void bake_qos_config(struct tsn_config* config);
 static uint64_t bytes_to_ns(uint64_t bytes);
 static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint8_t vlan_prio, uint64_t bytes);
 static bool get_timestamps(struct timestamps* timestamps, const struct tsn_config* tsn_config, timestamp_t from, uint8_t vlan_prio, uint64_t bytes, bool consider_delay);
@@ -70,6 +70,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct tsn_config* tsn_config = &xdev->tsn_config;
 	struct buffer_tracker* buffer_tracker = &tsn_config->buffer_tracker;
+	struct xdma_private* priv = netdev_priv(xdev->ndev);
 
 	cleanup_buffer_track(buffer_tracker, alinx_timestamp_to_sysclock(pdev, now));
 
@@ -113,7 +114,6 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 		metadata->fail_policy = consider_delay ? TSN_FAIL_POLICY_RETRY : TSN_FAIL_POLICY_DROP;
 	}
 
-	// TODO: Convert ns to sysclock
 	metadata->from.tick = alinx_timestamp_to_sysclock(pdev, timestamps.from);
 	metadata->from.priority = queue_prio;
 	metadata->to.tick = alinx_timestamp_to_sysclock(pdev, timestamps.to);
@@ -122,6 +122,14 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	metadata->delay_from.priority = queue_prio;
 	metadata->delay_to.tick = alinx_timestamp_to_sysclock(pdev, timestamps.delay_to);
 	metadata->delay_to.priority = queue_prio;
+
+	if (priv->tstamp_config.tx_type != HWTSTAMP_TX_ON) {
+		metadata->timestamp_id = TSN_TIMESTAMP_ID_NONE;
+	} else if (is_gptp) {
+		metadata->timestamp_id = TSN_TIMESTAMP_ID_GPTP;
+	} else {
+		metadata->timestamp_id = TSN_TIMESTAMP_ID_NORMAL;
+	}
 
 	// Update available_ats
 	spend_qav_credit(tsn_config, from, vlan_prio, metadata->frame_length);
@@ -147,7 +155,7 @@ void tsn_init_configs(struct pci_dev* pdev) {
 		config->qbv.slots[0].duration_ns = 500000000; // 500ms
 		config->qbv.slots[0].opened_prios[0] = true;
 		config->qbv.slots[1].duration_ns = 500000000; // 500ms
-		config->qbv.slots[1].opened_prios[0] = false;
+		config->qbv.slots[1].opened_prios[0] = true;
 	}
 
 	// Example Qav configuration
@@ -160,14 +168,31 @@ void tsn_init_configs(struct pci_dev* pdev) {
 		config->qav[0].send_slope = -90;
 	}
 
-	bake_qbv_config(config);
+	bake_qos_config(config);
 }
 
-static void bake_qbv_config(struct tsn_config* config) {
+static void bake_qos_config(struct tsn_config* config) {
 	int slot_id, vlan_prio; // Iterators
+	bool qav_disabled = true;
 	struct qbv_baked_config* baked;
 	if (config->qbv.enabled == false) {
-		return;
+		// TODO: remove this when throughput issue without QoS gets resolved
+		for (vlan_prio = 0; vlan_prio < VLAN_PRIO_COUNT; vlan_prio++) {
+			if (config->qav[vlan_prio].enabled) {
+				qav_disabled = false;
+				break;
+			}
+		}
+
+		if (qav_disabled) {
+			config->qbv.enabled = true;
+			config->qbv.start = 0;
+			config->qbv.slot_count = 1;
+			config->qbv.slots[0].duration_ns = 1000000000; // 1s
+			for (vlan_prio = 0; vlan_prio < VLAN_PRIO_COUNT; vlan_prio++) {
+				config->qbv.slots[0].opened_prios[vlan_prio] = true;
+			}
+		}
 	}
 
 	baked = &config->qbv_baked;
@@ -324,6 +349,9 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 
 	// 2. "to"
 	timestamps->to = timestamps->from + baked_prio->slots[slot_id].duration_ns;
+	if (baked_prio->slot_count == 2 && baked_prio->slots[1].opened == false) {
+		timestamps->to += _DEFAULT_TO_MARGIN_;
+	}
 
 	if (consider_delay) {
 		// 3. "delay_from"
@@ -403,6 +431,8 @@ int tsn_set_qav(struct pci_dev* pdev, struct tc_cbs_qopt_offload* qopt) {
 	config->qav[qopt->queue].idle_slope = qopt->idleslope;
 	config->qav[qopt->queue].send_slope = qopt->sendslope;
 
+	bake_qos_config(config);
+
 	return 0;
 }
 
@@ -416,18 +446,21 @@ int tsn_set_qbv(struct pci_dev* pdev, struct tc_taprio_qopt_offload* qopt) {
 	}
 
 	config->qbv.enabled = qopt->enable;
-	config->qbv.start = qopt->base_time;
-	config->qbv.slot_count = qopt->num_entries;
 
-	for (i = 0; i < config->qbv.slot_count; i++) {
-		// TODO: handle qopt->entries[i].command
-		config->qbv.slots[i].duration_ns = qopt->entries[i].interval;
-		for (j = 0; j < VLAN_PRIO_COUNT; j++) {
-			config->qbv.slots[i].opened_prios[j] = (qopt->entries[i].gate_mask & (1 << j));
+	if (qopt->enable) {
+		config->qbv.start = qopt->base_time;
+		config->qbv.slot_count = qopt->num_entries;
+
+		for (i = 0; i < config->qbv.slot_count; i++) {
+			// TODO: handle qopt->entries[i].command
+			config->qbv.slots[i].duration_ns = qopt->entries[i].interval;
+			for (j = 0; j < VLAN_PRIO_COUNT; j++) {
+				config->qbv.slots[i].opened_prios[j] = (qopt->entries[i].gate_mask & (1 << j));
+			}
 		}
 	}
 
-	bake_qbv_config(config);
+	bake_qos_config(config);
 
 	return 0;
 }

@@ -7,6 +7,7 @@
 #include <linux/workqueue.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
+#include <linux/net_tstamp.h>
 
 #include "xdma_mod.h"
 
@@ -24,6 +25,10 @@
 #define DESC_BUSY 2
 
 #define CRC_LEN 4
+
+enum xdma_state_t {
+        XDMA_TX_IN_PROGRESS,
+};
 
 struct xdma_private {
         struct pci_dev *pdev;
@@ -51,10 +56,16 @@ struct xdma_private {
         spinlock_t rx_lock;
         int irq;
         int rx_count;
+
+        struct work_struct tx_work;
+        struct sk_buff *tx_work_skb;
+        struct hwtstamp_config tstamp_config;
+
+        unsigned long state;
 };
 
 #define _DEFAULT_FROM_MARGIN_ (500)
-#define _DEFAULT_TO_MARGIN_ (19100)
+#define _DEFAULT_TO_MARGIN_ (50000)
 struct tick_count {
         uint32_t tick:29;
         uint32_t priority:3;
@@ -133,5 +144,9 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
  * @type_data: parameters passed to the tc command
  */
 int xdma_netdev_setup_tc(struct net_device *ndev, enum tc_setup_type type, void *type_data);
+
+int xdma_netdev_ioctl(struct net_device *ndev, struct ifreq *ifr, int cmd);
+
+void xdma_tx_work(struct work_struct *work);
 
 #endif

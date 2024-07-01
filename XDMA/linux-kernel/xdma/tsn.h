@@ -8,6 +8,12 @@
 typedef uint64_t timestamp_t;
 typedef uint64_t sysclock_t;
 
+enum tsn_timestamp_id {
+	TSN_TIMESTAMP_ID_NONE = 0,
+	TSN_TIMESTAMP_ID_GPTP = 1,
+	TSN_TIMESTAMP_ID_NORMAL = 2,
+};
+
 enum tsn_prio {
 	TSN_PRIO_GPTP = 3,
 	TSN_PRIO_VLAN = 5,

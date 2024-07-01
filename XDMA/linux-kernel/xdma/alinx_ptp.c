@@ -60,8 +60,9 @@ timestamp_t alinx_get_rx_timestamp(struct pci_dev* pdev, sysclock_t sysclock) {
 
 timestamp_t alinx_get_tx_timestamp(struct pci_dev* pdev, int tx_id) {
         int64_t adjustment = 0; // TODO: Use exact value
+        sysclock_t tmp = alinx_read_tx_timestamp(pdev, tx_id);
 
-        return alinx_read_tx_timestamp(pdev, tx_id) + adjustment;
+        return alinx_sysclock_to_timestamp(pdev, tmp) + adjustment;
 }
 
 static int alinx_ptp_gettimex(struct ptp_clock_info *ptp, struct timespec64 *ts,
@@ -117,6 +118,7 @@ static int alinx_ptp_settime(struct ptp_clock_info *ptp, const struct timespec64
 
         ptp_data->offset = host_timestamp - hw_timestamp;
 
+        set_cycle_1s(ptp_data, RESERVED_CYCLE);
         set_pulse_at(ptp_data, sys_clock);
 
         spin_unlock_irqrestore(&ptp_data->lock, flags);
