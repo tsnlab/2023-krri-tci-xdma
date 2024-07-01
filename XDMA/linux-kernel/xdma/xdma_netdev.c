@@ -153,7 +153,12 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         sys_count_low = (uint32_t)alinx_get_sys_clock(priv->pdev) & 0x1FFFFFFF;
 
         /* Set the fromtick & to_tick values based on the lower 29 bits of the system count */
-        tsn_fill_metadata(xdev->pdev, alinx_sysclock_to_timestamp(priv->pdev, sys_count_low), skb);
+        if (tsn_fill_metadata(xdev->pdev, alinx_sysclock_to_timestamp(priv->pdev, sys_count_low), skb) == false) {
+                // TODO: Increment SW drop stats
+                pr_err("tsn_fill_metadata failed\n");
+                dev_kfree_skb(skb);
+                return NETDEV_TX_BUSY;
+        }
 
         xdma_debug("0x%08x  0x%08x  0x%08x  %4d  %1d",
                 sys_count_low, tx_metadata->from.tick, tx_metadata->to.tick,
