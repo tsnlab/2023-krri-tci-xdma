@@ -259,7 +259,7 @@ void xdma_tx_work(struct work_struct *work) {
                  * so limit the number of retries
                  */
                 priv->tstamp_retry[tstamp_id]++;
-                if (priv->tstamp_retry[tstamp_id] == TX_TSTAMP_MAX_RETRY) {
+                if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
                         // TODO: track the number of skipped packets for ethtool stats
                         priv->tstamp_retry[tstamp_id] = 0;
                         clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->state);
