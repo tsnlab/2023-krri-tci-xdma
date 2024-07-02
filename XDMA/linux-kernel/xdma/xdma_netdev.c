@@ -232,6 +232,7 @@ int xdma_netdev_ioctl(struct net_device *ndev, struct ifreq *ifr, int cmd) {
 }
 
 void xdma_tx_work(struct work_struct *work) {
+        uint16_t tstamp_id;
         sysclock_t tx_tstamp;
         struct skb_shared_hwtstamps shhwtstamps;
         struct xdma_private* priv = container_of(work, struct xdma_private, tx_work);
@@ -249,32 +250,33 @@ void xdma_tx_work(struct work_struct *work) {
          * 1. Reading and writing TX timestamp register are not atomic
          * 2. The work thread might try to read TX timestamp before the register gets updated
          */
-        tx_tstamp = alinx_read_tx_timestamp(priv->pdev, metadata->timestamp_id);
-        if (tx_tstamp == priv->last_tx_tstamp && priv->tstamp_retry < TX_TSTAMP_MAX_RETRY) {
+        tstamp_id = metadata->timestamp_id;
+        tx_tstamp = alinx_read_tx_timestamp(priv->pdev, tstamp_id);
+        if (tx_tstamp == priv->last_tx_tstamp[tstamp_id] && priv->tstamp_retry[tstamp_id] < TX_TSTAMP_MAX_RETRY) {
                 /*
                  * Tx timestamp is not updated. Try again.
                  * Waiting for it to be updated forever is not desirable,
                  * so limit the number of retries
                  */
-                priv->tstamp_retry++;
-                if (priv->tstamp_retry == TX_TSTAMP_MAX_RETRY) {
+                priv->tstamp_retry[tstamp_id]++;
+                if (priv->tstamp_retry[tstamp_id] == TX_TSTAMP_MAX_RETRY) {
                         // TODO: track the number of skipped packets for ethtool stats
-                        priv->tstamp_retry = 0;
+                        priv->tstamp_retry[tstamp_id] = 0;
                         clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->state);
                         return;
                 }
                 schedule_work(&priv->tx_work);
                 return;
         }
-        priv->tstamp_retry = 0;
-	/*
+        priv->tstamp_retry[tstamp_id] = 0;
+        /*
          * Tx timestamp is updated, or getting updated.
          * If it is getting updated, the value might be incorrect.
          * So read it again.
          */
-        tx_tstamp = alinx_read_tx_timestamp(priv->pdev, metadata->timestamp_id);
+        tx_tstamp = alinx_read_tx_timestamp(priv->pdev, tstamp_id);
         shhwtstamps.hwtstamp = ns_to_ktime(alinx_sysclock_to_timestamp(priv->pdev, tx_tstamp));
-        priv->last_tx_tstamp = tx_tstamp;
+        priv->last_tx_tstamp[tstamp_id] = tx_tstamp;
 
         priv->tx_work_skb = NULL;
         clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->state);

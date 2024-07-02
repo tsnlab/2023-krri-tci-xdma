@@ -62,8 +62,8 @@ struct xdma_private {
         struct work_struct tx_work;
         struct sk_buff *tx_work_skb;
         struct hwtstamp_config tstamp_config;
-        sysclock_t last_tx_tstamp;
-        int tstamp_retry;
+        sysclock_t last_tx_tstamp[TSN_TIMESTAMP_ID_MAX];
+        int tstamp_retry[TSN_TIMESTAMP_ID_MAX];
 
         unsigned long state;
 };
