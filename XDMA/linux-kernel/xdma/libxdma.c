@@ -1346,10 +1346,13 @@ static irqreturn_t user_irq_service(int irq, struct xdma_user_irq *user_irq)
 	return IRQ_HANDLED;
 }
 
-static bool filter_rx_timestamp(struct xdma_private *priv, struct sk_buff *skb) {
-	unsigned int ptp_class;
-	struct ptp_header* ptp;
+static bool filter_rx_timestamp(struct xdma_private* priv, struct sk_buff* skb) {
 	u8 msg_type;
+	u16 eth_type;
+	uint8_t* payload;
+	struct ptp_header* ptp;
+	struct ethhdr* eth;
+	struct tsn_vlan_hdr* vlan;
 	int rx_filter = priv->tstamp_config.rx_filter;
 	if (rx_filter == HWTSTAMP_FILTER_NONE) {
 		return false;
@@ -1357,20 +1360,35 @@ static bool filter_rx_timestamp(struct xdma_private *priv, struct sk_buff *skb) 
 		return true;
 	}
 
-	ptp_class = ptp_classify_raw(skb);
-	if (!(ptp_class & PTP_CLASS_V2_L2)) {
+	payload = skb->data;
+	eth = (struct ethhdr*)payload;
+	payload += sizeof(*eth);
+	eth_type = ntohs(eth->h_proto);
+	if (eth_type == ETH_P_8021Q) {
+		vlan = (struct tsn_vlan_hdr*)payload;
+		eth_type = vlan->pid;
+		payload += sizeof(*vlan);
+	}
+
+	if (eth_type != ETH_P_1588) {
 		return false;
 	}
 
-	ptp = ptp_parse_header(skb, ptp_class);
-	msg_type = ptp_get_msgtype(ptp, ptp_class);
-	if (rx_filter == HWTSTAMP_FILTER_PTP_V2_L2_EVENT
-		|| (rx_filter == HWTSTAMP_FILTER_PTP_V2_L2_SYNC && msg_type == PTP_MSGTYPE_SYNC)
-		|| (rx_filter == HWTSTAMP_FILTER_PTP_V2_L2_DELAY_REQ && msg_type == PTP_MSGTYPE_DELAY_REQ)) {
+	ptp = (struct ptp_header*)payload;
+	msg_type = ptp->tsmt & 0xF;
+	switch (rx_filter) {
+	case HWTSTAMP_FILTER_PTP_V2_EVENT:
+	case HWTSTAMP_FILTER_PTP_V2_L2_EVENT:
 		return true;
+	case HWTSTAMP_FILTER_PTP_V2_SYNC:
+	case HWTSTAMP_FILTER_PTP_V2_L2_SYNC:
+		return msg_type == PTP_MSGTYPE_SYNC;
+	case HWTSTAMP_FILTER_PTP_V2_DELAY_REQ:
+	case HWTSTAMP_FILTER_PTP_V2_L2_DELAY_REQ:
+		return msg_type == PTP_MSGTYPE_DELAY_REQ;
+	default:
+		return false;
 	}
-
-	return false;
 }
 
 /*
@@ -1391,9 +1409,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 	struct xdma_engine *engine;
 	struct xdma_private *priv;
 	struct xdma_result *result;
-#ifdef __LIBXDMA_DEBUG__
-	struct rx_buffer * rx_buffer;
-#endif
+	struct rx_buffer *rx_buffer;
 
 	dbg_irq("(irq=%d, dev 0x%p) <<<< ISR.\n", irq, dev_id);
 	if (!dev_id) {
@@ -1435,9 +1451,9 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		dbg_info("xdma_isr c2h");
 		engine = &xdev->engine_c2h[0];
 		result = priv->res;
+		rx_buffer = (struct rx_buffer*)priv->rx_buffer;
 
 #ifdef __LIBXDMA_DEBUG__
-		rx_buffer = (struct rx_buffer*)&priv->rx_buffer;
 		assert_eq(rx_buffer->metadata.frame_length, result->length - RX_METADATA_SIZE);
 #endif
 		spin_lock_irqsave(&priv->rx_lock, flag);
@@ -1465,12 +1481,11 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 			skb_put(skb, skb_len),
 			priv->rx_buffer + RX_METADATA_SIZE,
 			skb_len);
+		if (filter_rx_timestamp(priv, skb)) {
+			skb_hwtstamps(skb)->hwtstamp = alinx_get_rx_timestamp(xdev->pdev, alinx_get_sys_clock(xdev->pdev));
+		}
 		skb->dev = ndev;
 		skb->protocol = eth_type_trans(skb, ndev);
-		if (filter_rx_timestamp(priv, skb)) {
-			// TODO: This needs to be tested
-			skb->tstamp = alinx_get_rx_timestamp(xdev->pdev, alinx_get_sys_clock(xdev->pdev));
-		}
 
 		/* Transfer the skb to the Linux network stack */
 		netif_rx(skb);
