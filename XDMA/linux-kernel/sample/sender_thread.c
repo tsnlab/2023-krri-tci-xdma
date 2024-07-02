@@ -1751,7 +1751,8 @@ int test_timestamp_issue() {
   struct tsn_tx_buffer packet;
   struct tx_metadata *tx_metadata = &packet.metadata;
   uint32_t time_stamp_id;
-  uint32_t pre_time_stamp_id = 1;
+  uint64_t max_diff = 0;
+  uint64_t min_diff = 0x1ffffffff;
 
   while (1) {
     time_stamp_id = (duration % 4) + 1;
@@ -1761,19 +1762,11 @@ int test_timestamp_issue() {
     sys_count = ((uint64_t)get_register(REG_SYS_COUNT_HIGH) << 32) |
                 get_register(REG_SYS_COUNT_LOW);
 
-    tx_metadata->from.tick = (uint32_t)((sys_count + 300) & 0x1FFFFFFF);
-    tx_metadata->to.tick = (uint32_t)((sys_count + 300 + 49100) & 0x1FFFFFFF);
+    tx_metadata->from.tick = (uint32_t)((sys_count)&0x1FFFFFFF);
+    tx_metadata->to.tick = (uint32_t)((sys_count + 49100) & 0x1FFFFFFF);
     transmit_tsn_packet_no_free(&packet);
 
-    if (tx_metadata->from.tick > tx_metadata->to.tick) {
-      from_bigger_than_to_count++;
-    }
-
-    printf("[elapsed_time %4d][error %3d] sys_count     %20ld  diff %12ld\n",
-           duration, time_stamp_error, sys_count, sys_count - pre_sys_count);
-    pre_sys_count = sys_count;
-
-    sleep(1);
+    usleep(1000);
 
     switch (time_stamp_id) {
     case 1:
@@ -1794,11 +1787,11 @@ int test_timestamp_issue() {
       break;
     }
 
-    printf("[elapsed_time %4d][error %3d] time_stamp    %20ld  diff %12ld  "
-           "[time_stamp - sys_count] %12ld\n",
-           duration, time_stamp_error, time_stamp, time_stamp - pre_time_stamp,
-           time_stamp - sys_count);
-    if (pre_time_stamp > time_stamp) {
+    if (tx_metadata->from.tick > tx_metadata->to.tick) {
+      from_bigger_than_to_count++;
+    }
+
+    if (pre_time_stamp >= time_stamp) {
       time_stamp_error++;
       switch (time_stamp_id) {
       case 1:
@@ -1823,10 +1816,26 @@ int test_timestamp_issue() {
              duration, time_stamp_error, time_stamp,
              time_stamp - pre_time_stamp, time_stamp - sys_count);
     }
-    pre_time_stamp = time_stamp;
+    if ((time_stamp - sys_count) > max_diff) {
+      max_diff = time_stamp - sys_count;
+    }
+    if ((time_stamp - sys_count) < min_diff) {
+      min_diff = time_stamp - sys_count;
+    }
 
-    pre_time_stamp_id = time_stamp_id;
+    printf("[elapsed_time %4d][error %3d] sys_count  %16ld  diff %12ld\n",
+           duration, time_stamp_error, sys_count, sys_count - pre_sys_count);
+
+    printf("[elapsed_time %4d][error %3d] time_stamp %16ld  diff %12ld  "
+           "[time_stamp - sys_count] %6ld, max %6ld min %6ld\n",
+           duration, time_stamp_error, time_stamp, time_stamp - pre_time_stamp,
+           time_stamp - sys_count, max_diff, min_diff);
+
+    pre_time_stamp = time_stamp;
+    pre_sys_count = sys_count;
+
     duration++;
+    usleep(1000000 - 1010);
   }
 
   return XST_SUCCESS;
