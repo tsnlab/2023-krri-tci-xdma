@@ -26,6 +26,8 @@
 
 #define CRC_LEN 4
 
+#define TX_TSTAMP_MAX_RETRY 5
+
 enum xdma_state_t {
         XDMA_TX_IN_PROGRESS,
 };
@@ -60,6 +62,8 @@ struct xdma_private {
         struct work_struct tx_work;
         struct sk_buff *tx_work_skb;
         struct hwtstamp_config tstamp_config;
+        sysclock_t last_tx_tstamp;
+        int tstamp_retry;
 
         unsigned long state;
 };
