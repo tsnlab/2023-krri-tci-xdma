@@ -1347,10 +1347,12 @@ static irqreturn_t user_irq_service(int irq, struct xdma_user_irq *user_irq)
 }
 
 static bool filter_rx_timestamp(struct xdma_private *priv, uint8_t *payload) {
+	u8 msg_type;
 	u16 eth_type;
+	size_t payload_offset;
 	struct ptp_header* ptp;
 	struct ethhdr* eth;
-	u8 msg_type;
+	struct tsn_vlan_hdr* vlan;
 	int rx_filter = priv->tstamp_config.rx_filter;
 	if (rx_filter == HWTSTAMP_FILTER_NONE) {
 		return false;
@@ -1361,15 +1363,18 @@ static bool filter_rx_timestamp(struct xdma_private *priv, uint8_t *payload) {
 	eth = (struct ethhdr*)payload;
 	eth_type = ntohs(eth->h_proto);
 	if (eth_type == ETH_P_8021Q) {
-		// TODO: ptp over vlan
-		return false;
+		vlan = (struct tsn_vlan_hdr*)(eth + 1);
+		eth_type = vlan->pid;
+		payload_offset = sizeof(struct tsn_vlan_hdr) + ETH_HLEN - ETH_TLEN;
+	} else {
+		payload_offset = sizeof(struct ethhdr);
 	}
 
 	if (eth_type != ETH_P_1588) {
 		return false;
 	}
 
-	ptp = (struct ptp_header*)(payload + sizeof(struct ethhdr));
+	ptp = (struct ptp_header*)(payload + payload_offset);
 	msg_type = ptp->tsmt & 0xF;
 	switch (rx_filter) {
 	case HWTSTAMP_FILTER_PTP_V2_EVENT:
