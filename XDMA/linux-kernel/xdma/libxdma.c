@@ -1346,10 +1346,10 @@ static irqreturn_t user_irq_service(int irq, struct xdma_user_irq *user_irq)
 	return IRQ_HANDLED;
 }
 
-static bool filter_rx_timestamp(struct xdma_private *priv, uint8_t *payload) {
+static bool filter_rx_timestamp(struct xdma_private* priv, struct sk_buff* skb) {
 	u8 msg_type;
 	u16 eth_type;
-	size_t payload_offset;
+	uint8_t* payload;
 	struct ptp_header* ptp;
 	struct ethhdr* eth;
 	struct tsn_vlan_hdr* vlan;
@@ -1360,21 +1360,21 @@ static bool filter_rx_timestamp(struct xdma_private *priv, uint8_t *payload) {
 		return true;
 	}
 
+	payload = skb->data;
 	eth = (struct ethhdr*)payload;
+	payload += sizeof(*eth);
 	eth_type = ntohs(eth->h_proto);
 	if (eth_type == ETH_P_8021Q) {
-		vlan = (struct tsn_vlan_hdr*)(eth + 1);
+		vlan = (struct tsn_vlan_hdr*)payload;
 		eth_type = vlan->pid;
-		payload_offset = sizeof(struct tsn_vlan_hdr) + ETH_HLEN - ETH_TLEN;
-	} else {
-		payload_offset = sizeof(struct ethhdr);
+		payload += sizeof(*vlan);
 	}
 
 	if (eth_type != ETH_P_1588) {
 		return false;
 	}
 
-	ptp = (struct ptp_header*)(payload + payload_offset);
+	ptp = (struct ptp_header*)payload;
 	msg_type = ptp->tsmt & 0xF;
 	switch (rx_filter) {
 	case HWTSTAMP_FILTER_PTP_V2_EVENT:
@@ -1481,12 +1481,11 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 			skb_put(skb, skb_len),
 			priv->rx_buffer + RX_METADATA_SIZE,
 			skb_len);
-		skb->dev = ndev;
-		skb->protocol = eth_type_trans(skb, ndev);
-		if (filter_rx_timestamp(priv, rx_buffer->data)) {
-			// TODO: This needs to be tested
+		if (filter_rx_timestamp(priv, skb)) {
 			skb_hwtstamps(skb)->hwtstamp = alinx_get_rx_timestamp(xdev->pdev, alinx_get_sys_clock(xdev->pdev));
 		}
+		skb->dev = ndev;
+		skb->protocol = eth_type_trans(skb, ndev);
 
 		/* Transfer the skb to the Linux network stack */
 		netif_rx(skb);
