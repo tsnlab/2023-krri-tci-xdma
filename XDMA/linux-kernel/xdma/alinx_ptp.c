@@ -46,10 +46,9 @@ timestamp_t alinx_sysclock_to_timestamp(struct pci_dev* pdev, sysclock_t syscloc
         struct xdma_pci_dev *xpdev = dev_get_drvdata(&pdev->dev);
         struct ptp_device_data* ptp_data = xpdev->ptp;
 
-        double ticks_scale = (double)NS_IN_1S / alinx_get_cycle_1s(pdev);
         u64 offset = ptp_data->offset;
 
-        return alinx_get_timestamp(sysclock, ticks_scale, offset);
+        return alinx_get_timestamp(sysclock, ptp_data->ticks_scale, offset);
 }
 
 timestamp_t alinx_get_rx_timestamp(struct pci_dev* pdev, sysclock_t sysclock) {
