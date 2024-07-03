@@ -33,6 +33,7 @@
 #include "cdev_sgdma.h"
 #include "xdma_thread.h"
 #include "xdma_netdev.h"
+#include "tsn.h"
 
 
 #ifdef __LIBXDMA_DEBUG__
@@ -1510,6 +1511,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 		dma_unmap_single(&xdev->pdev->dev, priv->tx_dma_addr, priv->tx_skb->len, DMA_TO_DEVICE);
 		dev_kfree_skb_any(priv->tx_skb);
 		priv->tx_skb = NULL;
+		tsn_pop_buffer_track(xdev->pdev);
 
 		iowrite32(DMA_ENGINE_STOP, &engine->regs->control);
 		netif_wake_queue(ndev);

@@ -397,6 +397,17 @@ static bool cleanup_buffer_track(struct buffer_tracker* tracker, sysclock_t now)
 	return true;
 }
 
+void tsn_pop_buffer_track(struct pci_dev* pdev) {
+	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+	struct tsn_config* tsn_config = &xdev->tsn_config;
+	struct buffer_tracker* tracker = &tsn_config->buffer_tracker;
+
+	if (tracker->count > 0) {
+		tracker->tail = (tracker->tail + 1) % HW_QUEUE_SIZE;
+		tracker->count -= 1;
+	}
+}
+
 int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* qopt) {
 	u8 i;
 
