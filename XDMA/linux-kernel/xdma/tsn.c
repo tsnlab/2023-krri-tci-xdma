@@ -385,18 +385,21 @@ static bool append_buffer_track(struct buffer_tracker* buffer_tracker) {
 	return true;
 }
 
-void tsn_pop_buffer_track(struct pci_dev* pdev) {
+void tsn_update_buffer_track(struct pci_dev* pdev) {
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct buffer_tracker* buffer_tracker = &xdev->tsn_config.buffer_tracker;
 	u64 tx_count, pop_count;
 
-	if (buffer_tracker->entry_count >= HW_QUEUE_SIZE - HW_QUEUE_SIZE_PAD) {
-		tx_count = alinx_get_tx_packets(pdev) + alinx_get_tx_drop_packets(pdev);
-		pop_count = tx_count - buffer_tracker->last_tx_count;
-		buffer_tracker->last_tx_count = tx_count;
-		pop_count = min(pop_count, buffer_tracker->entry_count);
-		buffer_tracker->entry_count -= pop_count;
+	if (buffer_tracker->entry_count < HW_QUEUE_SIZE - HW_QUEUE_SIZE_PAD) {
+		// No need to update that frequently
+		return;
 	}
+
+	tx_count = alinx_get_tx_packets(pdev) + alinx_get_tx_drop_packets(pdev);
+	pop_count = tx_count - buffer_tracker->last_tx_count;
+	buffer_tracker->last_tx_count = tx_count;
+	pop_count = min(pop_count, buffer_tracker->entry_count);
+	buffer_tracker->entry_count -= pop_count;
 }
 
 int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* qopt) {
