@@ -114,12 +114,17 @@ struct qav_state {
 	timestamp_t available_at;
 };
 
+struct buffer_tracker {
+	uint32_t entry_count;
+	uint32_t last_tx_count;
+};
+
 struct tsn_config {
 	struct qbv_config qbv;
 	struct qbv_baked_config qbv_baked;
 	struct qav_state qav[VLAN_PRIO_COUNT];
 	struct mqprio_config mqprio;
-	uint32_t buffer_count;
+	struct buffer_tracker buffer_tracker;
 	timestamp_t queue_available_at[TSN_PRIO_COUNT];
 	timestamp_t total_available_at;
 };
