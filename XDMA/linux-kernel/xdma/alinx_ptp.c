@@ -19,7 +19,7 @@ static void set_pulse_at(struct ptp_device_data *ptp_data, sysclock_t sys_count)
         struct xdma_dev *xdev = ptp_data->xdev;
 
         current_ns = alinx_get_timestamp(sys_count, ptp_data->ticks_scale, ptp_data->offset);
-        next_pulse_ns = current_ns - (current_ns % 1000000000) + 1000000000;
+        next_pulse_ns = current_ns - (current_ns % NS_IN_1S) + NS_IN_1S;
         next_pulse_sysclock = ((double)(next_pulse_ns - ptp_data->offset) / ptp_data->ticks_scale);
         xdma_debug("ptp%u: %s sys_count=%llu, current_ns=%llu, next_pulse_ns=%llu, next_pulse_sysclock=%llu",
                    ptp_data->ptp_id, __func__, sys_count, current_ns, next_pulse_ns, next_pulse_sysclock);
@@ -32,14 +32,15 @@ static void set_cycle_1s(struct ptp_device_data *ptp_data, u32 cycle_1s) {
         alinx_set_cycle_1s(ptp_data->xdev->pdev, cycle_1s);
 }
 
+static void set_ticks_scale(struct ptp_device_data *ptp_data, double ticks_scale) {
+        alinx_set_ticks_scale(ptp_data->xdev->pdev, ticks_scale);
+}
+
 sysclock_t alinx_timestamp_to_sysclock(struct pci_dev* pdev, timestamp_t timestamp) {
         struct xdma_pci_dev *xpdev = dev_get_drvdata(&pdev->dev);
         struct ptp_device_data* ptp_data = xpdev->ptp;
 
-        double ticks_scale = (double)NS_IN_1S / alinx_get_cycle_1s(pdev);
-        u64 offset = ptp_data->offset;
-
-        return (timestamp - offset) / ticks_scale;
+        return (timestamp - ptp_data->offset) / ptp_data->ticks_scale;
 }
 
 timestamp_t alinx_sysclock_to_timestamp(struct pci_dev* pdev, sysclock_t sysclock) {
@@ -64,6 +65,21 @@ timestamp_t alinx_get_tx_timestamp(struct pci_dev* pdev, int tx_id) {
         return alinx_sysclock_to_timestamp(pdev, tmp) + adjustment;
 }
 
+double alinx_get_ticks_scale(struct pci_dev* pdev) {
+        struct xdma_pci_dev *xpdev = dev_get_drvdata(&pdev->dev);
+        struct ptp_device_data* ptp_data = xpdev->ptp;
+
+        return ptp_data->ticks_scale;
+}
+
+void alinx_set_ticks_scale(struct pci_dev* pdev, double ticks_scale) {
+        struct xdma_pci_dev *xpdev = dev_get_drvdata(&pdev->dev);
+        struct ptp_device_data* ptp_data = xpdev->ptp;
+
+        ptp_data->ticks_scale = ticks_scale;
+        alinx_set_cycle_1s(pdev, (double)NS_IN_1S / ptp_data->ticks_scale);
+}
+
 static int alinx_ptp_gettimex(struct ptp_clock_info *ptp, struct timespec64 *ts,
 			  struct ptp_system_timestamp *sts)
 {
@@ -83,8 +99,8 @@ static int alinx_ptp_gettimex(struct ptp_clock_info *ptp, struct timespec64 *ts,
 
         timestamp = alinx_get_timestamp(clock, ptp_data->ticks_scale, ptp_data->offset);
 
-        ts->tv_sec = timestamp / 1000000000;
-        ts->tv_nsec = timestamp % 1000000000;
+        ts->tv_sec = timestamp / NS_IN_1S;
+        ts->tv_nsec = timestamp % NS_IN_1S;
 
         spin_unlock_irqrestore(&ptp_data->lock, flags);
 
@@ -106,7 +122,7 @@ static int alinx_ptp_settime(struct ptp_clock_info *ptp, const struct timespec64
         struct xdma_dev *xdev = ptp_data->xdev;
 
         /* Get host timestamp */
-        host_timestamp = (u64)ts->tv_sec * 1000000000 + ts->tv_nsec;
+        host_timestamp = (u64)ts->tv_sec * NS_IN_1S + ts->tv_nsec;
 
         spin_lock_irqsave(&ptp_data->lock, flags);
 
@@ -158,7 +174,6 @@ static int alinx_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 {
         u64 cur_timestamp, new_timestamp;
         u64 sys_clock;
-        u32 cycle_1s;
         double diff;
         unsigned long flags;
         int is_negative = 0;
@@ -193,8 +208,7 @@ static int alinx_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
         ptp_data->offset += (cur_timestamp - new_timestamp);
 
         /* Adjust cycle_1s */
-        cycle_1s = (double)1000000000 / ptp_data->ticks_scale;
-        set_cycle_1s(ptp_data, cycle_1s);
+        set_ticks_scale(ptp_data, ptp_data->ticks_scale);
 
         /* Set pulse_at */
         sys_clock = alinx_get_sys_clock(xdev->pdev);
