@@ -401,10 +401,12 @@ void tsn_pop_buffer_track(struct pci_dev* pdev) {
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct tsn_config* tsn_config = &xdev->tsn_config;
 	struct buffer_tracker* tracker = &tsn_config->buffer_tracker;
+	u32 pop_cnt;
 
-	if (tracker->count > 0) {
-		tracker->tail = (tracker->tail + 1) % HW_QUEUE_SIZE;
-		tracker->count -= 1;
+	if (tracker->count >= HW_QUEUE_SIZE - HW_QUEUE_SIZE_PAD) {
+		pop_cnt = min((u32)tracker->count, alinx_get_tx_packets(pdev) + alinx_get_tx_drop_packets(pdev));
+		tracker->tail = (tracker->tail + pop_cnt) % HW_QUEUE_SIZE;
+		tracker->count -= pop_cnt;
 	}
 }
 

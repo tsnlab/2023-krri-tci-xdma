@@ -74,6 +74,16 @@ timestamp_t alinx_read_tx_timestamp(struct pci_dev* pdev, int tx_id) {
         }
 }
 
+u32 alinx_get_tx_packets(struct pci_dev *pdev) {
+        struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+        return read32(xdev->bar[0] + REG_TX_PACKETS);
+}
+
+u32 alinx_get_tx_drop_packets(struct pci_dev *pdev) {
+        struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+        return read32(xdev->bar[0] + REG_TX_DROP_PACKETS);
+}
+
 #ifdef __LIBXDMA_DEBUG__
 void dump_buffer(unsigned char* buffer, int len)
 {
