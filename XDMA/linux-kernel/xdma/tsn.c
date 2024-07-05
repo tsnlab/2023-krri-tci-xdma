@@ -98,12 +98,12 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 		}
 		if (consider_delay) {
 			// Check if queue is available
-			if (buffer_tracker->entry_count >= TSN_QUEUE_SIZE) {
+			if (buffer_tracker->pending_packets >= TSN_QUEUE_SIZE) {
 				return false;
 			}
 		} else {
 			// Best effort
-			if (buffer_tracker->entry_count >= BE_QUEUE_SIZE) {
+			if (buffer_tracker->pending_packets >= BE_QUEUE_SIZE) {
 				return false;
 			}
 			from = max(from, tsn_config->total_available_at);
@@ -377,11 +377,11 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 }
 
 static bool append_buffer_track(struct buffer_tracker* buffer_tracker) {
-	if (buffer_tracker->entry_count >= HW_QUEUE_SIZE) {
+	if (buffer_tracker->pending_packets >= HW_QUEUE_SIZE) {
 		return false;
 	}
 
-	buffer_tracker->entry_count += 1;
+	buffer_tracker->pending_packets += 1;
 	return true;
 }
 
@@ -390,7 +390,7 @@ void tsn_update_buffer_track(struct pci_dev* pdev) {
 	struct buffer_tracker* buffer_tracker = &xdev->tsn_config.buffer_tracker;
 	u64 tx_count, pop_count;
 
-	if (buffer_tracker->entry_count < HW_QUEUE_SIZE - HW_QUEUE_SIZE_PAD) {
+	if (buffer_tracker->pending_packets < HW_QUEUE_SIZE - HW_QUEUE_SIZE_PAD) {
 		// No need to update that frequently
 		return;
 	}
@@ -398,8 +398,8 @@ void tsn_update_buffer_track(struct pci_dev* pdev) {
 	tx_count = alinx_get_tx_packets(pdev) + alinx_get_tx_drop_packets(pdev);
 	pop_count = tx_count - buffer_tracker->last_tx_count;
 	buffer_tracker->last_tx_count = tx_count;
-	pop_count = min(pop_count, buffer_tracker->entry_count);
-	buffer_tracker->entry_count -= pop_count;
+	pop_count = min(pop_count, buffer_tracker->pending_packets);
+	buffer_tracker->pending_packets -= pop_count;
 }
 
 int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* qopt) {
