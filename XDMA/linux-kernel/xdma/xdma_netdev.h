@@ -65,8 +65,8 @@ struct xdma_private {
         sysclock_t last_tx_tstamp[TSN_TIMESTAMP_ID_MAX];
         int tstamp_retry[TSN_TIMESTAMP_ID_MAX];
 
-        uint32_t tx_count;
-        uint32_t tx_drop_count;
+        uint64_t total_tx_count;
+        uint64_t total_tx_drop_count;
 
         unsigned long state;
 };

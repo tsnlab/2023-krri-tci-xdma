@@ -388,7 +388,7 @@ static bool append_buffer_track(struct buffer_tracker* buffer_tracker) {
 void tsn_pop_buffer_track(struct pci_dev* pdev) {
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct buffer_tracker* buffer_tracker = &xdev->tsn_config.buffer_tracker;
-	u32 tx_count, pop_count;
+	u64 tx_count, pop_count;
 
 	if (buffer_tracker->entry_count >= HW_QUEUE_SIZE - HW_QUEUE_SIZE_PAD) {
 		tx_count = alinx_get_tx_packets(pdev) + alinx_get_tx_drop_packets(pdev);

@@ -115,8 +115,8 @@ struct qav_state {
 };
 
 struct buffer_tracker {
-	uint32_t entry_count;
-	uint32_t last_tx_count;
+	uint64_t entry_count;
+	uint64_t last_tx_count;
 };
 
 struct tsn_config {

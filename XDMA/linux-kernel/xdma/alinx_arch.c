@@ -79,18 +79,18 @@ u32 alinx_get_tx_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
         u32 regval = read32(xdev->bar[0] + REG_TX_PACKETS);
-        priv->tx_count += regval;
+        priv->total_tx_count += regval;
 
-        return priv->tx_count;
+        return priv->total_tx_count;
 }
 
 u32 alinx_get_tx_drop_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
         u32 regval = read32(xdev->bar[0] + REG_TX_DROP_PACKETS);
-        priv->tx_drop_count += regval;
+        priv->total_tx_drop_count += regval;
 
-        return priv->tx_drop_count;
+        return priv->total_tx_drop_count;
 }
 
 #ifdef __LIBXDMA_DEBUG__
