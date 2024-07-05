@@ -42,5 +42,3 @@ void tsn_init_configs(struct pci_dev* config);
 int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* qopt);
 int tsn_set_qav(struct pci_dev* pdev, struct tc_cbs_qopt_offload* qopt);
 int tsn_set_qbv(struct pci_dev* pdev, struct tc_taprio_qopt_offload* qopt);
-
-void tsn_update_buffer_track(struct pci_dev* pdev);

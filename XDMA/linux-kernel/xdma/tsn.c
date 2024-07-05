@@ -24,6 +24,7 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 
 // HW Buffer tracker
 static bool append_buffer_track(struct buffer_tracker* buffer_tracker);
+static void update_buffer_track(struct pci_dev* pdev);
 
 static uint8_t tsn_get_vlan_prio(struct tsn_config* tsn_config, struct sk_buff* skb) {
 	struct tx_buffer* tx_buf = (struct tx_buffer*)skb->data;
@@ -70,6 +71,8 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	struct tsn_config* tsn_config = &xdev->tsn_config;
 	struct buffer_tracker* buffer_tracker = &tsn_config->buffer_tracker;
 	struct xdma_private* priv = netdev_priv(xdev->ndev);
+
+	update_buffer_track(pdev);
 
 	vlan_prio = tsn_get_vlan_prio(tsn_config, skb);
 	is_gptp = is_gptp_packet(tx_buf->data);
@@ -385,7 +388,7 @@ static bool append_buffer_track(struct buffer_tracker* buffer_tracker) {
 	return true;
 }
 
-void tsn_update_buffer_track(struct pci_dev* pdev) {
+static void update_buffer_track(struct pci_dev* pdev) {
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct buffer_tracker* buffer_tracker = &xdev->tsn_config.buffer_tracker;
 	u64 tx_count, pop_count;
