@@ -145,6 +145,7 @@ u32 alinx_get_tx_drop_packets(struct pci_dev *pdev);
 u32 alinx_get_normal_timeout_packets(struct pci_dev *pdev);
 u32 alinx_get_to_overflow_popped_packets(struct pci_dev *pdev);
 u32 alinx_get_to_overflow_timeout_packets(struct pci_dev *pdev);
+u32 alinx_get_total_tx_drop_packets(struct pci_dev *pdev);
 
 void dump_buffer(unsigned char* buffer, int len);
 

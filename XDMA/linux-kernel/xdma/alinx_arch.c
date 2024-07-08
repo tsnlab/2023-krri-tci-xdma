@@ -120,6 +120,13 @@ u32 alinx_get_to_overflow_timeout_packets(struct pci_dev *pdev) {
         return regval;
 }
 
+u32 alinx_get_total_tx_drop_packets(struct pci_dev *pdev) {
+        return alinx_get_tx_drop_packets(pdev)
+                + alinx_get_normal_timeout_packets(pdev)
+                + alinx_get_to_overflow_popped_packets(pdev)
+                + alinx_get_to_overflow_timeout_packets(pdev);
+}
+
 #ifdef __LIBXDMA_DEBUG__
 void dump_buffer(unsigned char* buffer, int len)
 {
