@@ -111,6 +111,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         skb->len = max((unsigned int)ETH_ZLEN, skb->len);
         if (skb_padto(skb, skb->len)) {
                 pr_err("skb_padto failed\n");
+                netif_wake_queue(ndev);
                 dev_kfree_skb(skb);
                 return NETDEV_TX_OK;
         }
@@ -118,6 +119,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         /* Jumbo frames not supported */
         if (skb->len > XDMA_BUFFER_SIZE) {
                 pr_err("Jumbo frames not supported\n");
+                netif_wake_queue(ndev);
                 dev_kfree_skb(skb);
                 return NETDEV_TX_OK;
         }
@@ -128,6 +130,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         /* Add metadata to the skb */
         if (pskb_expand_head(skb, TX_METADATA_SIZE, 0, GFP_ATOMIC) != 0) {
                 pr_err("pskb_expand_head failed\n");
+                netif_wake_queue(ndev);
                 dev_kfree_skb(skb);
                 return NETDEV_TX_OK;
         }
@@ -157,6 +160,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         if (tsn_fill_metadata(xdev->pdev, now, skb) == false) {
                 // TODO: Increment SW drop stats
                 pr_err("tsn_fill_metadata failed\n");
+                netif_wake_queue(ndev);
                 return NETDEV_TX_BUSY;
         }
 
@@ -168,6 +172,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         dma_addr = dma_map_single(&xdev->pdev->dev, skb->data, skb->len, DMA_TO_DEVICE);
         if (unlikely(dma_mapping_error(&xdev->pdev->dev, dma_addr))) {
                 pr_err("dma_map_single failed\n");
+                netif_wake_queue(ndev);
                 return NETDEV_TX_BUSY;
         }
         priv->tx_dma_addr = dma_addr;
