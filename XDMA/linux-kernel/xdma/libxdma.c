@@ -1483,7 +1483,7 @@ static irqreturn_t xdma_isr(int irq, void *dev_id)
 			priv->rx_buffer + RX_METADATA_SIZE,
 			skb_len);
 		if (filter_rx_timestamp(priv, skb)) {
-			skb_hwtstamps(skb)->hwtstamp = alinx_get_rx_timestamp(xdev->pdev, alinx_get_sys_clock(xdev->pdev));
+			skb_hwtstamps(skb)->hwtstamp = alinx_get_rx_timestamp(xdev->pdev, rx_buffer->metadata.timestamp);
 		}
 		skb->dev = ndev;
 		skb->protocol = eth_type_trans(skb, ndev);
