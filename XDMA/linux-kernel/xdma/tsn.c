@@ -23,8 +23,8 @@ static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint
 static bool get_timestamps(struct timestamps* timestamps, const struct tsn_config* tsn_config, timestamp_t from, uint8_t vlan_prio, uint64_t bytes, bool consider_delay);
 
 // HW Buffer tracker
-static bool append_buffer_track(struct buffer_tracker* tracker, sysclock_t free_at);
-static bool cleanup_buffer_track(struct buffer_tracker* tracker, sysclock_t now);
+static bool append_buffer_track(struct buffer_tracker* buffer_tracker);
+static void update_buffer_track(struct pci_dev* pdev);
 
 static uint8_t tsn_get_vlan_prio(struct tsn_config* tsn_config, struct sk_buff* skb) {
 	struct tx_buffer* tx_buf = (struct tx_buffer*)skb->data;
@@ -72,7 +72,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	struct buffer_tracker* buffer_tracker = &tsn_config->buffer_tracker;
 	struct xdma_private* priv = netdev_priv(xdev->ndev);
 
-	cleanup_buffer_track(buffer_tracker, alinx_timestamp_to_sysclock(pdev, now));
+	update_buffer_track(pdev);
 
 	vlan_prio = tsn_get_vlan_prio(tsn_config, skb);
 	is_gptp = is_gptp_packet(tx_buf->data);
@@ -101,12 +101,12 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 		}
 		if (consider_delay) {
 			// Check if queue is available
-			if (buffer_tracker->count >= TSN_QUEUE_SIZE) {
+			if (buffer_tracker->pending_packets >= TSN_QUEUE_SIZE) {
 				return false;
 			}
 		} else {
 			// Best effort
-			if (buffer_tracker->count >= BE_QUEUE_SIZE) {
+			if (buffer_tracker->pending_packets >= BE_QUEUE_SIZE) {
 				return false;
 			}
 			from = max(from, tsn_config->total_available_at);
@@ -139,7 +139,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	tsn_config->total_available_at += duration_ns;
 
 	free_at = max(timestamps.to + duration_ns, tsn_config->total_available_at);
-	if (append_buffer_track(buffer_tracker, alinx_timestamp_to_sysclock(pdev, free_at)) == false) {
+	if (append_buffer_track(buffer_tracker) == false) {
 		// HW queue is full. Drop the frame
 		// Mostly, this won't happen because we already checked the queue size
 		return false;
@@ -379,22 +379,30 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 	return true;
 }
 
-static bool append_buffer_track(struct buffer_tracker* tracker, sysclock_t free_at) {
-	if (tracker->count >= HW_QUEUE_SIZE) {
+static bool append_buffer_track(struct buffer_tracker* buffer_tracker) {
+	if (buffer_tracker->pending_packets >= HW_QUEUE_SIZE) {
 		return false;
 	}
-	tracker->free_at[tracker->head] = free_at;
-	tracker->head = (tracker->head + 1) % HW_QUEUE_SIZE;
-	tracker->count += 1;
+
+	buffer_tracker->pending_packets += 1;
 	return true;
 }
 
-static bool cleanup_buffer_track(struct buffer_tracker* tracker, sysclock_t now) {
-	while (tracker->count > 0 && tracker->free_at[tracker->tail] < now) {
-		tracker->tail = (tracker->tail + 1) % HW_QUEUE_SIZE;
-		tracker->count -= 1;
+static void update_buffer_track(struct pci_dev* pdev) {
+	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+	struct buffer_tracker* buffer_tracker = &xdev->tsn_config.buffer_tracker;
+	u64 tx_count, pop_count;
+
+	if (buffer_tracker->pending_packets < HW_QUEUE_SIZE - HW_QUEUE_SIZE_PAD) {
+		// No need to update that frequently
+		return;
 	}
-	return true;
+
+	tx_count = alinx_get_tx_packets(pdev) + alinx_get_tx_drop_packets(pdev);
+	pop_count = tx_count - buffer_tracker->last_tx_count;
+	buffer_tracker->last_tx_count = tx_count;
+	pop_count = min(pop_count, buffer_tracker->pending_packets);
+	buffer_tracker->pending_packets -= pop_count;
 }
 
 int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* qopt) {

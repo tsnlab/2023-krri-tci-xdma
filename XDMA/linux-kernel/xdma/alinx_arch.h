@@ -29,6 +29,9 @@ typedef uint32_t u32
 #define REG_TX_TIMESTAMP4_HIGH 0x0340
 #define REG_TX_TIMESTAMP4_LOW 0x0344
 
+#define REG_TX_PACKETS 0x0200
+#define REG_TX_DROP_PACKETS 0x0220
+
 #define TX_QUEUE_COUNT 3
 
 /* 125 MHz */
@@ -38,6 +41,7 @@ typedef uint32_t u32
 #define HW_QUEUE_SIZE (128)
 #define BE_QUEUE_SIZE (HW_QUEUE_SIZE - 20)
 #define TSN_QUEUE_SIZE (HW_QUEUE_SIZE - 2)
+#define HW_QUEUE_SIZE_PAD 20
 
 #define VLAN_PRIO_COUNT 8
 #define TSN_PRIO_COUNT 8
@@ -111,10 +115,8 @@ struct qav_state {
 };
 
 struct buffer_tracker {
-	sysclock_t free_at[HW_QUEUE_SIZE];
-	int head; // Insert
-	int tail; // Remove
-	int count;
+	uint64_t pending_packets;
+	uint64_t last_tx_count;
 };
 
 struct tsn_config {
@@ -135,6 +137,8 @@ sysclock_t alinx_get_sys_clock(struct pci_dev *pdev);
 void alinx_set_cycle_1s(struct pci_dev *pdev, u32 cycle_1s);
 u32 alinx_get_cycle_1s(struct pci_dev *pdev);
 timestamp_t alinx_read_tx_timestamp(struct pci_dev *pdev, int tx_id);
+u32 alinx_get_tx_packets(struct pci_dev *pdev);
+u32 alinx_get_tx_drop_packets(struct pci_dev *pdev);
 
 void dump_buffer(unsigned char* buffer, int len);
 

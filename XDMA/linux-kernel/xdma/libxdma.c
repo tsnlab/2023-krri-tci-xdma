@@ -33,6 +33,7 @@
 #include "cdev_sgdma.h"
 #include "xdma_thread.h"
 #include "xdma_netdev.h"
+#include "tsn.h"
 
 
 #ifdef __LIBXDMA_DEBUG__
