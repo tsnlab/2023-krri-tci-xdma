@@ -398,7 +398,7 @@ static void update_buffer_track(struct pci_dev* pdev) {
 		return;
 	}
 
-	tx_count = alinx_get_tx_packets(pdev) + alinx_get_tx_drop_packets(pdev);
+	tx_count = alinx_get_tx_packets(pdev) + alinx_get_tx_drop_packets(pdev) + alinx_get_normal_timeout_packets(pdev) + alinx_get_to_overflow_popped_packets(pdev) + alinx_get_to_overflow_timeout_packets(pdev);
 	pop_count = tx_count - buffer_tracker->last_tx_count;
 	buffer_tracker->last_tx_count = tx_count;
 	pop_count = min(pop_count, buffer_tracker->pending_packets);

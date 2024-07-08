@@ -93,6 +93,33 @@ u32 alinx_get_tx_drop_packets(struct pci_dev *pdev) {
         return priv->total_tx_drop_count;
 }
 
+u32 alinx_get_normal_timeout_packets(struct pci_dev *pdev) {
+        struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+        u32 regval = read32(xdev->bar[0] + REG_NORMAL_TIMEOUT_COUNT);
+        // This register does not get cleared when read
+        // TODO: Handle overflow?
+
+        return regval;
+}
+
+u32 alinx_get_to_overflow_popped_packets(struct pci_dev *pdev) {
+        struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+        u32 regval = read32(xdev->bar[0] + REG_TO_OVERFLOW_POPPED_COUNT);
+        // This register does not get cleared when read
+        // TODO: Handle overflow?
+
+        return regval;
+}
+
+u32 alinx_get_to_overflow_timeout_packets(struct pci_dev *pdev) {
+        struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+        u32 regval = read32(xdev->bar[0] + REG_TO_OVERFLOW_TIMEOUT_COUNT);
+        // This register does not get cleared when read
+        // TODO: Handle overflow?
+
+        return regval;
+}
+
 #ifdef __LIBXDMA_DEBUG__
 void dump_buffer(unsigned char* buffer, int len)
 {
