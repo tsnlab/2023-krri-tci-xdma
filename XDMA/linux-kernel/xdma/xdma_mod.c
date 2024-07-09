@@ -69,7 +69,7 @@ static bool get_host_id(uint64_t* hostid) {
 	// Cut it to 64-bit
 	((char*)buf)[16] = '\0';
 
-	if (ret = kstrtoull(buf, 16, hostid)) {
+	if ((ret = kstrtoull(buf, 16, hostid))) {
 		pr_err("Failed to convert machine-id to uint64_t: %d\n", ret);
 		result = false;
 		goto end;
@@ -94,7 +94,7 @@ static uint64_t hash(unsigned long hostid, unsigned long num) {
 
 static void get_mac_address(char* mac_addr, struct xdma_dev *xdev) {
 	int i;
-	void* data = NULL;
+	uint64_t hashed_num;
 	unsigned long long machine_id;
 	unsigned char pcie_num = xdev->idx; // FIXME: Use proper PCIe number
 
@@ -103,7 +103,7 @@ static void get_mac_address(char* mac_addr, struct xdma_dev *xdev) {
 	}
 
 	// Hashing
-	uint64_t hashed_num = hash(machine_id, pcie_num);
+	hashed_num = hash(machine_id, pcie_num);
 
 	// Convert to MAC address
 	for (i = 0; i < ETH_ALEN; i++) {
@@ -265,6 +265,7 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct net_device *ndev;
 	struct xdma_private *priv;
 	struct ptp_device_data *ptp_data;
+	unsigned char mac_addr[ETH_ALEN];
 
 	xpdev = xpdev_alloc(pdev);
 	if (!xpdev) {
@@ -403,7 +404,6 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	spin_lock_init(&priv->rx_lock);
 
 	/* Set the MAC address */
-	unsigned char mac_addr[ETH_ALEN];
 	get_mac_address(mac_addr, xdev);
 	memcpy(ndev->dev_addr, mac_addr, ETH_ALEN);
 
