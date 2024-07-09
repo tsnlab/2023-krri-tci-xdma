@@ -83,6 +83,8 @@ static void add_u32_counter(u64* sum, u32 value) {
 u64 alinx_get_tx_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
+
+        /* This register gets cleared after read */
         u32 regval = read32(xdev->bar[0] + REG_TX_PACKETS);
         priv->total_tx_count += regval;
 
@@ -92,6 +94,8 @@ u64 alinx_get_tx_packets(struct pci_dev *pdev) {
 u64 alinx_get_tx_drop_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
+
+        /* This register gets cleared after read */
         u32 regval = read32(xdev->bar[0] + REG_TX_DROP_PACKETS);
         priv->total_tx_drop_count += regval;
 
@@ -101,6 +105,8 @@ u64 alinx_get_tx_drop_packets(struct pci_dev *pdev) {
 u64 alinx_get_normal_timeout_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
+
+        /* This register does not get cleared after read */
         u32 regval = read32(xdev->bar[0] + REG_NORMAL_TIMEOUT_COUNT);
         add_u32_counter(&priv->last_normal_timeout, regval);
 
@@ -110,6 +116,8 @@ u64 alinx_get_normal_timeout_packets(struct pci_dev *pdev) {
 u64 alinx_get_to_overflow_popped_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
+
+        /* This register does not get cleared after read */
         u32 regval = read32(xdev->bar[0] + REG_TO_OVERFLOW_POPPED_COUNT);
         add_u32_counter(&priv->last_to_overflow_popped, regval);
 
@@ -119,6 +127,8 @@ u64 alinx_get_to_overflow_popped_packets(struct pci_dev *pdev) {
 u64 alinx_get_to_overflow_timeout_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
+
+        /* This register does not get cleared after read */
         u32 regval = read32(xdev->bar[0] + REG_TO_OVERFLOW_TIMEOUT_COUNT);
         add_u32_counter(&priv->last_to_overflow_timeout, regval);
 

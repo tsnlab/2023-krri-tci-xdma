@@ -175,6 +175,8 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                 netif_wake_queue(ndev);
                 return NETDEV_TX_BUSY;
         }
+
+        /* netif_wake_queue() will be called in xdma_isr() */
         priv->tx_dma_addr = dma_addr;
         priv->tx_skb = skb;
         tx_desc_set(priv->tx_desc, dma_addr, skb->len);
