@@ -78,7 +78,7 @@ static bool get_host_id(uint64_t* hostid) {
 
 end:
 	vfree(buf);
-	return ret;
+	return result;
 }
 
 static uint64_t hash(unsigned long hostid, unsigned long num) {
