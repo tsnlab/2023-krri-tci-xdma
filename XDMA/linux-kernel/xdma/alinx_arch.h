@@ -140,12 +140,12 @@ sysclock_t alinx_get_sys_clock(struct pci_dev *pdev);
 void alinx_set_cycle_1s(struct pci_dev *pdev, u32 cycle_1s);
 u32 alinx_get_cycle_1s(struct pci_dev *pdev);
 timestamp_t alinx_read_tx_timestamp(struct pci_dev *pdev, int tx_id);
-u32 alinx_get_tx_packets(struct pci_dev *pdev);
-u32 alinx_get_tx_drop_packets(struct pci_dev *pdev);
-u32 alinx_get_normal_timeout_packets(struct pci_dev *pdev);
-u32 alinx_get_to_overflow_popped_packets(struct pci_dev *pdev);
-u32 alinx_get_to_overflow_timeout_packets(struct pci_dev *pdev);
-u32 alinx_get_total_tx_drop_packets(struct pci_dev *pdev);
+u64 alinx_get_tx_packets(struct pci_dev *pdev);
+u64 alinx_get_tx_drop_packets(struct pci_dev *pdev);
+u64 alinx_get_normal_timeout_packets(struct pci_dev *pdev);
+u64 alinx_get_to_overflow_popped_packets(struct pci_dev *pdev);
+u64 alinx_get_to_overflow_timeout_packets(struct pci_dev *pdev);
+u64 alinx_get_total_tx_drop_packets(struct pci_dev *pdev);
 
 void dump_buffer(unsigned char* buffer, int len);
 

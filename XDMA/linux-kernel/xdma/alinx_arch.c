@@ -75,7 +75,7 @@ timestamp_t alinx_read_tx_timestamp(struct pci_dev* pdev, int tx_id) {
         }
 }
 
-u32 alinx_get_tx_packets(struct pci_dev *pdev) {
+u64 alinx_get_tx_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
         u32 regval = read32(xdev->bar[0] + REG_TX_PACKETS);
@@ -84,7 +84,7 @@ u32 alinx_get_tx_packets(struct pci_dev *pdev) {
         return priv->total_tx_count;
 }
 
-u32 alinx_get_tx_drop_packets(struct pci_dev *pdev) {
+u64 alinx_get_tx_drop_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
         u32 regval = read32(xdev->bar[0] + REG_TX_DROP_PACKETS);
@@ -93,34 +93,52 @@ u32 alinx_get_tx_drop_packets(struct pci_dev *pdev) {
         return priv->total_tx_drop_count;
 }
 
-u32 alinx_get_normal_timeout_packets(struct pci_dev *pdev) {
+u64 alinx_get_normal_timeout_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+        struct xdma_private* priv = netdev_priv(xdev->ndev);
         u32 regval = read32(xdev->bar[0] + REG_NORMAL_TIMEOUT_COUNT);
-        // This register does not get cleared when read
-        // TODO: Handle overflow?
 
-        return regval;
+        if (regval < (u32)(priv->last_normal_timeout & 0xFFFFFFFF)) {
+                // Overflow
+                priv->last_normal_timeout += 0x100000000;
+        }
+        priv->last_normal_timeout &= 0xFFFFFFFF00000000;
+        priv->last_normal_timeout |= (u64)regval;
+
+        return priv->last_normal_timeout;
 }
 
-u32 alinx_get_to_overflow_popped_packets(struct pci_dev *pdev) {
+u64 alinx_get_to_overflow_popped_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+        struct xdma_private* priv = netdev_priv(xdev->ndev);
         u32 regval = read32(xdev->bar[0] + REG_TO_OVERFLOW_POPPED_COUNT);
-        // This register does not get cleared when read
-        // TODO: Handle overflow?
 
-        return regval;
+        if (regval < (u32)(priv->last_to_overflow_popped & 0xFFFFFFFF)) {
+                // Overflow
+                priv->last_to_overflow_popped += 0x100000000;
+        }
+        priv->last_to_overflow_popped &= 0xFFFFFFFF00000000;
+        priv->last_to_overflow_popped |= (u64)regval;
+
+        return priv->last_to_overflow_popped;
 }
 
-u32 alinx_get_to_overflow_timeout_packets(struct pci_dev *pdev) {
+u64 alinx_get_to_overflow_timeout_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
+        struct xdma_private* priv = netdev_priv(xdev->ndev);
         u32 regval = read32(xdev->bar[0] + REG_TO_OVERFLOW_TIMEOUT_COUNT);
-        // This register does not get cleared when read
-        // TODO: Handle overflow?
 
-        return regval;
+        if (regval < (u32)(priv->last_to_overflow_timeout & 0xFFFFFFFF)) {
+                // Overflow
+                priv->last_to_overflow_timeout += 0x100000000;
+        }
+        priv->last_to_overflow_timeout &= 0xFFFFFFFF00000000;
+        priv->last_to_overflow_timeout |= (u64)regval;
+
+        return priv->last_to_overflow_timeout;
 }
 
-u32 alinx_get_total_tx_drop_packets(struct pci_dev *pdev) {
+u64 alinx_get_total_tx_drop_packets(struct pci_dev *pdev) {
         return alinx_get_tx_drop_packets(pdev)
                 + alinx_get_normal_timeout_packets(pdev)
                 + alinx_get_to_overflow_popped_packets(pdev)
