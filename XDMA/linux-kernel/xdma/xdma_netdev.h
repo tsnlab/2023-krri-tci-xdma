@@ -67,6 +67,9 @@ struct xdma_private {
 
         uint64_t total_tx_count;
         uint64_t total_tx_drop_count;
+        uint64_t last_normal_timeout;
+        uint64_t last_to_overflow_popped;
+        uint64_t last_to_overflow_timeout;
 
         unsigned long state;
 };
