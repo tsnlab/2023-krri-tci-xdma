@@ -16,6 +16,7 @@
 
 #define pr_fmt(fmt)     KBUILD_MODNAME ":%s: " fmt, __func__
 
+#include <linux/fs.h>
 #include <linux/ioctl.h>
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -45,6 +46,74 @@ MODULE_LICENSE("Dual BSD/GPL");
 
 /* SECTION: Module global variables */
 static int xpdev_cnt;
+
+static bool get_host_id(uint64_t* hostid) {
+	void* buf = NULL;
+	size_t size;
+	int ret;
+	bool result;
+	ret = kernel_read_file_from_path("/etc/machine-id", 0, &buf, INT_MAX, NULL, READING_UNKNOWN);
+	if (ret < 0) {
+		pr_err("Failed to read machine-id\n");
+		return false;
+	}
+
+	size = ret;
+
+	if (size != 33) {
+		pr_err("Invalid machine-id\n");
+		result = false;
+		goto end;
+	}
+
+	// Cut it to 64-bit
+	((char*)buf)[16] = '\0';
+
+	if ((ret = kstrtoull(buf, 16, hostid))) {
+		pr_err("Failed to convert machine-id to uint64_t: %d\n", ret);
+		result = false;
+		goto end;
+	}
+	result = true;
+
+end:
+	vfree(buf);
+	return result;
+}
+
+static uint64_t hash(unsigned long hostid, unsigned long num) {
+	// Note that these magic numbers are well known constants for hashing
+	// See splitmix64
+	uint64_t hash = hostid;
+	hash = ((hash >> 30) ^ (hash ^ num)) * U64_C(0xbf58476d1ce4e5b9);
+	hash = ((hash >> 27) ^ hash) * U64_C(0x94d049bb133111eb);
+	hash = (hash >> 31) ^ hash;
+
+	return hash;
+}
+
+static void get_mac_address(char* mac_addr, struct xdma_dev *xdev) {
+	int i;
+	uint64_t hashed_num;
+	unsigned long long machine_id;
+	unsigned char pcie_num = xdev->idx; // FIXME: Use proper PCIe number
+
+	if (get_host_id(&machine_id) == false) {
+		machine_id = 0; // Fallback value
+	}
+
+	// Hashing
+	hashed_num = hash(machine_id, pcie_num);
+
+	// Convert to MAC address
+	for (i = 0; i < ETH_ALEN; i++) {
+		mac_addr[i] = (hashed_num >> (i * 8)) & 0xFF;
+	}
+
+	// Adjust U/L, I/G bits
+	mac_addr[0] &= ~0x1; // Unicast
+	mac_addr[0] &= ~0x2; // Global
+}
 
 static const struct pci_device_id pci_ids[] = {
 	{ PCI_DEVICE(0x10ee, 0x9048), },
@@ -196,6 +265,7 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	struct net_device *ndev;
 	struct xdma_private *priv;
 	struct ptp_device_data *ptp_data;
+	unsigned char mac_addr[ETH_ALEN];
 
 	xpdev = xpdev_alloc(pdev);
 	if (!xpdev) {
@@ -334,7 +404,8 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	spin_lock_init(&priv->rx_lock);
 
 	/* Set the MAC address */
-	memcpy(ndev->dev_addr, "\xca\x11\x22\x3a\x44\x55", ETH_ALEN);
+	get_mac_address(mac_addr, xdev);
+	memcpy(ndev->dev_addr, mac_addr, ETH_ALEN);
 
 	priv->rx_buffer = kmalloc(XDMA_BUFFER_SIZE, GFP_KERNEL);
 	if (!priv->rx_buffer) {
