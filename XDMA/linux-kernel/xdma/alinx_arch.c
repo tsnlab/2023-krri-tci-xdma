@@ -75,6 +75,11 @@ timestamp_t alinx_read_tx_timestamp(struct pci_dev* pdev, int tx_id) {
         }
 }
 
+static void add_u32_counter(u64* sum, u32 value) {
+        u32 diff = value - (u32)*sum;
+        *sum += (u64)diff;
+}
+
 u64 alinx_get_tx_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
@@ -97,13 +102,7 @@ u64 alinx_get_normal_timeout_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
         u32 regval = read32(xdev->bar[0] + REG_NORMAL_TIMEOUT_COUNT);
-
-        if (regval < (u32)(priv->last_normal_timeout & 0xFFFFFFFF)) {
-                // Overflow
-                priv->last_normal_timeout += 0x100000000;
-        }
-        priv->last_normal_timeout &= 0xFFFFFFFF00000000;
-        priv->last_normal_timeout |= (u64)regval;
+        add_u32_counter(&priv->last_normal_timeout, regval);
 
         return priv->last_normal_timeout;
 }
@@ -112,13 +111,7 @@ u64 alinx_get_to_overflow_popped_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
         u32 regval = read32(xdev->bar[0] + REG_TO_OVERFLOW_POPPED_COUNT);
-
-        if (regval < (u32)(priv->last_to_overflow_popped & 0xFFFFFFFF)) {
-                // Overflow
-                priv->last_to_overflow_popped += 0x100000000;
-        }
-        priv->last_to_overflow_popped &= 0xFFFFFFFF00000000;
-        priv->last_to_overflow_popped |= (u64)regval;
+        add_u32_counter(&priv->last_to_overflow_popped, regval);
 
         return priv->last_to_overflow_popped;
 }
@@ -127,13 +120,7 @@ u64 alinx_get_to_overflow_timeout_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
         u32 regval = read32(xdev->bar[0] + REG_TO_OVERFLOW_TIMEOUT_COUNT);
-
-        if (regval < (u32)(priv->last_to_overflow_timeout & 0xFFFFFFFF)) {
-                // Overflow
-                priv->last_to_overflow_timeout += 0x100000000;
-        }
-        priv->last_to_overflow_timeout &= 0xFFFFFFFF00000000;
-        priv->last_to_overflow_timeout |= (u64)regval;
+        add_u32_counter(&priv->last_to_overflow_timeout, regval);
 
         return priv->last_to_overflow_timeout;
 }
