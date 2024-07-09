@@ -76,6 +76,7 @@ timestamp_t alinx_read_tx_timestamp(struct pci_dev* pdev, int tx_id) {
 }
 
 static void add_u32_counter(u64* sum, u32 value) {
+        /* Handle overflows of 32-bit counters */
         u32 diff = value - (u32)*sum;
         *sum += (u64)diff;
 }
