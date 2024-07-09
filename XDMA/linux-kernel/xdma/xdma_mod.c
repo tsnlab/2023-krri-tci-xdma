@@ -89,11 +89,11 @@ static uint64_t hash(unsigned long hostid, unsigned long num) {
 	return hash;
 }
 
-static void get_mac_address(char* mac_addr, struct pci_dev *pdev) {
+static void get_mac_address(char* mac_addr, struct xdma_dev *xdev) {
 	int i;
 	void* data = NULL;
 	unsigned long long machine_id;
-	unsigned char pcie_num = 0; // FIXME
+	unsigned char pcie_num = xdev->idx; // FIXME: Use proper PCIe number
 
 	if (get_host_id(&machine_id) == false) {
 		machine_id = 0; // Fallback value
@@ -401,7 +401,7 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	/* Set the MAC address */
 	unsigned char mac_addr[ETH_ALEN];
-	get_mac_address(mac_addr, pdev);
+	get_mac_address(mac_addr, xdev);
 	memcpy(ndev->dev_addr, mac_addr, ETH_ALEN);
 
 	priv->rx_buffer = kmalloc(XDMA_BUFFER_SIZE, GFP_KERNEL);
