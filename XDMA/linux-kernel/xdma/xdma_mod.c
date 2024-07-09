@@ -93,7 +93,7 @@ static void get_mac_address(char* mac_addr, struct pci_dev *pdev) {
 	int i;
 	void* data = NULL;
 	unsigned long long machine_id;
-	unsigned char pcie_num = pdev->slot->number;
+	unsigned char pcie_num = 0; // FIXME
 
 	if (get_host_id(&machine_id) == false) {
 		machine_id = 0; // Fallback value
