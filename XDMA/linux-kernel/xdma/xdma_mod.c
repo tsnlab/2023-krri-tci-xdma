@@ -49,17 +49,20 @@ static int xpdev_cnt;
 
 static bool get_host_id(uint64_t* hostid) {
 	void* buf = NULL;
-	loff_t offsize;
+	size_t size;
 	int ret;
-	ret = kernel_read_file_from_path("/etc/machine-id", &buf, &offsize, INT_MAX, READING_UNKNOWN);
+	bool result;
+	ret = kernel_read_file_from_path("/etc/machine-id", 0, &buf, INT_MAX, NULL, READING_UNKNOWN);
 	if (ret < 0) {
 		pr_err("Failed to read machine-id\n");
 		return false;
 	}
 
-	if (offsize != 33) {
+	size = ret;
+
+	if (size != 33) {
 		pr_err("Invalid machine-id\n");
-		ret = false;
+		result = false;
 		goto end;
 	}
 
@@ -68,10 +71,10 @@ static bool get_host_id(uint64_t* hostid) {
 
 	if (ret = kstrtoull(buf, 16, hostid)) {
 		pr_err("Failed to convert machine-id to uint64_t: %d\n", ret);
-		ret = false;
+		result = false;
 		goto end;
 	}
-	ret = true;
+	result = true;
 
 end:
 	vfree(buf);
