@@ -10,6 +10,8 @@
 #include "tsn.h"
 #include "alinx_arch.h"
 
+#define LOWER_29_BITS 0x1FFFFFFFULL
+
 static void tx_desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len)
 {
         u32 control_field;
@@ -98,7 +100,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         struct xdma_private *priv = netdev_priv(ndev);
         struct xdma_dev *xdev = priv->xdev;
         u32 w;
-        sysclock_t sys_count;
+        sysclock_t sys_count, sys_count_upper, sys_count_lower;
         timestamp_t now;
         u16 frame_length;
         dma_addr_t dma_addr;
@@ -145,6 +147,9 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
 
         sys_count = alinx_get_sys_clock(priv->pdev);
         now = alinx_sysclock_to_timestamp(priv->pdev, sys_count);
+        sys_count_lower = sys_count & LOWER_29_BITS;
+        sys_count_upper = sys_count & ~LOWER_29_BITS;
+
 
         /* Set the fromtick & to_tick values based on the lower 29 bits of the system count */
         if (tsn_fill_metadata(xdev->pdev, now, skb) == false) {
@@ -171,8 +176,20 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                         !test_and_set_bit_lock(tx_metadata->timestamp_id, &priv->state)) {
                         skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
                         priv->tx_work_skb[tx_metadata->timestamp_id] = skb_get(skb);
-                        priv->tx_work_wait_until[tx_metadata->timestamp_id] = (sys_count & ~0x1FFFFFFF) | tx_metadata->to.tick;
-                        if ((sys_count & 0x1FFFFFFF) > tx_metadata->to.tick) {
+                        /*
+                         * Even if the driver's intention was sys_count == from,
+                         * there might be a slight error caused during conversion (sysclock <-> timestamp)
+                         * So if the diffence is small, don't consider it as overflow.
+                         * Adding/Subtracting directly from values can cause another overflow,
+                         * so just calculate the difference.
+                         */
+                        priv->tx_work_start_after[tx_metadata->timestamp_id] = sys_count_upper | tx_metadata->from.tick;
+                        if (sys_count_lower > tx_metadata->from.tick && sys_count_lower - tx_metadata->from.tick > 3) {
+                                // Overflow
+                                priv->tx_work_start_after[tx_metadata->timestamp_id] += 0x20000000;
+                        }
+                        priv->tx_work_wait_until[tx_metadata->timestamp_id] = sys_count_lower | tx_metadata->to.tick;
+                        if (sys_count_lower > tx_metadata->to.tick) {
                                 // Overflow
                                 priv->tx_work_wait_until[tx_metadata->timestamp_id] += 0x20000000;
                         }
@@ -254,12 +271,17 @@ void xdma_tx_work##tstamp_id(struct work_struct *work) { \
         struct skb_shared_hwtstamps shhwtstamps; \
         struct xdma_private* priv = container_of(work - tstamp_id, struct xdma_private, tx_work[0]); \
         struct sk_buff* skb = priv->tx_work_skb[tstamp_id]; \
+        sysclock_t now = alinx_get_sys_clock(priv->xdev->pdev); \
  \
         if (!priv->tx_work_skb[tstamp_id]) { \
                 clear_bit_unlock(XDMA_TX##tstamp_id##_IN_PROGRESS, &priv->state); \
                 return; \
         } \
  \
+        if (now < priv->tx_work_start_after[tstamp_id]) { \
+                schedule_work(&priv->tx_work[tstamp_id]); \
+                return; \
+        } \
         /* Read TX timestamp several times because */ \
         /* 1. Reading and writing TX timestamp register are not atomic */ \
         /* 2. The work thread might try to read TX timestamp before the register gets updated */ \

@@ -64,6 +64,7 @@ struct xdma_private {
 
         struct work_struct tx_work[TSN_TIMESTAMP_ID_MAX];
         struct sk_buff *tx_work_skb[TSN_TIMESTAMP_ID_MAX];
+        sysclock_t tx_work_start_after[TSN_TIMESTAMP_ID_MAX];
         sysclock_t tx_work_wait_until[TSN_TIMESTAMP_ID_MAX];
         struct hwtstamp_config tstamp_config;
         sysclock_t last_tx_tstamp[TSN_TIMESTAMP_ID_MAX];
