@@ -424,7 +424,11 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_out;
 	}
 
-	INIT_WORK(&priv->tx_work, xdma_tx_work);
+	/* Tx works for each timestamp id */
+	INIT_WORK(&priv->tx_work[1], xdma_tx_work1);
+	INIT_WORK(&priv->tx_work[2], xdma_tx_work2);
+	INIT_WORK(&priv->tx_work[3], xdma_tx_work3);
+	INIT_WORK(&priv->tx_work[4], xdma_tx_work4);
 
 	ptp_data = ptp_device_init(&pdev->dev, xdev);
 	if (!ptp_data) {

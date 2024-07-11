@@ -29,7 +29,10 @@
 #define TX_TSTAMP_MAX_RETRY 5
 
 enum xdma_state_t {
-        XDMA_TX_IN_PROGRESS,
+        XDMA_TX1_IN_PROGRESS = 1,
+        XDMA_TX2_IN_PROGRESS = 2,
+        XDMA_TX3_IN_PROGRESS = 3,
+        XDMA_TX4_IN_PROGRESS = 4,
 };
 
 struct xdma_private {
@@ -59,8 +62,9 @@ struct xdma_private {
         int irq;
         int rx_count;
 
-        struct work_struct tx_work;
-        struct sk_buff *tx_work_skb;
+        struct work_struct tx_work[TSN_TIMESTAMP_ID_MAX];
+        struct sk_buff *tx_work_skb[TSN_TIMESTAMP_ID_MAX];
+        sysclock_t tx_work_wait_until[TSN_TIMESTAMP_ID_MAX];
         struct hwtstamp_config tstamp_config;
         sysclock_t last_tx_tstamp[TSN_TIMESTAMP_ID_MAX];
         int tstamp_retry[TSN_TIMESTAMP_ID_MAX];
@@ -157,6 +161,9 @@ int xdma_netdev_setup_tc(struct net_device *ndev, enum tc_setup_type type, void 
 
 int xdma_netdev_ioctl(struct net_device *ndev, struct ifreq *ifr, int cmd);
 
-void xdma_tx_work(struct work_struct *work);
+void xdma_tx_work1(struct work_struct *work);
+void xdma_tx_work2(struct work_struct *work);
+void xdma_tx_work3(struct work_struct *work);
+void xdma_tx_work4(struct work_struct *work);
 
 #endif
