@@ -172,7 +172,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                         skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
                         priv->tx_work_skb[tx_metadata->timestamp_id] = skb_get(skb);
                         priv->tx_work_wait_until[tx_metadata->timestamp_id] = (sys_count & ~0x1FFFFFFF) | tx_metadata->to.tick;
-                        if (sys_count & 0x1FFFFFFF > tx_metadata->to.tick) {
+                        if ((sys_count & 0x1FFFFFFF) > tx_metadata->to.tick) {
                                 // Overflow
                                 priv->tx_work_wait_until[tx_metadata->timestamp_id] += 0x20000000;
                         }
@@ -254,7 +254,6 @@ void xdma_tx_work##tstamp_id(struct work_struct *work) { \
         struct skb_shared_hwtstamps shhwtstamps; \
         struct xdma_private* priv = container_of(work - tstamp_id, struct xdma_private, tx_work[0]); \
         struct sk_buff* skb = priv->tx_work_skb[tstamp_id]; \
-        struct tx_buffer* tx_buf = (struct tx_buffer*)skb->data; \
  \
         if (!priv->tx_work_skb[tstamp_id]) { \
                 clear_bit_unlock(XDMA_TX##tstamp_id##_IN_PROGRESS, &priv->state); \
