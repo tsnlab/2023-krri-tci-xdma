@@ -1355,6 +1355,7 @@ static bool filter_rx_timestamp(struct xdma_private* priv, struct sk_buff* skb) 
 	struct ethhdr* eth;
 	struct tsn_vlan_hdr* vlan;
 	int rx_filter = priv->tstamp_config.rx_filter;
+	return true;
 	if (rx_filter == HWTSTAMP_FILTER_NONE) {
 		return false;
 	} else if (rx_filter == HWTSTAMP_FILTER_ALL) {
