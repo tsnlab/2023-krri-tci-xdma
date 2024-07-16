@@ -319,6 +319,7 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 	sending_duration = bytes_to_ns(bytes);
 
 	// TODO: Need to check if the slot is big enough to fit the frame. But, That is a user fault. Don't mind for now
+	// But we still have to check if the first current slot's remaining time is enough to fit the frame
 
 	remainder = (from - qbv->start) % baked->cycle_ns;
 	slot_id = 0;
@@ -346,7 +347,19 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 
 	// 1. "from"
 	if (baked_prio->slots[slot_id].opened) {
-		timestamps->from = from - remainder;
+		// Skip the slot if its remaining time is not enough to fit the frame
+		if (baked_prio->slots[slot_id].duration_ns - remainder < sending_duration) {
+			// Skip this slot. Because the slots are on/off pairs, we skip 2 slots
+			// First
+			timestamps->from = from - remainder + baked_prio->slots[slot_id].duration_ns;
+			slot_id = (slot_id + 1) % baked_prio->slot_count;
+			// Second
+			timestamps->from += baked_prio->slots[slot_id].duration_ns;
+			slot_id = (slot_id + 1) % baked_prio->slot_count;
+		} else {
+			// The slot's remaining time is enough to fit the frame
+			timestamps->from = from - remainder;
+		}
 	} else {
 		// Select next slot
 		timestamps->from = from - remainder + baked_prio->slots[slot_id].duration_ns;
@@ -375,6 +388,23 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 	if (consider_delay) {
 		timestamps->delay_to -= sending_duration;
 	}
+
+#ifdef __LIBXDMA_DEBUG__
+	// Assert the timestamps
+	if (timestamps->from >= timestamps->to) {
+		pr_err("Invalid timestamps, from >= to, %llu >= %llu", timestamps->from, timestamps->to);
+	}
+
+	if (consider_delay) {
+		if (timestamps->delay_from >= timestamps->delay_to) {
+			pr_err("Invalid timestamps, delay_from >= delay_to, %llu >= %llu", timestamps->delay_from, timestamps->delay_to);
+		}
+
+		if (timestamps->to >= timestamps->delay_from) {
+			pr_err("Invalid timestamps, to >= delay_from, %llu >= %llu", timestamps->to, timestamps->delay_from);
+		}
+	}
+#endif // __LIBXDMA_DEBUG__
 
 	return true;
 }
