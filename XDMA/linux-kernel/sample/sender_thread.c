@@ -1841,6 +1841,103 @@ int test_timestamp_issue() {
   return XST_SUCCESS;
 }
 
+int test_Qbv_issue_with_n_packets(char *ip_address, uint32_t from_tick, uint32_t margin) {
+  struct tx_metadata *tx_metadata[PACKET_BURST_SIZE];
+  int id;
+  uint64_t pre_timestamps;
+  uint64_t curr_timestamps;
+  uint64_t timestamps[PACKET_BURST_SIZE];
+  struct tsn_tx_buffer *packet;
+  uint64_t curr_time;
+
+  if (initialize_buffer_allocation()) {
+    return -1;
+  }
+
+  memset(timestamps, 0, sizeof(timestamps));
+  for (id = 0; id < PACKET_BURST_SIZE; id++) {
+    tx_metadata[id] = (struct tx_metadata *)buffer_list[id];
+    fill_tx_metadata_except_from_to((struct tsn_tx_buffer *)buffer_list[id],
+                                    (uint8_t)(id & 0xFF), TOTAL_PKT_LEN, 1, 0);
+  }
+
+  pre_timestamps = ((uint64_t)get_register(REG_TX_TIMESTAMP1_HIGH) << 32) | get_register(REG_TX_TIMESTAMP1_LOW);
+  uint64_t now = get_sys_count();
+  for (id = 0; id < PACKET_BURST_SIZE; id++) {
+    tx_metadata[id]->from.tick =
+        (uint32_t)((now + 1250000 + id * (TOTAL_PKT_LEN + 14 + 10)) & 0x1FFFFFFF);
+    tx_metadata[id]->to.tick =
+        (uint32_t)((now + 1250000 + (id + 1) * (TOTAL_PKT_LEN + 14 + 10)) & 0x1FFFFFFF);
+  }
+
+  struct timeval start_time, end_time;
+  gettimeofday(&start_time, NULL);
+  for (id = 0; id < PACKET_BURST_SIZE; id++) {
+    transmit_tsn_packet_no_free((struct tsn_tx_buffer *)buffer_list[id]);
+  }
+  gettimeofday(&end_time, NULL);
+  long seconds = end_time.tv_sec - start_time.tv_sec;
+  long microseconds = end_time.tv_usec - start_time.tv_usec;
+  double elapsed_time = seconds + (microseconds / 1000000.0);
+
+  printf("\ncheck time-stamps\n");
+  for (id = 0; id < PACKET_BURST_SIZE; id++) {
+      curr_timestamps = ((uint64_t)get_register(REG_TX_TIMESTAMP1_HIGH) << 32) | get_register(REG_TX_TIMESTAMP1_LOW);
+      if(curr_timestamps != pre_timestamps) {
+          timestamps[id] = curr_timestamps;
+          pre_timestamps = curr_timestamps;
+      } else {
+            curr_time = get_sys_count();
+            if((curr_time - now) > 250000000) {
+                break;
+            }
+            id--;
+      }
+  }
+
+//  printf("\n%s - Elapsed time: %f seconds\n", __func__, elapsed_time);
+
+  for (id = 0; id < PACKET_BURST_SIZE; id++) {
+      packet = (struct tsn_tx_buffer *)buffer_list[id];
+      printf(" 0x%08x  0x%08x 0x%08lx\n", packet->metadata.from.tick, packet->metadata.to.tick, timestamps[id] & 0x1FFFFFFF);
+  }
+
+  buffer_release();
+  return XST_SUCCESS;
+}
+
+int test_Qbv_issue_with_a_packets(char *ip_address, uint32_t from_tick, uint32_t margin) {
+  struct tx_metadata *tx_metadata[256];
+  int id;
+  uint64_t curr_timestamps;
+  uint64_t now;
+
+  if (initialize_buffer_allocation()) {
+    return -1;
+  }
+
+  for (id = 0; id < 256; id++) {
+    tx_metadata[id] = (struct tx_metadata *)buffer_list[id];
+    fill_tx_metadata_except_from_to((struct tsn_tx_buffer *)buffer_list[id],
+                                    (uint8_t)(id & 0xFF), TOTAL_PKT_LEN, 1, 0);
+  }
+
+  for (id = 0; id < 256; id++) {
+    now = get_sys_count();
+    tx_metadata[id]->from.tick =
+        (uint32_t)((now + 100) & 0x1FFFFFFF);
+    tx_metadata[id]->to.tick =
+        (uint32_t)((now + 100 + (TOTAL_PKT_LEN + 14)) & 0x1FFFFFFF);
+    transmit_tsn_packet_no_free((struct tsn_tx_buffer *)buffer_list[id]);
+    usleep(10000);
+    curr_timestamps = ((uint64_t)get_register(REG_TX_TIMESTAMP1_HIGH) << 32) | get_register(REG_TX_TIMESTAMP1_LOW);
+    printf(" 0x%08x  0x%08x 0x%08lx 0x%08lx\n", tx_metadata[id]->from.tick, tx_metadata[id]->to.tick, curr_timestamps & 0x1FFFFFFF, (curr_timestamps & 0x1FFFFFFF) - tx_metadata[id]->from.tick);
+  }
+
+  buffer_release();
+  return XST_SUCCESS;
+}
+
 int send_1queueTSN_packet(char *ip_address, uint32_t from_tick,
                           uint32_t margin) {
 
@@ -1886,7 +1983,9 @@ int send_1queueTSN_packet(char *ip_address, uint32_t from_tick,
   //    test_normal(20);
   //    test_from_bigger_than_to(50);
   //    test_fail_policy(20);
-  test_timestamp_issue();
+  //    test_timestamp_issue();
+      test_Qbv_issue_with_n_packets(ip_address, from_tick, margin);
+  //    test_Qbv_issue_with_a_packets(ip_address, from_tick, margin);
 
   gettimeofday(&end_time, NULL);
   long seconds = end_time.tv_sec - start_time.tv_sec;
