@@ -1841,6 +1841,8 @@ int test_timestamp_issue() {
   return XST_SUCCESS;
 }
 
+#define READ_TIMESTAMP_MARGIN 9 // 10 1960
+
 int test_Qbv_issue_with_n_packets(char *ip_address, uint32_t from_tick, uint32_t margin) {
   struct tx_metadata *tx_metadata[PACKET_BURST_SIZE];
   int id;
@@ -1849,6 +1851,7 @@ int test_Qbv_issue_with_n_packets(char *ip_address, uint32_t from_tick, uint32_t
   uint64_t timestamps[PACKET_BURST_SIZE];
   struct tsn_tx_buffer *packet;
   uint64_t curr_time;
+  int try = 0;
 
   if (initialize_buffer_allocation()) {
     return -1;
@@ -1865,9 +1868,9 @@ int test_Qbv_issue_with_n_packets(char *ip_address, uint32_t from_tick, uint32_t
   uint64_t now = get_sys_count();
   for (id = 0; id < PACKET_BURST_SIZE; id++) {
     tx_metadata[id]->from.tick =
-        (uint32_t)((now + 1250000 + id * (TOTAL_PKT_LEN + 14 + 10)) & 0x1FFFFFFF);
+        (uint32_t)((now + 1250000 + id * (TOTAL_PKT_LEN + 14 + READ_TIMESTAMP_MARGIN)) & 0x1FFFFFFF);
     tx_metadata[id]->to.tick =
-        (uint32_t)((now + 1250000 + (id + 1) * (TOTAL_PKT_LEN + 14 + 10)) & 0x1FFFFFFF);
+        (uint32_t)((now + 1250000 + (id + 1) * (TOTAL_PKT_LEN + 14 + READ_TIMESTAMP_MARGIN)) & 0x1FFFFFFF);
   }
 
   struct timeval start_time, end_time;
@@ -1887,10 +1890,16 @@ int test_Qbv_issue_with_n_packets(char *ip_address, uint32_t from_tick, uint32_t
           timestamps[id] = curr_timestamps;
           pre_timestamps = curr_timestamps;
       } else {
+          try++;
+          if(try >= 100000) {
+              break;
+          }
+#if 0
             curr_time = get_sys_count();
             if((curr_time - now) > 250000000) {
                 break;
             }
+#endif
             id--;
       }
   }
@@ -1911,6 +1920,8 @@ int test_Qbv_issue_with_a_packets(char *ip_address, uint32_t from_tick, uint32_t
   int id;
   uint64_t curr_timestamps;
   uint64_t now;
+  int diff;
+  int not_equal = 0;
 
   if (initialize_buffer_allocation()) {
     return -1;
@@ -1925,15 +1936,20 @@ int test_Qbv_issue_with_a_packets(char *ip_address, uint32_t from_tick, uint32_t
   for (id = 0; id < 256; id++) {
     now = get_sys_count();
     tx_metadata[id]->from.tick =
-        (uint32_t)((now + 100) & 0x1FFFFFFF);
+        (uint32_t)((now + 10000) & 0x1FFFFFFF);
     tx_metadata[id]->to.tick =
-        (uint32_t)((now + 100 + (TOTAL_PKT_LEN + 14)) & 0x1FFFFFFF);
+        (uint32_t)((now + 10000 + (TOTAL_PKT_LEN + 14)) & 0x1FFFFFFF);
     transmit_tsn_packet_no_free((struct tsn_tx_buffer *)buffer_list[id]);
     usleep(10000);
     curr_timestamps = ((uint64_t)get_register(REG_TX_TIMESTAMP1_HIGH) << 32) | get_register(REG_TX_TIMESTAMP1_LOW);
-    printf(" 0x%08x  0x%08x 0x%08lx 0x%08lx\n", tx_metadata[id]->from.tick, tx_metadata[id]->to.tick, curr_timestamps & 0x1FFFFFFF, (curr_timestamps & 0x1FFFFFFF) - tx_metadata[id]->from.tick);
+    diff = (int)((curr_timestamps & 0x1FFFFFFF) - tx_metadata[id]->from.tick);
+    printf(" 0x%08x  0x%08x 0x%08lx 0x%08x\n", tx_metadata[id]->from.tick, tx_metadata[id]->to.tick, curr_timestamps & 0x1FFFFFFF, diff);
+    if(diff != 14) {
+        not_equal++;
+    }
   }
 
+  printf("Number of times the difference is not 14: %d\n", not_equal);
   buffer_release();
   return XST_SUCCESS;
 }
@@ -1984,7 +2000,7 @@ int send_1queueTSN_packet(char *ip_address, uint32_t from_tick,
   //    test_from_bigger_than_to(50);
   //    test_fail_policy(20);
   //    test_timestamp_issue();
-      test_Qbv_issue_with_n_packets(ip_address, from_tick, margin);
+  test_Qbv_issue_with_n_packets(ip_address, from_tick, margin);
   //    test_Qbv_issue_with_a_packets(ip_address, from_tick, margin);
 
   gettimeofday(&end_time, NULL);
