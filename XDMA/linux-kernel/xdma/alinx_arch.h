@@ -50,8 +50,8 @@ typedef uint32_t u32
 #define TSN_PRIO_COUNT 8
 #define MAX_QBV_SLOTS 20
 
-#define ETHERNET_GAP_SIZE = (8 + 4 + 12) // 8 bytes preamble, 4 bytes FCS, 12 bytes interpacket gap
-#define PHY_DELAY_CLOCKS = 14 // 14 clocks from MAC to PHY
+#define ETHERNET_GAP_SIZE (8 + 4 + 12) // 8 bytes preamble, 4 bytes FCS, 12 bytes interpacket gap
+#define PHY_DELAY_CLOCKS 14 // 14 clocks from MAC to PHY
 
 typedef u64 sysclock_t;
 typedef u64 timestamp_t;
