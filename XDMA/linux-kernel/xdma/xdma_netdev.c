@@ -11,6 +11,7 @@
 #include "alinx_arch.h"
 
 #define LOWER_29_BITS 0x1FFFFFFFULL
+#define TX_WORK_OVERFLOW_MARGIN 100
 
 static void tx_desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len)
 {
@@ -106,6 +107,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         dma_addr_t dma_addr;
         struct tx_buffer* tx_buffer;
         struct tx_metadata* tx_metadata;
+        u32 to_value;
 
         /* Check desc count */
         netif_stop_queue(ndev);
@@ -184,12 +186,13 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                          * so just calculate the difference.
                          */
                         priv->tx_work_start_after[tx_metadata->timestamp_id] = sys_count_upper | tx_metadata->from.tick;
-                        if (sys_count_lower > tx_metadata->from.tick && sys_count_lower - tx_metadata->from.tick > 3) {
+                        if (sys_count_lower > tx_metadata->from.tick && sys_count_lower - tx_metadata->from.tick > TX_WORK_OVERFLOW_MARGIN) {
                                 // Overflow
                                 priv->tx_work_start_after[tx_metadata->timestamp_id] += 0x20000000;
                         }
-                        priv->tx_work_wait_until[tx_metadata->timestamp_id] = sys_count_upper | tx_metadata->to.tick;
-                        if (sys_count_lower > tx_metadata->to.tick) {
+                        to_value = (tx_metadata->fail_policy == TSN_FAIL_POLICY_RETRY ? tx_metadata->delay_to.tick : tx_metadata->to.tick);
+                        priv->tx_work_wait_until[tx_metadata->timestamp_id] = sys_count_upper | to_value;
+                        if (sys_count_lower > to_value && sys_count_lower - to_value > TX_WORK_OVERFLOW_MARGIN) {
                                 // Overflow
                                 priv->tx_work_wait_until[tx_metadata->timestamp_id] += 0x20000000;
                         }
