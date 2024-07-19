@@ -188,7 +188,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                                 // Overflow
                                 priv->tx_work_start_after[tx_metadata->timestamp_id] += 0x20000000;
                         }
-                        priv->tx_work_wait_until[tx_metadata->timestamp_id] = sys_count_lower | tx_metadata->to.tick;
+                        priv->tx_work_wait_until[tx_metadata->timestamp_id] = sys_count_upper | tx_metadata->to.tick;
                         if (sys_count_lower > tx_metadata->to.tick) {
                                 // Overflow
                                 priv->tx_work_wait_until[tx_metadata->timestamp_id] += 0x20000000;
