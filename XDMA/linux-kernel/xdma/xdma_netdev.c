@@ -268,58 +268,73 @@ int xdma_netdev_ioctl(struct net_device *ndev, struct ifreq *ifr, int cmd) {
         }
 }
 
-#define DEFINE_TX_WORK(tstamp_id) \
-void xdma_tx_work##tstamp_id(struct work_struct *work) { \
-        sysclock_t tx_tstamp; \
-        struct skb_shared_hwtstamps shhwtstamps; \
-        struct xdma_private* priv = container_of(work - tstamp_id, struct xdma_private, tx_work[0]); \
-        struct sk_buff* skb = priv->tx_work_skb[tstamp_id]; \
-        sysclock_t now = alinx_get_sys_clock(priv->xdev->pdev); \
- \
-        if (!priv->tx_work_skb[tstamp_id]) { \
-                clear_bit_unlock(XDMA_TX##tstamp_id##_IN_PROGRESS, &priv->state); \
-                return; \
-        } \
- \
-        if (now < priv->tx_work_start_after[tstamp_id]) { \
-                schedule_work(&priv->tx_work[tstamp_id]); \
-                return; \
-        } \
-        /* Read TX timestamp several times because */ \
-        /* 1. Reading and writing TX timestamp register are not atomic */ \
-        /* 2. The work thread might try to read TX timestamp before the register gets updated */ \
-        tx_tstamp = alinx_read_tx_timestamp(priv->pdev, tstamp_id); \
-        if (tx_tstamp == priv->last_tx_tstamp[tstamp_id] && priv->tstamp_retry[tstamp_id] < TX_TSTAMP_MAX_RETRY) { \
-                if (alinx_get_sys_clock(priv->xdev->pdev) < priv->tx_work_wait_until[tstamp_id]) { \
-                        /* The packet might have not been sent yet */ \
-                        schedule_work(&priv->tx_work[tstamp_id]); \
-                        return; \
-                } \
-                /* Tx timestamp is not updated. Try again. */ \
-                /* Waiting for it to be updated forever is not desirable, */ \
-                /* so limit the number of retries */ \
-                priv->tstamp_retry[tstamp_id]++; \
-                if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) { \
-                        /* TODO: track the number of skipped packets for ethtool stats */ \
-                        priv->tstamp_retry[tstamp_id] = 0; \
-                        clear_bit_unlock(XDMA_TX##tstamp_id##_IN_PROGRESS, &priv->state); \
-                        return; \
-                } \
-                schedule_work(&priv->tx_work[tstamp_id]); \
-                return; \
-        } \
-        priv->tstamp_retry[tstamp_id] = 0; \
-        /* Tx timestamp is updated, or getting updated. */ \
-        /* If it is getting updated, the value might be incorrect. */ \
-        /* So read it again. */ \
-        tx_tstamp = alinx_read_tx_timestamp(priv->pdev, tstamp_id); \
-        shhwtstamps.hwtstamp = ns_to_ktime(alinx_sysclock_to_timestamp(priv->pdev, tx_tstamp)); \
-        priv->last_tx_tstamp[tstamp_id] = tx_tstamp; \
- \
-        priv->tx_work_skb[tstamp_id] = NULL; \
-        clear_bit_unlock(XDMA_TX##tstamp_id##_IN_PROGRESS, &priv->state); \
-        skb_tstamp_tx(skb, &shhwtstamps); \
-        dev_kfree_skb_any(skb); \
+static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
+        sysclock_t tx_tstamp;
+        struct skb_shared_hwtstamps shhwtstamps;
+        struct xdma_private* priv = container_of(work - tstamp_id, struct xdma_private, tx_work[0]);
+        struct sk_buff* skb = priv->tx_work_skb[tstamp_id];
+        sysclock_t now = alinx_get_sys_clock(priv->xdev->pdev);
+
+        if (tstamp_id >= TSN_TIMESTAMP_ID_MAX) {
+                pr_err("Invalid timestamp ID\n");
+                return;
+        }
+
+        if (!priv->tx_work_skb[tstamp_id]) {
+                clear_bit_unlock(tstamp_id, &priv->state);
+                return;
+        }
+
+        if (now < priv->tx_work_start_after[tstamp_id]) {
+                schedule_work(&priv->tx_work[tstamp_id]);
+                return;
+        }
+        /*
+         * Read TX timestamp several times because
+         * 1. Reading and writing TX timestamp register are not atomic
+         * 2. The work thread might try to read TX timestamp before the register gets updated
+         */
+        tx_tstamp = alinx_read_tx_timestamp(priv->pdev, tstamp_id);
+        if (tx_tstamp == priv->last_tx_tstamp[tstamp_id] && priv->tstamp_retry[tstamp_id] < TX_TSTAMP_MAX_RETRY) {
+                if (alinx_get_sys_clock(priv->xdev->pdev) < priv->tx_work_wait_until[tstamp_id]) {
+                        /* The packet might have not been sent yet */
+                        schedule_work(&priv->tx_work[tstamp_id]);
+                        return;
+                }
+                /*
+                 * Tx timestamp is not updated. Try again.
+                 * Waiting for it to be updated forever is not desirable,
+                 * so limit the number of retries
+                 */
+                priv->tstamp_retry[tstamp_id]++;
+                if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
+                        /* TODO: track the number of skipped packets for ethtool stats */
+                        priv->tstamp_retry[tstamp_id] = 0;
+                        clear_bit_unlock(tstamp_id, &priv->state);
+                        return;
+                }
+                schedule_work(&priv->tx_work[tstamp_id]);
+                return;
+        }
+        priv->tstamp_retry[tstamp_id] = 0;
+        /*
+         * Tx timestamp is updated, or getting updated.
+         * If it is getting updated, the value might be incorrect.
+         * So read it again.
+         */
+        tx_tstamp = alinx_read_tx_timestamp(priv->pdev, tstamp_id);
+        shhwtstamps.hwtstamp = ns_to_ktime(alinx_sysclock_to_timestamp(priv->pdev, tx_tstamp));
+        priv->last_tx_tstamp[tstamp_id] = tx_tstamp;
+
+        priv->tx_work_skb[tstamp_id] = NULL;
+        clear_bit_unlock(tstamp_id, &priv->state);
+        skb_tstamp_tx(skb, &shhwtstamps);
+        dev_kfree_skb_any(skb);
+}
+
+#define DEFINE_TX_WORK(n) \
+void xdma_tx_work##n(struct work_struct *work) { \
+        do_tx_work(work, n); \
 }
 
 DEFINE_TX_WORK(1);
