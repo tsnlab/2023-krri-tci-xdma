@@ -10,7 +10,7 @@
 #include "tsn.h"
 #include "alinx_arch.h"
 
-#define LOWER_29_BITS 0x1FFFFFFFULL
+#define LOWER_29_BITS ((1ULL << 29) - 1)
 #define TX_WORK_OVERFLOW_MARGIN 100
 
 static void tx_desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len)
@@ -188,13 +188,13 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                         priv->tx_work_start_after[tx_metadata->timestamp_id] = sys_count_upper | tx_metadata->from.tick;
                         if (sys_count_lower > tx_metadata->from.tick && sys_count_lower - tx_metadata->from.tick > TX_WORK_OVERFLOW_MARGIN) {
                                 // Overflow
-                                priv->tx_work_start_after[tx_metadata->timestamp_id] += 0x20000000;
+                                priv->tx_work_start_after[tx_metadata->timestamp_id] += (1 << 29);
                         }
                         to_value = (tx_metadata->fail_policy == TSN_FAIL_POLICY_RETRY ? tx_metadata->delay_to.tick : tx_metadata->to.tick);
                         priv->tx_work_wait_until[tx_metadata->timestamp_id] = sys_count_upper | to_value;
                         if (sys_count_lower > to_value && sys_count_lower - to_value > TX_WORK_OVERFLOW_MARGIN) {
                                 // Overflow
-                                priv->tx_work_wait_until[tx_metadata->timestamp_id] += 0x20000000;
+                                priv->tx_work_wait_until[tx_metadata->timestamp_id] += (1 << 29);
                         }
                         schedule_work(&priv->tx_work[tx_metadata->timestamp_id]);
                 }
