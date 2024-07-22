@@ -368,9 +368,6 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 
 	// 2. "to"
 	timestamps->to = timestamps->from + baked_prio->slots[slot_id].duration_ns;
-	if (baked_prio->slot_count == 2 && baked_prio->slots[1].opened == false) {
-		timestamps->to += _DEFAULT_TO_MARGIN_;
-	}
 
 	if (consider_delay) {
 		// 3. "delay_from"

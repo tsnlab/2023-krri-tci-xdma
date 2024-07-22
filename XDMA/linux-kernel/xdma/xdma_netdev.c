@@ -10,6 +10,9 @@
 #include "tsn.h"
 #include "alinx_arch.h"
 
+#define LOWER_29_BITS ((1ULL << 29) - 1)
+#define TX_WORK_OVERFLOW_MARGIN 100
+
 static void tx_desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len)
 {
         u32 control_field;
@@ -98,12 +101,13 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         struct xdma_private *priv = netdev_priv(ndev);
         struct xdma_dev *xdev = priv->xdev;
         u32 w;
-        sysclock_t sys_count;
+        sysclock_t sys_count, sys_count_upper, sys_count_lower;
         timestamp_t now;
         u16 frame_length;
         dma_addr_t dma_addr;
         struct tx_buffer* tx_buffer;
         struct tx_metadata* tx_metadata;
+        u32 to_value;
 
         /* Check desc count */
         netif_stop_queue(ndev);
@@ -137,16 +141,6 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         skb_push(skb, TX_METADATA_SIZE);
         memset(skb->data, 0, TX_METADATA_SIZE);
 
-        if (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) {
-                if (priv->tstamp_config.tx_type == HWTSTAMP_TX_ON &&
-                        !test_and_set_bit_lock(XDMA_TX_IN_PROGRESS, &priv->state)) {
-                        skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
-                        priv->tx_work_skb = skb_get(skb);
-                        schedule_work(&priv->tx_work);
-                }
-                // TODO: track the number of skipped packets for ethtool stats
-        }
-
         xdma_debug("skb->len : %d\n", skb->len);
         tx_buffer = (struct tx_buffer*)skb->data;
         /* Fill in the metadata */
@@ -155,6 +149,9 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
 
         sys_count = alinx_get_sys_clock(priv->pdev);
         now = alinx_sysclock_to_timestamp(priv->pdev, sys_count);
+        sys_count_lower = sys_count & LOWER_29_BITS;
+        sys_count_upper = sys_count & ~LOWER_29_BITS;
+
 
         /* Set the fromtick & to_tick values based on the lower 29 bits of the system count */
         if (tsn_fill_metadata(xdev->pdev, now, skb) == false) {
@@ -174,6 +171,34 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                 pr_err("dma_map_single failed\n");
                 netif_wake_queue(ndev);
                 return NETDEV_TX_BUSY;
+        }
+
+        if (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) {
+                if (priv->tstamp_config.tx_type == HWTSTAMP_TX_ON &&
+                        !test_and_set_bit_lock(tx_metadata->timestamp_id, &priv->state)) {
+                        skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
+                        priv->tx_work_skb[tx_metadata->timestamp_id] = skb_get(skb);
+                        /*
+                         * Even if the driver's intention was sys_count == from,
+                         * there might be a slight error caused during conversion (sysclock <-> timestamp)
+                         * So if the diffence is small, don't consider it as overflow.
+                         * Adding/Subtracting directly from values can cause another overflow,
+                         * so just calculate the difference.
+                         */
+                        priv->tx_work_start_after[tx_metadata->timestamp_id] = sys_count_upper | tx_metadata->from.tick;
+                        if (sys_count_lower > tx_metadata->from.tick && sys_count_lower - tx_metadata->from.tick > TX_WORK_OVERFLOW_MARGIN) {
+                                // Overflow
+                                priv->tx_work_start_after[tx_metadata->timestamp_id] += (1 << 29);
+                        }
+                        to_value = (tx_metadata->fail_policy == TSN_FAIL_POLICY_RETRY ? tx_metadata->delay_to.tick : tx_metadata->to.tick);
+                        priv->tx_work_wait_until[tx_metadata->timestamp_id] = sys_count_upper | to_value;
+                        if (sys_count_lower > to_value && sys_count_lower - to_value > TX_WORK_OVERFLOW_MARGIN) {
+                                // Overflow
+                                priv->tx_work_wait_until[tx_metadata->timestamp_id] += (1 << 29);
+                        }
+                        schedule_work(&priv->tx_work[tx_metadata->timestamp_id]);
+                }
+                // TODO: track the number of skipped packets for ethtool stats
         }
 
         /* netif_wake_queue() will be called in xdma_isr() */
@@ -243,28 +268,39 @@ int xdma_netdev_ioctl(struct net_device *ndev, struct ifreq *ifr, int cmd) {
         }
 }
 
-void xdma_tx_work(struct work_struct *work) {
-        uint16_t tstamp_id;
+static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
         sysclock_t tx_tstamp;
         struct skb_shared_hwtstamps shhwtstamps;
-        struct xdma_private* priv = container_of(work, struct xdma_private, tx_work);
-        struct sk_buff* skb = priv->tx_work_skb;
-        struct tx_buffer* tx_buf = (struct tx_buffer*)skb->data;
-        struct tx_metadata* metadata = (struct tx_metadata*)&tx_buf->metadata;
+        struct xdma_private* priv = container_of(work - tstamp_id, struct xdma_private, tx_work[0]);
+        struct sk_buff* skb = priv->tx_work_skb[tstamp_id];
+        sysclock_t now = alinx_get_sys_clock(priv->xdev->pdev);
 
-        if (!priv->tx_work_skb) {
-                clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->state);
+        if (tstamp_id >= TSN_TIMESTAMP_ID_MAX) {
+                pr_err("Invalid timestamp ID\n");
                 return;
         }
 
+        if (!priv->tx_work_skb[tstamp_id]) {
+                clear_bit_unlock(tstamp_id, &priv->state);
+                return;
+        }
+
+        if (now < priv->tx_work_start_after[tstamp_id]) {
+                schedule_work(&priv->tx_work[tstamp_id]);
+                return;
+        }
         /*
          * Read TX timestamp several times because
          * 1. Reading and writing TX timestamp register are not atomic
          * 2. The work thread might try to read TX timestamp before the register gets updated
          */
-        tstamp_id = metadata->timestamp_id;
         tx_tstamp = alinx_read_tx_timestamp(priv->pdev, tstamp_id);
         if (tx_tstamp == priv->last_tx_tstamp[tstamp_id] && priv->tstamp_retry[tstamp_id] < TX_TSTAMP_MAX_RETRY) {
+                if (alinx_get_sys_clock(priv->xdev->pdev) < priv->tx_work_wait_until[tstamp_id]) {
+                        /* The packet might have not been sent yet */
+                        schedule_work(&priv->tx_work[tstamp_id]);
+                        return;
+                }
                 /*
                  * Tx timestamp is not updated. Try again.
                  * Waiting for it to be updated forever is not desirable,
@@ -272,12 +308,12 @@ void xdma_tx_work(struct work_struct *work) {
                  */
                 priv->tstamp_retry[tstamp_id]++;
                 if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
-                        // TODO: track the number of skipped packets for ethtool stats
+                        /* TODO: track the number of skipped packets for ethtool stats */
                         priv->tstamp_retry[tstamp_id] = 0;
-                        clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->state);
+                        clear_bit_unlock(tstamp_id, &priv->state);
                         return;
                 }
-                schedule_work(&priv->tx_work);
+                schedule_work(&priv->tx_work[tstamp_id]);
                 return;
         }
         priv->tstamp_retry[tstamp_id] = 0;
@@ -290,8 +326,18 @@ void xdma_tx_work(struct work_struct *work) {
         shhwtstamps.hwtstamp = ns_to_ktime(alinx_sysclock_to_timestamp(priv->pdev, tx_tstamp));
         priv->last_tx_tstamp[tstamp_id] = tx_tstamp;
 
-        priv->tx_work_skb = NULL;
-        clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->state);
+        priv->tx_work_skb[tstamp_id] = NULL;
+        clear_bit_unlock(tstamp_id, &priv->state);
         skb_tstamp_tx(skb, &shhwtstamps);
         dev_kfree_skb_any(skb);
 }
+
+#define DEFINE_TX_WORK(n) \
+void xdma_tx_work##n(struct work_struct *work) { \
+        do_tx_work(work, n); \
+}
+
+DEFINE_TX_WORK(1);
+DEFINE_TX_WORK(2);
+DEFINE_TX_WORK(3);
+DEFINE_TX_WORK(4);
