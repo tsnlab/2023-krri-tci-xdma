@@ -326,16 +326,16 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 	slot_count = baked_prio->slot_count;
 
 	// Check if vlan_prio is always open or always closed
-	if (slot_count == 1) {
+	if (slot_count == 2 && baked_prio->slots[1].duration_ns == 0) {
 		if (baked_prio->slots[0].opened == false) {
 			// The only slot is closed. Drop the frame
 			return false;
 		}
 		timestamps->from = from;
-		timestamps->to = from + baked_prio->slots[0].duration_ns - sending_duration;
+		timestamps->to = from - 1;
 		if (consider_delay) {
-			timestamps->delay_from = timestamps->from + baked_prio->slots[0].duration_ns;
-			timestamps->delay_to = timestamps->delay_from + baked_prio->slots[0].duration_ns - sending_duration;
+			timestamps->delay_from = timestamps->from;
+			timestamps->delay_to = timestamps->delay_from - 1;
 		}
 		return true;
 	}
