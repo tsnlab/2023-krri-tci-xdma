@@ -86,7 +86,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	}
 	consider_delay = (queue_prio != TSN_PRIO_BE);
 
-	from = now + H2C_LATENCY;
+	from = now + H2C_LATENCY_NS;
 
 	duration_ns = bytes_to_ns(metadata->frame_length);
 

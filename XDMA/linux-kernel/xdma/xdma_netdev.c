@@ -323,7 +323,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
          * So read it again.
          */
         tx_tstamp = alinx_read_tx_timestamp(priv->pdev, tstamp_id);
-        shhwtstamps.hwtstamp = ns_to_ktime(alinx_get_tx_timestamp2(priv->pdev, tx_tstamp));
+        shhwtstamps.hwtstamp = ns_to_ktime(alinx_sysclock_to_txtstamp(priv->pdev, tx_tstamp));
         priv->last_tx_tstamp[tstamp_id] = tx_tstamp;
 
         priv->tx_work_skb[tstamp_id] = NULL;

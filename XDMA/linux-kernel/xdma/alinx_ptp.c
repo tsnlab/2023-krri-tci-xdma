@@ -62,7 +62,7 @@ timestamp_t alinx_get_tx_timestamp(struct pci_dev* pdev, int tx_id) {
         return alinx_sysclock_to_timestamp(pdev, sysclock) + TX_ADJUST_NS;
 }
 
-timestamp_t alinx_get_tx_timestamp2(struct pci_dev* pdev, sysclock_t sysclock) {
+timestamp_t alinx_sysclock_to_txtstamp(struct pci_dev* pdev, sysclock_t sysclock) {
         return alinx_sysclock_to_timestamp(pdev, sysclock) + TX_ADJUST_NS;
 }
 

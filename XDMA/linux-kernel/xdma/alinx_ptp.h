@@ -17,7 +17,7 @@ sysclock_t alinx_timestamp_to_sysclock(struct pci_dev* pdev, timestamp_t timesta
 timestamp_t alinx_sysclock_to_timestamp(struct pci_dev* pdev, sysclock_t sysclock);
 timestamp_t alinx_get_rx_timestamp(struct pci_dev* pdev, sysclock_t sysclock);
 timestamp_t alinx_get_tx_timestamp(struct pci_dev* pdev, int tx_id);
-timestamp_t alinx_get_tx_timestamp2(struct pci_dev* pdev, sysclock_t sysclock);
+timestamp_t alinx_sysclock_to_txtstamp(struct pci_dev* pdev, sysclock_t sysclock);
 
 double alinx_get_ticks_scale(struct pci_dev* pdev);
 void alinx_set_ticks_scale(struct pci_dev* pdev, double ticks_scale);
