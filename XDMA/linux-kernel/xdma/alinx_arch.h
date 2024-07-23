@@ -56,6 +56,8 @@ typedef uint32_t u32
 #define TX_ADJUST_NS 100/* MAC */ + 262/* PHY */
 #define RX_ADJUST_NS 188/* MAC */ + 262/* PHY */
 
+#define H2C_LATENCY 30000 // TODO: Adjust this value dynamically
+
 typedef u64 sysclock_t;
 typedef u64 timestamp_t;
 
