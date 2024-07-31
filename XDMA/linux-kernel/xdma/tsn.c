@@ -51,6 +51,10 @@ static bool is_gptp_packet(const uint8_t* payload) {
 	return eth_type == ETH_P_1588;
 }
 
+static inline sysclock_t tsn_timestamp_to_sysclock(struct pci_dev* pdev, timestamp_t timestamp) {
+	return alinx_timestamp_to_sysclock(pdev, timestamp - TX_ADJUST_NS) - PHY_DELAY_CLOCKS;
+}
+
 /**
  * Fill in the time related metadata of a frame
  * @param tsn_config: TSN configuration
@@ -116,13 +120,13 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 		metadata->fail_policy = consider_delay ? TSN_FAIL_POLICY_RETRY : TSN_FAIL_POLICY_DROP;
 	}
 
-	metadata->from.tick = alinx_timestamp_to_sysclock(pdev, timestamps.from) - PHY_DELAY_CLOCKS;
+	metadata->from.tick = tsn_timestamp_to_sysclock(pdev, timestamps.from);
 	metadata->from.priority = queue_prio;
-	metadata->to.tick = alinx_timestamp_to_sysclock(pdev, timestamps.to) - PHY_DELAY_CLOCKS;
+	metadata->to.tick = tsn_timestamp_to_sysclock(pdev, timestamps.to);
 	metadata->to.priority = queue_prio;
-	metadata->delay_from.tick = alinx_timestamp_to_sysclock(pdev, timestamps.delay_from) - PHY_DELAY_CLOCKS;
+	metadata->delay_from.tick = tsn_timestamp_to_sysclock(pdev, timestamps.delay_from);
 	metadata->delay_from.priority = queue_prio;
-	metadata->delay_to.tick = alinx_timestamp_to_sysclock(pdev, timestamps.delay_to) - PHY_DELAY_CLOCKS;
+	metadata->delay_to.tick = tsn_timestamp_to_sysclock(pdev, timestamps.delay_to);
 	metadata->delay_to.priority = queue_prio;
 
 	if (priv->tstamp_config.tx_type != HWTSTAMP_TX_ON) {
