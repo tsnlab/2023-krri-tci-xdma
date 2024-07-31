@@ -53,6 +53,11 @@ typedef uint32_t u32
 #define ETHERNET_GAP_SIZE (8 + 4 + 12) // 8 bytes preamble, 4 bytes FCS, 12 bytes interpacket gap
 #define PHY_DELAY_CLOCKS 14 // 14 clocks from MAC to PHY
 
+#define TX_ADJUST_NS (100 + 200)  // MAC + PHY
+#define RX_ADJUST_NS (188 + 324)  // MAC + PHY
+
+#define H2C_LATENCY_NS 30000 // TODO: Adjust this value dynamically
+
 typedef u64 sysclock_t;
 typedef u64 timestamp_t;
 

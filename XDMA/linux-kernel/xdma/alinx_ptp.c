@@ -53,16 +53,17 @@ timestamp_t alinx_sysclock_to_timestamp(struct pci_dev* pdev, sysclock_t syscloc
 }
 
 timestamp_t alinx_get_rx_timestamp(struct pci_dev* pdev, sysclock_t sysclock) {
-        int64_t adjustment = 0; // TODO: Use exact value
-
-        return alinx_sysclock_to_timestamp(pdev, sysclock) + adjustment;
+        return alinx_sysclock_to_timestamp(pdev, sysclock) - RX_ADJUST_NS;
 }
 
 timestamp_t alinx_get_tx_timestamp(struct pci_dev* pdev, int tx_id) {
-        int64_t adjustment = 0; // TODO: Use exact value
-        sysclock_t tmp = alinx_read_tx_timestamp(pdev, tx_id);
+        sysclock_t sysclock = alinx_read_tx_timestamp(pdev, tx_id);
 
-        return alinx_sysclock_to_timestamp(pdev, tmp) + adjustment;
+        return alinx_sysclock_to_timestamp(pdev, sysclock) + TX_ADJUST_NS;
+}
+
+timestamp_t alinx_sysclock_to_txtstamp(struct pci_dev* pdev, sysclock_t sysclock) {
+        return alinx_sysclock_to_timestamp(pdev, sysclock) + TX_ADJUST_NS;
 }
 
 double alinx_get_ticks_scale(struct pci_dev* pdev) {
