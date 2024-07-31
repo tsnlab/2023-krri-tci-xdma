@@ -51,7 +51,7 @@ typedef uint32_t u32
 #define MAX_QBV_SLOTS 20
 
 #define ETHERNET_GAP_SIZE (8 + 4 + 12) // 8 bytes preamble, 4 bytes FCS, 12 bytes interpacket gap
-#define PHY_DELAY_CLOCKS 14 // 14 clocks from MAC to PHY
+#define PHY_DELAY_CLOCKS 13 // 14 clocks from MAC to PHY, but sometimes there is 1 tick error
 
 #define TX_ADJUST_NS (100 + 200)  // MAC + PHY
 #define RX_ADJUST_NS (188 + 324)  // MAC + PHY
