@@ -26,6 +26,14 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 static bool append_buffer_track(struct buffer_tracker* buffer_tracker);
 static void update_buffer_track(struct pci_dev* pdev);
 
+static inline uint8_t tsn_get_mqprio_tc(struct tsn_config* tsn_config, uint8_t prio) {
+	if (!tsn_config->mqprio.enabled || tsn_config->mqprio.num_tc == 0) {
+		return prio;
+	}
+
+	return tsn_config->mqprio.prio_tc_map[prio];
+}
+
 static uint8_t tsn_get_vlan_prio(struct tsn_config* tsn_config, struct sk_buff* skb) {
 	struct tx_buffer* tx_buf = (struct tx_buffer*)skb->data;
 	struct ethhdr* eth = (struct ethhdr*)(tx_buf->data);
@@ -33,8 +41,6 @@ static uint8_t tsn_get_vlan_prio(struct tsn_config* tsn_config, struct sk_buff* 
 	if (eth_type == ETH_P_8021Q) {
 		struct tsn_vlan_hdr* vlan = (struct tsn_vlan_hdr*)(tx_buf->data + ETH_HLEN - ETH_TLEN);  // eth->h_proto == vlan->pid
 		return vlan->pcp;
-	} else if (tsn_config->mqprio.enabled && tsn_config->mqprio.num_tc > 0) {
-		return tsn_config->mqprio.count[tsn_config->mqprio.prio_tc_map[skb->priority]];
 	}
 	//XXX: Or you can use skb->priority;
 	return 0;
@@ -63,7 +69,7 @@ static inline sysclock_t tsn_timestamp_to_sysclock(struct pci_dev* pdev, timesta
  * @return: true if the frame reserves timestamps, false is for drop
  */
 bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* skb) {
-	uint8_t vlan_prio;
+	uint8_t vlan_prio, mqprio_tc;
 	uint64_t duration_ns;
 	bool is_gptp, consider_delay;
 	timestamp_t from, free_at;
@@ -79,6 +85,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	update_buffer_track(pdev);
 
 	vlan_prio = tsn_get_vlan_prio(tsn_config, skb);
+	mqprio_tc = tsn_get_mqprio_tc(tsn_config, vlan_prio);
 	is_gptp = is_gptp_packet(tx_buf->data);
 
 	if (is_gptp) {
@@ -94,14 +101,14 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 
 	duration_ns = bytes_to_ns(metadata->frame_length);
 
-	if (tsn_config->qbv.enabled == false && tsn_config->qav[vlan_prio].enabled == false) {
+	if (tsn_config->qbv.enabled == false && tsn_config->qav[mqprio_tc].enabled == false) {
 		// Don't care. Just fill in the metadata
 		timestamps.from = tsn_config->total_available_at;
 		timestamps.to = timestamps.from + _DEFAULT_TO_MARGIN_;
 		metadata->fail_policy = TSN_FAIL_POLICY_DROP;
 	} else {
-		if (tsn_config->qav[vlan_prio].enabled == true && tsn_config->qav[vlan_prio].available_at > from) {
-			from = tsn_config->qav[vlan_prio].available_at;
+		if (tsn_config->qav[mqprio_tc].enabled == true && tsn_config->qav[mqprio_tc].available_at > from) {
+			from = tsn_config->qav[mqprio_tc].available_at;
 		}
 		if (consider_delay) {
 			// Check if queue is available
@@ -116,7 +123,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 			from = max(from, tsn_config->total_available_at);
 		}
 
-		get_timestamps(&timestamps, tsn_config, from, vlan_prio, metadata->frame_length, consider_delay);
+		get_timestamps(&timestamps, tsn_config, from, mqprio_tc, metadata->frame_length, consider_delay);
 		metadata->fail_policy = consider_delay ? TSN_FAIL_POLICY_RETRY : TSN_FAIL_POLICY_DROP;
 	}
 
@@ -138,7 +145,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	}
 
 	// Update available_ats
-	spend_qav_credit(tsn_config, from, vlan_prio, metadata->frame_length);
+	spend_qav_credit(tsn_config, from, mqprio_tc, metadata->frame_length);
 	tsn_config->queue_available_at[queue_prio] += duration_ns;
 	tsn_config->total_available_at += duration_ns;
 
