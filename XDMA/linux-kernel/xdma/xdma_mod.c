@@ -352,11 +352,6 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 		rv = -ENOMEM;
 		goto err_out;
 	}
-	rv = netif_set_real_num_tx_queues(ndev, 1);
-	if (rv) {
-		pr_err("netif_set_real_num_tx_queues failed\n");
-		goto err_out;
-	}
 	rv = netif_set_real_num_rx_queues(ndev, 1);
 	if (rv) {
 		pr_err("netif_set_real_num_rx_queues failed\n");
