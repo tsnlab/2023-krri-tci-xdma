@@ -26,12 +26,12 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 static bool append_buffer_track(struct buffer_tracker* buffer_tracker);
 static void update_buffer_track(struct pci_dev* pdev);
 
-static inline uint8_t tsn_get_mqprio_tc(struct tsn_config* tsn_config, uint8_t prio) {
-	if (!tsn_config->mqprio.enabled || tsn_config->mqprio.num_tc == 0) {
+static inline uint8_t tsn_get_mqprio_tc(struct net_device* ndev, uint8_t prio) {
+	if (netdev_get_num_tc(ndev) == 0) {
 		return prio;
 	}
 
-	return tsn_config->mqprio.prio_tc_map[prio];
+	return netdev_get_prio_tc_map(ndev, prio);
 }
 
 static uint8_t tsn_get_vlan_prio(struct tsn_config* tsn_config, struct sk_buff* skb) {
@@ -85,7 +85,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	update_buffer_track(pdev);
 
 	vlan_prio = tsn_get_vlan_prio(tsn_config, skb);
-	mqprio_tc = tsn_get_mqprio_tc(tsn_config, vlan_prio);
+	mqprio_tc = tsn_get_mqprio_tc(xdev->ndev, vlan_prio);
 	is_gptp = is_gptp_packet(tx_buf->data);
 
 	if (is_gptp) {
@@ -445,32 +445,45 @@ static void update_buffer_track(struct pci_dev* pdev) {
 
 int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* qopt) {
 	u8 i;
+	int ret;
 
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct tsn_config* config = &xdev->tsn_config;
-	struct mqprio_config mqprio;
-	memset(&mqprio, 0, sizeof(struct mqprio_config));
+	// struct mqprio_config mqprio;  TODO: Revert changes when an error happens
+	// memset(&mqprio, 0, sizeof(struct mqprio_config));
 
 	if (qopt->mode != TC_MQPRIO_MODE_DCB) {
 		return -ENOTSUPP;
 	}
 
-	mqprio.enabled = true;
-	mqprio.num_tc = qopt->qopt.num_tc;
+	if (qopt->qopt.num_tc >= TC_QOPT_MAX_QUEUE) {
+		pr_err("Invalid number of tc\n");
+		return -EINVAL;
+	}
+
+	if ((ret = netdev_set_num_tc(xdev->ndev, qopt->qopt.num_tc)) < 0) {
+		pr_err("Failed to set num_tc\n");
+		return ret;
+	}
+
+	for (i = 0; i < qopt->qopt.num_tc; i++) {
+		if ((ret = netdev_set_tc_queue(xdev->ndev, i, qopt->qopt.count[i], qopt->qopt.offset[i])) < 0) {
+			pr_err("Failed to set tc queue: tc [%u], queue %u@%u\n", i, qopt->qopt.count[i], qopt->qopt.offset[i]);
+			return ret;
+		}
+	}
 
 	for (i = 0; i < TC_QOPT_BITMASK; i++) {
-		// TC filters prio_tc_map[i] > num_tc
-		mqprio.prio_tc_map[i] = qopt->qopt.prio_tc_map[i];
-	}
-
-	for (i = 0; i < mqprio.num_tc; i++) {
-		if (mqprio.count[i] >= VLAN_PRIO_COUNT) {
-			return -EINVAL;
+		if ((ret = netdev_set_prio_tc_map(xdev->ndev, i, qopt->qopt.prio_tc_map[i])) < 0) {
+			if (qopt->qopt.num_tc == 0 && qopt->qopt.prio_tc_map[i] == 0) {
+				// For some reason this case is considered "invalid"
+				// even though this is called when qdisc is deleted
+				continue;
+			}
+			pr_err("Failed to set tc map: prio [%u], tc [%d]\n", i, qopt->qopt.prio_tc_map[i]);
+			return ret;
 		}
-		mqprio.count[i] = qopt->qopt.prio_tc_map[i];
 	}
-
-	memcpy(&config->mqprio, &mqprio, sizeof(struct mqprio_config));
 
 	return 0;
 }
