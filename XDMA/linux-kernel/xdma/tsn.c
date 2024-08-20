@@ -194,7 +194,7 @@ static void bake_qos_config(struct tsn_config* config) {
 	struct qbv_baked_config* baked;
 	if (config->qbv.enabled == false) {
 		// TODO: remove this when throughput issue without QoS gets resolved
-		for (tc_id = 0; tc_id < VLAN_PRIO_COUNT; tc_id++) {
+		for (tc_id = 0; tc_id < TC_COUNT; tc_id++) {
 			if (config->qav[tc_id].enabled) {
 				qav_disabled = false;
 				break;
@@ -206,7 +206,7 @@ static void bake_qos_config(struct tsn_config* config) {
 			config->qbv.start = 0;
 			config->qbv.slot_count = 1;
 			config->qbv.slots[0].duration_ns = 1000000000; // 1s
-			for (tc_id = 0; tc_id < VLAN_PRIO_COUNT; tc_id++) {
+			for (tc_id = 0; tc_id < TC_COUNT; tc_id++) {
 				config->qbv.slots[0].opened_prios[tc_id] = true;
 			}
 		}
@@ -218,7 +218,7 @@ static void bake_qos_config(struct tsn_config* config) {
 	baked->cycle_ns = 0;
 
 	// First slot
-	for (tc_id = 0; tc_id < VLAN_PRIO_COUNT; tc_id += 1) {
+	for (tc_id = 0; tc_id < TC_COUNT; tc_id += 1) {
 		baked->prios[tc_id].slot_count = 1;
 		baked->prios[tc_id].slots[0].opened = config->qbv.slots[0].opened_prios[tc_id];
 	}
@@ -226,7 +226,7 @@ static void bake_qos_config(struct tsn_config* config) {
 	for (slot_id = 0; slot_id < config->qbv.slot_count; slot_id += 1) {
 		uint64_t slot_duration = config->qbv.slots[slot_id].duration_ns;
 		baked->cycle_ns += slot_duration;
-		for (tc_id = 0; tc_id < VLAN_PRIO_COUNT; tc_id += 1) {
+		for (tc_id = 0; tc_id < TC_COUNT; tc_id += 1) {
 			struct qbv_baked_prio* prio = &baked->prios[tc_id];
 			if (prio->slots[prio->slot_count - 1].opened == config->qbv.slots[slot_id].opened_prios[tc_id]) {
 				// Same as the last slot. Just increase the duration
@@ -241,7 +241,7 @@ static void bake_qos_config(struct tsn_config* config) {
 	}
 
 	// Adjust slot counts to be even number. Because we need to have open-close pairs
-	for (tc_id = 0; tc_id < VLAN_PRIO_COUNT; tc_id += 1) {
+	for (tc_id = 0; tc_id < TC_COUNT; tc_id += 1) {
 		struct qbv_baked_prio* prio = &baked->prios[tc_id];
 		if (prio->slot_count % 2 == 1) {
 			prio->slots[prio->slot_count].opened = !prio->slots[prio->slot_count - 1].opened;
@@ -486,7 +486,7 @@ int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* offload)
 int tsn_set_qav(struct pci_dev* pdev, struct tc_cbs_qopt_offload* offload) {
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct tsn_config* config = &xdev->tsn_config;
-	if (offload->queue < 0 || offload->queue >= VLAN_PRIO_COUNT) {
+	if (offload->queue < 0 || offload->queue >= TC_COUNT) {
 		return -EINVAL;
 	}
 
@@ -519,7 +519,7 @@ int tsn_set_qbv(struct pci_dev* pdev, struct tc_taprio_qopt_offload* offload) {
 		for (i = 0; i < config->qbv.slot_count; i++) {
 			// TODO: handle offload->entries[i].command
 			config->qbv.slots[i].duration_ns = offload->entries[i].interval;
-			for (j = 0; j < VLAN_PRIO_COUNT; j++) {
+			for (j = 0; j < TC_COUNT; j++) {
 				config->qbv.slots[i].opened_prios[j] = (offload->entries[i].gate_mask & (1 << j));
 			}
 		}
