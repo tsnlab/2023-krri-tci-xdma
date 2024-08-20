@@ -19,8 +19,8 @@ struct timestamps {
 static bool is_gptp_packet(const uint8_t* payload);
 static void bake_qos_config(struct tsn_config* config);
 static uint64_t bytes_to_ns(uint64_t bytes);
-static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint8_t vlan_prio, uint64_t bytes);
-static bool get_timestamps(struct timestamps* timestamps, const struct tsn_config* tsn_config, timestamp_t from, uint8_t vlan_prio, uint64_t bytes, bool consider_delay);
+static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint8_t tc_id, uint64_t bytes);
+static bool get_timestamps(struct timestamps* timestamps, const struct tsn_config* tsn_config, timestamp_t from, uint8_t tc_id, uint64_t bytes, bool consider_delay);
 
 // HW Buffer tracker
 static bool append_buffer_track(struct buffer_tracker* buffer_tracker);
@@ -69,7 +69,7 @@ static inline sysclock_t tsn_timestamp_to_sysclock(struct pci_dev* pdev, timesta
  * @return: true if the frame reserves timestamps, false is for drop
  */
 bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* skb) {
-	uint8_t vlan_prio, mqprio_tc;
+	uint8_t vlan_prio, tc_id;
 	uint64_t duration_ns;
 	bool is_gptp, consider_delay;
 	timestamp_t from, free_at;
@@ -85,7 +85,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	update_buffer_track(pdev);
 
 	vlan_prio = tsn_get_vlan_prio(tsn_config, skb);
-	mqprio_tc = tsn_get_mqprio_tc(xdev->ndev, vlan_prio);
+	tc_id = tsn_get_mqprio_tc(xdev->ndev, vlan_prio);
 	is_gptp = is_gptp_packet(tx_buf->data);
 
 	if (is_gptp) {
@@ -101,14 +101,14 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 
 	duration_ns = bytes_to_ns(metadata->frame_length);
 
-	if (tsn_config->qbv.enabled == false && tsn_config->qav[mqprio_tc].enabled == false) {
+	if (tsn_config->qbv.enabled == false && tsn_config->qav[tc_id].enabled == false) {
 		// Don't care. Just fill in the metadata
 		timestamps.from = tsn_config->total_available_at;
 		timestamps.to = timestamps.from + _DEFAULT_TO_MARGIN_;
 		metadata->fail_policy = TSN_FAIL_POLICY_DROP;
 	} else {
-		if (tsn_config->qav[mqprio_tc].enabled == true && tsn_config->qav[mqprio_tc].available_at > from) {
-			from = tsn_config->qav[mqprio_tc].available_at;
+		if (tsn_config->qav[tc_id].enabled == true && tsn_config->qav[tc_id].available_at > from) {
+			from = tsn_config->qav[tc_id].available_at;
 		}
 		if (consider_delay) {
 			// Check if queue is available
@@ -123,7 +123,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 			from = max(from, tsn_config->total_available_at);
 		}
 
-		get_timestamps(&timestamps, tsn_config, from, mqprio_tc, metadata->frame_length, consider_delay);
+		get_timestamps(&timestamps, tsn_config, from, tc_id, metadata->frame_length, consider_delay);
 		metadata->fail_policy = consider_delay ? TSN_FAIL_POLICY_RETRY : TSN_FAIL_POLICY_DROP;
 	}
 
@@ -145,7 +145,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	}
 
 	// Update available_ats
-	spend_qav_credit(tsn_config, from, mqprio_tc, metadata->frame_length);
+	spend_qav_credit(tsn_config, from, tc_id, metadata->frame_length);
 	tsn_config->queue_available_at[queue_prio] += duration_ns;
 	tsn_config->total_available_at += duration_ns;
 
@@ -189,13 +189,13 @@ void tsn_init_configs(struct pci_dev* pdev) {
 }
 
 static void bake_qos_config(struct tsn_config* config) {
-	int slot_id, vlan_prio; // Iterators
+	int slot_id, tc_id; // Iterators
 	bool qav_disabled = true;
 	struct qbv_baked_config* baked;
 	if (config->qbv.enabled == false) {
 		// TODO: remove this when throughput issue without QoS gets resolved
-		for (vlan_prio = 0; vlan_prio < VLAN_PRIO_COUNT; vlan_prio++) {
-			if (config->qav[vlan_prio].enabled) {
+		for (tc_id = 0; tc_id < VLAN_PRIO_COUNT; tc_id++) {
+			if (config->qav[tc_id].enabled) {
 				qav_disabled = false;
 				break;
 			}
@@ -206,8 +206,8 @@ static void bake_qos_config(struct tsn_config* config) {
 			config->qbv.start = 0;
 			config->qbv.slot_count = 1;
 			config->qbv.slots[0].duration_ns = 1000000000; // 1s
-			for (vlan_prio = 0; vlan_prio < VLAN_PRIO_COUNT; vlan_prio++) {
-				config->qbv.slots[0].opened_prios[vlan_prio] = true;
+			for (tc_id = 0; tc_id < VLAN_PRIO_COUNT; tc_id++) {
+				config->qbv.slots[0].opened_prios[tc_id] = true;
 			}
 		}
 	}
@@ -218,22 +218,22 @@ static void bake_qos_config(struct tsn_config* config) {
 	baked->cycle_ns = 0;
 
 	// First slot
-	for (vlan_prio = 0; vlan_prio < VLAN_PRIO_COUNT; vlan_prio += 1) {
-		baked->prios[vlan_prio].slot_count = 1;
-		baked->prios[vlan_prio].slots[0].opened = config->qbv.slots[0].opened_prios[vlan_prio];
+	for (tc_id = 0; tc_id < VLAN_PRIO_COUNT; tc_id += 1) {
+		baked->prios[tc_id].slot_count = 1;
+		baked->prios[tc_id].slots[0].opened = config->qbv.slots[0].opened_prios[tc_id];
 	}
 
 	for (slot_id = 0; slot_id < config->qbv.slot_count; slot_id += 1) {
 		uint64_t slot_duration = config->qbv.slots[slot_id].duration_ns;
 		baked->cycle_ns += slot_duration;
-		for (vlan_prio = 0; vlan_prio < VLAN_PRIO_COUNT; vlan_prio += 1) {
-			struct qbv_baked_prio* prio = &baked->prios[vlan_prio];
-			if (prio->slots[prio->slot_count - 1].opened == config->qbv.slots[slot_id].opened_prios[vlan_prio]) {
+		for (tc_id = 0; tc_id < VLAN_PRIO_COUNT; tc_id += 1) {
+			struct qbv_baked_prio* prio = &baked->prios[tc_id];
+			if (prio->slots[prio->slot_count - 1].opened == config->qbv.slots[slot_id].opened_prios[tc_id]) {
 				// Same as the last slot. Just increase the duration
 				prio->slots[prio->slot_count - 1].duration_ns += slot_duration;
 			} else {
 				// Different from the last slot. Add a new slot
-				prio->slots[prio->slot_count].opened = config->qbv.slots[slot_id].opened_prios[vlan_prio];
+				prio->slots[prio->slot_count].opened = config->qbv.slots[slot_id].opened_prios[tc_id];
 				prio->slots[prio->slot_count].duration_ns = slot_duration;
 				prio->slot_count += 1;
 			}
@@ -241,8 +241,8 @@ static void bake_qos_config(struct tsn_config* config) {
 	}
 
 	// Adjust slot counts to be even number. Because we need to have open-close pairs
-	for (vlan_prio = 0; vlan_prio < VLAN_PRIO_COUNT; vlan_prio += 1) {
-		struct qbv_baked_prio* prio = &baked->prios[vlan_prio];
+	for (tc_id = 0; tc_id < VLAN_PRIO_COUNT; tc_id += 1) {
+		struct qbv_baked_prio* prio = &baked->prios[tc_id];
 		if (prio->slot_count % 2 == 1) {
 			prio->slots[prio->slot_count].opened = !prio->slots[prio->slot_count - 1].opened;
 			prio->slots[prio->slot_count].duration_ns = 0;
@@ -257,11 +257,11 @@ static uint64_t bytes_to_ns(uint64_t bytes) {
 	return max(bytes, (uint64_t)ETH_ZLEN) * 8 * NS_IN_1S / link_speed;
 }
 
-static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint8_t vlan_prio, uint64_t bytes) {
+static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint8_t tc_id, uint64_t bytes) {
 	uint64_t elapsed_from_last_update, sending_duration;
 	double earned_credit, spending_credit;
 	timestamp_t send_end;
-	struct qav_state* qav = &tsn_config->qav[vlan_prio];
+	struct qav_state* qav = &tsn_config->qav[tc_id];
 
 	if (qav->enabled == false) {
 		return;
@@ -302,12 +302,12 @@ static void spend_qav_credit(struct tsn_config* tsn_config, timestamp_t at, uint
  * @param timestamps: Output timestamps
  * @param tsn_config: TSN configuration
  * @param from: The time when the frame is ready to be sent
- * @param vlan_prio: VLAN priority of the frame
+ * @param tc_id: ID of mqprio tc or VLAN priority of the frame
  * @param bytes: Size of the frame
  * @param consider_delay: If true, calculate delay_from and delay_to
  * @return: true if the frame reserves timestamps, false is for drop
  */
-static bool get_timestamps(struct timestamps* timestamps, const struct tsn_config* tsn_config, timestamp_t from, uint8_t vlan_prio, uint64_t bytes, bool consider_delay) {
+static bool get_timestamps(struct timestamps* timestamps, const struct tsn_config* tsn_config, timestamp_t from, uint8_t tc_id, uint64_t bytes, bool consider_delay) {
 	int slot_id, slot_count;
 	uint64_t sending_duration, remainder;
 	const struct qbv_baked_config* baked;
@@ -326,7 +326,7 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 	}
 
 	baked = &tsn_config->qbv_baked;
-	baked_prio = &baked->prios[vlan_prio];
+	baked_prio = &baked->prios[tc_id];
 	sending_duration = bytes_to_ns(bytes);
 
 	// TODO: Need to check if the slot is big enough to fit the frame. But, That is a user fault. Don't mind for now
@@ -336,7 +336,7 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 	slot_id = 0;
 	slot_count = baked_prio->slot_count;
 
-	// Check if vlan_prio is always open or always closed
+	// Check if tc_id is always open or always closed
 	if (slot_count == 2 && baked_prio->slots[1].duration_ns == 0) {
 		if (baked_prio->slots[0].opened == false) {
 			// The only slot is closed. Drop the frame
@@ -443,44 +443,45 @@ static void update_buffer_track(struct pci_dev* pdev) {
 	buffer_tracker->pending_packets -= pop_count;
 }
 
-int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* qopt) {
+int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* offload) {
 	u8 i;
 	int ret;
 
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct tsn_config* config = &xdev->tsn_config;
+	struct tc_mqprio_qopt qopt = offload->qopt;
 	// struct mqprio_config mqprio;  TODO: Revert changes when an error happens
 	// memset(&mqprio, 0, sizeof(struct mqprio_config));
 
-	if (qopt->mode != TC_MQPRIO_MODE_DCB) {
+	if (offload->mode != TC_MQPRIO_MODE_DCB) {
 		return -ENOTSUPP;
 	}
 
-	if (qopt->qopt.num_tc >= TC_QOPT_MAX_QUEUE) {
+	if (qopt.num_tc >= TC_QOPT_MAX_QUEUE) {
 		pr_err("Invalid number of tc\n");
 		return -EINVAL;
 	}
 
-	if ((ret = netdev_set_num_tc(xdev->ndev, qopt->qopt.num_tc)) < 0) {
+	if ((ret = netdev_set_num_tc(xdev->ndev, qopt.num_tc)) < 0) {
 		pr_err("Failed to set num_tc\n");
 		return ret;
 	}
 
-	for (i = 0; i < qopt->qopt.num_tc; i++) {
-		if ((ret = netdev_set_tc_queue(xdev->ndev, i, qopt->qopt.count[i], qopt->qopt.offset[i])) < 0) {
-			pr_err("Failed to set tc queue: tc [%u], queue %u@%u\n", i, qopt->qopt.count[i], qopt->qopt.offset[i]);
+	for (i = 0; i < qopt.num_tc; i++) {
+		if ((ret = netdev_set_tc_queue(xdev->ndev, i, qopt.count[i], qopt.offset[i])) < 0) {
+			pr_err("Failed to set tc queue: tc [%u], queue %u@%u\n", i, qopt.count[i], qopt.offset[i]);
 			return ret;
 		}
 	}
 
 	for (i = 0; i < TC_QOPT_BITMASK; i++) {
-		if ((ret = netdev_set_prio_tc_map(xdev->ndev, i, qopt->qopt.prio_tc_map[i])) < 0) {
-			if (qopt->qopt.num_tc == 0 && qopt->qopt.prio_tc_map[i] == 0) {
+		if ((ret = netdev_set_prio_tc_map(xdev->ndev, i, qopt.prio_tc_map[i])) < 0) {
+			if (qopt.num_tc == 0 && qopt.prio_tc_map[i] == 0) {
 				// For some reason this case is considered "invalid"
 				// even though this is called when qdisc is deleted
 				continue;
 			}
-			pr_err("Failed to set tc map: prio [%u], tc [%d]\n", i, qopt->qopt.prio_tc_map[i]);
+			pr_err("Failed to set tc map: prio [%u], tc [%d]\n", i, qopt.prio_tc_map[i]);
 			return ret;
 		}
 	}
@@ -488,44 +489,44 @@ int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* qopt) {
 	return 0;
 }
 
-int tsn_set_qav(struct pci_dev* pdev, struct tc_cbs_qopt_offload* qopt) {
+int tsn_set_qav(struct pci_dev* pdev, struct tc_cbs_qopt_offload* offload) {
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct tsn_config* config = &xdev->tsn_config;
-	if (qopt->queue < 0 || qopt->queue >= VLAN_PRIO_COUNT) {
+	if (offload->queue < 0 || offload->queue >= VLAN_PRIO_COUNT) {
 		return -EINVAL;
 	}
 
-	config->qav[qopt->queue].enabled = qopt->enable;
-	config->qav[qopt->queue].hi_credit = qopt->hicredit;
-	config->qav[qopt->queue].lo_credit = qopt->locredit;
-	config->qav[qopt->queue].idle_slope = qopt->idleslope;
-	config->qav[qopt->queue].send_slope = qopt->sendslope;
+	config->qav[offload->queue].enabled = offload->enable;
+	config->qav[offload->queue].hi_credit = offload->hicredit;
+	config->qav[offload->queue].lo_credit = offload->locredit;
+	config->qav[offload->queue].idle_slope = offload->idleslope;
+	config->qav[offload->queue].send_slope = offload->sendslope;
 
 	bake_qos_config(config);
 
 	return 0;
 }
 
-int tsn_set_qbv(struct pci_dev* pdev, struct tc_taprio_qopt_offload* qopt) {
+int tsn_set_qbv(struct pci_dev* pdev, struct tc_taprio_qopt_offload* offload) {
 	u32 i, j;
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct tsn_config* config = &xdev->tsn_config;
 
-	if (qopt->num_entries > MAX_QBV_SLOTS) {
+	if (offload->num_entries > MAX_QBV_SLOTS) {
 		return -EINVAL;
 	}
 
-	config->qbv.enabled = qopt->enable;
+	config->qbv.enabled = offload->enable;
 
-	if (qopt->enable) {
-		config->qbv.start = qopt->base_time;
-		config->qbv.slot_count = qopt->num_entries;
+	if (offload->enable) {
+		config->qbv.start = offload->base_time;
+		config->qbv.slot_count = offload->num_entries;
 
 		for (i = 0; i < config->qbv.slot_count; i++) {
-			// TODO: handle qopt->entries[i].command
-			config->qbv.slots[i].duration_ns = qopt->entries[i].interval;
+			// TODO: handle offload->entries[i].command
+			config->qbv.slots[i].duration_ns = offload->entries[i].interval;
 			for (j = 0; j < VLAN_PRIO_COUNT; j++) {
-				config->qbv.slots[i].opened_prios[j] = (qopt->entries[i].gate_mask & (1 << j));
+				config->qbv.slots[i].opened_prios[j] = (offload->entries[i].gate_mask & (1 << j));
 			}
 		}
 	}

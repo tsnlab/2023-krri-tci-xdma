@@ -39,6 +39,6 @@ struct tsn_vlan_hdr {
 bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* skb);
 void tsn_init_configs(struct pci_dev* config);
 
-int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* qopt);
-int tsn_set_qav(struct pci_dev* pdev, struct tc_cbs_qopt_offload* qopt);
-int tsn_set_qbv(struct pci_dev* pdev, struct tc_taprio_qopt_offload* qopt);
+int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* offload);
+int tsn_set_qav(struct pci_dev* pdev, struct tc_cbs_qopt_offload* offload);
+int tsn_set_qbv(struct pci_dev* pdev, struct tc_taprio_qopt_offload* offload);
