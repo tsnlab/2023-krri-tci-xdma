@@ -446,12 +446,8 @@ static void update_buffer_track(struct pci_dev* pdev) {
 int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* offload) {
 	u8 i;
 	int ret;
-
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
-	struct tsn_config* config = &xdev->tsn_config;
 	struct tc_mqprio_qopt qopt = offload->qopt;
-	// struct mqprio_config mqprio;  TODO: Revert changes when an error happens
-	// memset(&mqprio, 0, sizeof(struct mqprio_config));
 
 	if (offload->mode != TC_MQPRIO_MODE_DCB) {
 		return -ENOTSUPP;
@@ -468,21 +464,19 @@ int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* offload)
 	}
 
 	for (i = 0; i < qopt.num_tc; i++) {
-		if ((ret = netdev_set_tc_queue(xdev->ndev, i, qopt.count[i], qopt.offset[i])) < 0) {
-			pr_err("Failed to set tc queue: tc [%u], queue %u@%u\n", i, qopt.count[i], qopt.offset[i]);
-			return ret;
+		if (netdev_set_tc_queue(xdev->ndev, i, qopt.count[i], qopt.offset[i]) < 0) {
+			pr_warn("Failed to set tc queue: tc [%u], queue [%u@%u]\n", i, qopt.count[i], qopt.offset[i]);
 		}
 	}
 
 	for (i = 0; i < TC_QOPT_BITMASK; i++) {
-		if ((ret = netdev_set_prio_tc_map(xdev->ndev, i, qopt.prio_tc_map[i])) < 0) {
+		if (netdev_set_prio_tc_map(xdev->ndev, i, qopt.prio_tc_map[i]) < 0) {
 			if (qopt.num_tc == 0 && qopt.prio_tc_map[i] == 0) {
 				// For some reason this case is considered "invalid"
 				// even though this is called when qdisc is deleted
 				continue;
 			}
-			pr_err("Failed to set tc map: prio [%u], tc [%d]\n", i, qopt.prio_tc_map[i]);
-			return ret;
+			pr_warn("Failed to set tc map: prio [%u], tc [%d]\n", i, qopt.prio_tc_map[i]);
 		}
 	}
 

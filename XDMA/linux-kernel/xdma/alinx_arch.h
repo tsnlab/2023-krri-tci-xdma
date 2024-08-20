@@ -74,15 +74,6 @@ struct ptp_device_data {
 #endif
 };
 
-struct mqprio_config {
-	bool enabled;
-	u8 num_tc;
-	u8 prio_tc_map[TC_QOPT_BITMASK + 1];
-	u16 count[TC_QOPT_MAX_QUEUE];
-	// Ignore offsets
-	// u16 offset[TC_QOPT_MAX_QUEUE];
-};
-
 struct qbv_slot {
 	uint32_t duration_ns; // We don't support cycle > 1s
 	bool opened_prios[VLAN_PRIO_COUNT];
@@ -132,7 +123,6 @@ struct tsn_config {
 	struct qbv_config qbv;
 	struct qbv_baked_config qbv_baked;
 	struct qav_state qav[VLAN_PRIO_COUNT];
-	struct mqprio_config mqprio;
 	struct buffer_tracker buffer_tracker;
 	timestamp_t queue_available_at[TSN_PRIO_COUNT];
 	timestamp_t total_available_at;
