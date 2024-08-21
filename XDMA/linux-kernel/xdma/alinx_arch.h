@@ -36,6 +36,7 @@ typedef uint32_t u32
 #define REG_TO_OVERFLOW_TIMEOUT_COUNT 0x0424
 
 #define TX_QUEUE_COUNT 3
+#define RX_QUEUE_COUNT 1
 
 /* 125 MHz */
 #define TICKS_SCALE 8.0
@@ -46,7 +47,7 @@ typedef uint32_t u32
 #define TSN_QUEUE_SIZE (HW_QUEUE_SIZE - 2)
 #define HW_QUEUE_SIZE_PAD 20
 
-#define VLAN_PRIO_COUNT 8
+#define TC_COUNT 8
 #define TSN_PRIO_COUNT 8
 #define MAX_QBV_SLOTS 20
 
@@ -74,18 +75,9 @@ struct ptp_device_data {
 #endif
 };
 
-struct mqprio_config {
-	bool enabled;
-	u8 num_tc;
-	u8 prio_tc_map[TC_QOPT_BITMASK + 1];
-	u16 count[TC_QOPT_MAX_QUEUE];
-	// Ignore offsets
-	// u16 offset[TC_QOPT_MAX_QUEUE];
-};
-
 struct qbv_slot {
 	uint32_t duration_ns; // We don't support cycle > 1s
-	bool opened_prios[VLAN_PRIO_COUNT];
+	bool opened_prios[TC_COUNT];
 };
 
 struct qbv_config {
@@ -108,7 +100,7 @@ struct qbv_baked_prio {
 
 struct qbv_baked_config {
 	uint64_t cycle_ns;
-	struct qbv_baked_prio prios[VLAN_PRIO_COUNT];
+	struct qbv_baked_prio prios[TC_COUNT];
 };
 
 struct qav_state {
@@ -131,8 +123,7 @@ struct buffer_tracker {
 struct tsn_config {
 	struct qbv_config qbv;
 	struct qbv_baked_config qbv_baked;
-	struct qav_state qav[VLAN_PRIO_COUNT];
-	struct mqprio_config mqprio;
+	struct qav_state qav[TC_COUNT];
 	struct buffer_tracker buffer_tracker;
 	timestamp_t queue_available_at[TSN_PRIO_COUNT];
 	timestamp_t total_available_at;

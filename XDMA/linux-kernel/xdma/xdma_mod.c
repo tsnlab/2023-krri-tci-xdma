@@ -346,10 +346,21 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	iowrite32(0x10, xdev->bar[0] + 0x620);
 
 	/* Allocate the network device */
-	ndev = alloc_etherdev(sizeof(struct xdma_private));
+	/* TC command requires multiple TX queues */
+	ndev = alloc_etherdev_mq(sizeof(struct xdma_private), TX_QUEUE_COUNT);
 	if (!ndev) {
 		pr_err("alloc_etherdev failed\n");
 		rv = -ENOMEM;
+		goto err_out;
+	}
+	/*
+	 * Multiple RX queues drops throughput significantly.
+	 * TODO: Find out why RX queue count affects throughput
+	 * and see if it can be resolved in another way
+	 */
+	rv = netif_set_real_num_rx_queues(ndev, RX_QUEUE_COUNT);
+	if (rv) {
+		pr_err("netif_set_real_num_rx_queues failed\n");
 		goto err_out;
 	}
 
