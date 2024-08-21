@@ -463,6 +463,11 @@ int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* offload)
 		return ret;
 	}
 
+	if (qopt.num_tc == 0) {
+		// No need to proceed further
+		return 0;
+	}
+
 	for (i = 0; i < qopt.num_tc; i++) {
 		if (netdev_set_tc_queue(xdev->ndev, i, qopt.count[i], qopt.offset[i]) < 0) {
 			pr_warn("Failed to set tc queue: tc [%u], queue [%u@%u]\n", i, qopt.count[i], qopt.offset[i]);
@@ -471,11 +476,6 @@ int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* offload)
 
 	for (i = 0; i < TC_QOPT_BITMASK; i++) {
 		if (netdev_set_prio_tc_map(xdev->ndev, i, qopt.prio_tc_map[i]) < 0) {
-			if (qopt.num_tc == 0 && qopt.prio_tc_map[i] == 0) {
-				// For some reason this case is considered "invalid"
-				// even though this is called when qdisc is deleted
-				continue;
-			}
 			pr_warn("Failed to set tc map: prio [%u], tc [%d]\n", i, qopt.prio_tc_map[i]);
 		}
 	}
