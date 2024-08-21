@@ -358,7 +358,7 @@ static int probe_one(struct pci_dev *pdev, const struct pci_device_id *id)
 	 * TODO: Find out why RX queue count affects throughput
 	 * and see if it can be resolved in another way
 	 */
-	rv = netif_set_real_num_rx_queues(ndev, 1);
+	rv = netif_set_real_num_rx_queues(ndev, RX_QUEUE_COUNT);
 	if (rv) {
 		pr_err("netif_set_real_num_rx_queues failed\n");
 		goto err_out;
