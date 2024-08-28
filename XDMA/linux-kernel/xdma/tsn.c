@@ -483,6 +483,11 @@ int tsn_set_mqprio(struct pci_dev* pdev, struct tc_mqprio_qopt_offload* offload)
 	return 0;
 }
 
+int tsn_set_etf(struct pci_dev* pdev, struct tc_etf_qopt_offload* offload) {
+	pr_err("etf\n");
+	return 0;
+}
+
 int tsn_set_qav(struct pci_dev* pdev, struct tc_cbs_qopt_offload* offload) {
 	struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
 	struct tsn_config* config = &xdev->tsn_config;

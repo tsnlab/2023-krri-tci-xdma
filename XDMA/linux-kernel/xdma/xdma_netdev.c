@@ -234,6 +234,8 @@ int xdma_netdev_setup_tc(struct net_device *ndev, enum tc_setup_type type, void 
                 return tsn_set_mqprio(priv->pdev, (struct tc_mqprio_qopt_offload*)type_data);
         case TC_SETUP_QDISC_CBS:
                 return tsn_set_qav(priv->pdev, (struct tc_cbs_qopt_offload*)type_data);
+        case TC_SETUP_QDISC_ETF:
+                return tsn_set_etf(priv->pdev, (struct tc_etf_qopt_offload*)type_data);
         case TC_SETUP_QDISC_TAPRIO:
                 return tsn_set_qbv(priv->pdev, (struct tc_taprio_qopt_offload*)type_data);
         case TC_SETUP_BLOCK:
