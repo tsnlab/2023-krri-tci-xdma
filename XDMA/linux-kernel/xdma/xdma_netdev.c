@@ -328,6 +328,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
         shhwtstamps.hwtstamp = ns_to_ktime(alinx_sysclock_to_txtstamp(priv->pdev, tx_tstamp));
         priv->last_tx_tstamp[tstamp_id] = tx_tstamp;
 	//pr_info("tstamp_id: %u\n", tstamp_id);
+        now = alinx_get_sys_clock(priv->xdev->pdev);
 	diff = now - tx_tstamp;
 	pr_info("tstamp:\t0x%llx,\tsysclock: 0x%llx\tdiff:0x%llx(%llu)\n", tx_tstamp, now, diff, diff);
 	//diff = priv->tx_work_wait_until[tstamp_id] - priv->tx_work_start_after[tstamp_id];
