@@ -106,9 +106,14 @@ u64 alinx_get_tx_drop_packets(struct pci_dev *pdev) {
 u64 alinx_get_normal_timeout_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
+	static u32 cnt = 0;
 
         /* This register does not get cleared after read */
         u32 regval = read32(xdev->bar[0] + REG_NORMAL_TIMEOUT_COUNT);
+	if (cnt != regval) {
+		pr_err("normal timeout\n");
+	}
+	cnt = regval;
         add_u32_counter(&priv->last_normal_timeout, regval);
 
         return priv->last_normal_timeout;
@@ -117,9 +122,14 @@ u64 alinx_get_normal_timeout_packets(struct pci_dev *pdev) {
 u64 alinx_get_to_overflow_popped_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
+	static u32 cnt = 0;
 
         /* This register does not get cleared after read */
         u32 regval = read32(xdev->bar[0] + REG_TO_OVERFLOW_POPPED_COUNT);
+	if (cnt != regval) {
+		pr_err("to overflow popped\n");
+	}
+	cnt = regval;
         add_u32_counter(&priv->last_to_overflow_popped, regval);
 
         return priv->last_to_overflow_popped;
@@ -128,9 +138,14 @@ u64 alinx_get_to_overflow_popped_packets(struct pci_dev *pdev) {
 u64 alinx_get_to_overflow_timeout_packets(struct pci_dev *pdev) {
         struct xdma_dev* xdev = xdev_find_by_pdev(pdev);
         struct xdma_private* priv = netdev_priv(xdev->ndev);
+	static u32 cnt = 0;
 
         /* This register does not get cleared after read */
         u32 regval = read32(xdev->bar[0] + REG_TO_OVERFLOW_TIMEOUT_COUNT);
+	if (cnt != regval) {
+		pr_err("to overflow timeout\n");
+	}
+	cnt = regval;
         add_u32_counter(&priv->last_to_overflow_timeout, regval);
 
         return priv->last_to_overflow_timeout;

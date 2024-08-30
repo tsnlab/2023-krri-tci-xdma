@@ -311,6 +311,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                         /* TODO: track the number of skipped packets for ethtool stats */
                         priv->tstamp_retry[tstamp_id] = 0;
                         clear_bit_unlock(tstamp_id, &priv->state);
+			pr_err("Failed to get tx timestamp\n");
                         return;
                 }
                 schedule_work(&priv->tx_work[tstamp_id]);
@@ -325,6 +326,10 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
         tx_tstamp = alinx_read_tx_timestamp(priv->pdev, tstamp_id);
         shhwtstamps.hwtstamp = ns_to_ktime(alinx_sysclock_to_txtstamp(priv->pdev, tx_tstamp));
         priv->last_tx_tstamp[tstamp_id] = tx_tstamp;
+	pr_info("tstamp_id: %u\n", tstamp_id);
+	pr_info("tx_tstamp: 0x%llx(%llu), sysclock: 0x%llx(%llu)\n", tx_tstamp, tx_tstamp, now, now);
+	pr_info("from: 0x%llx(%llu), to: 0x%llx(%llu)\n", priv->tx_work_start_after[tstamp_id], priv->tx_work_start_after[tstamp_id], priv->tx_work_wait_until[tstamp_id], priv->tx_work_wait_until[tstamp_id]);
+	pr_info("===========================================\n");
 
         priv->tx_work_skb[tstamp_id] = NULL;
         clear_bit_unlock(tstamp_id, &priv->state);
