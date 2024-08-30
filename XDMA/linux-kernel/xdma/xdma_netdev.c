@@ -274,6 +274,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
         struct xdma_private* priv = container_of(work - tstamp_id, struct xdma_private, tx_work[0]);
         struct sk_buff* skb = priv->tx_work_skb[tstamp_id];
         sysclock_t now = alinx_get_sys_clock(priv->xdev->pdev);
+	sysclock_t diff;
 
         if (tstamp_id >= TSN_TIMESTAMP_ID_MAX) {
                 pr_err("Invalid timestamp ID\n");
@@ -326,10 +327,12 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
         tx_tstamp = alinx_read_tx_timestamp(priv->pdev, tstamp_id);
         shhwtstamps.hwtstamp = ns_to_ktime(alinx_sysclock_to_txtstamp(priv->pdev, tx_tstamp));
         priv->last_tx_tstamp[tstamp_id] = tx_tstamp;
-	pr_info("tstamp_id: %u\n", tstamp_id);
-	pr_info("tx_tstamp: 0x%llx(%llu), sysclock: 0x%llx(%llu)\n", tx_tstamp, tx_tstamp, now, now);
-	pr_info("from: 0x%llx(%llu), to: 0x%llx(%llu)\n", priv->tx_work_start_after[tstamp_id], priv->tx_work_start_after[tstamp_id], priv->tx_work_wait_until[tstamp_id], priv->tx_work_wait_until[tstamp_id]);
-	pr_info("===========================================\n");
+	//pr_info("tstamp_id: %u\n", tstamp_id);
+	diff = now - tx_tstamp;
+	pr_info("tstamp:\t0x%llx,\tsysclock: 0x%llx\tdiff:0x%llx(%llu)\n", tx_tstamp, now, diff, diff);
+	//diff = priv->tx_work_wait_until[tstamp_id] - priv->tx_work_start_after[tstamp_id];
+	//pr_info("from:\t0x%llx,\tto:\t\t0x%llx\tdiff:0x%llx(%llu)\n", priv->tx_work_start_after[tstamp_id], priv->tx_work_wait_until[tstamp_id], diff, diff);
+	//pr_info("===========================================\n");
 
         priv->tx_work_skb[tstamp_id] = NULL;
         clear_bit_unlock(tstamp_id, &priv->state);
