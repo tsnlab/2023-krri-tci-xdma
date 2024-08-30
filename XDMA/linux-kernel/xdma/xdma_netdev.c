@@ -202,6 +202,8 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                                 priv->tx_work_wait_until[tx_metadata->timestamp_id] += (1 << 29);
                         }
                         schedule_work(&priv->tx_work[tx_metadata->timestamp_id]);
+                } else {
+                        pr_err("Timestamp skipped\n");
                 }
                 // TODO: track the number of skipped packets for ethtool stats
         }
@@ -279,6 +281,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
         struct xdma_private* priv = container_of(work - tstamp_id, struct xdma_private, tx_work[0]);
         struct sk_buff* skb = priv->tx_work_skb[tstamp_id];
         sysclock_t now = alinx_get_sys_clock(priv->xdev->pdev);
+        sysclock_t diff;
 
         if (tstamp_id >= TSN_TIMESTAMP_ID_MAX) {
                 pr_err("Invalid timestamp ID\n");
@@ -314,6 +317,9 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                 priv->tstamp_retry[tstamp_id]++;
                 if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
                         /* TODO: track the number of skipped packets for ethtool stats */
+                        pr_err("Failed to get timestamp: timestamp is not updated\n");
+                        diff = now - tx_tstamp;
+                        pr_err("tstamp: %llx, now: %llx, diff: %llx(%llu)\n", tx_tstamp, now, diff, diff);
                         priv->tstamp_retry[tstamp_id] = 0;
                         clear_bit_unlock(tstamp_id, &priv->state);
                         return;
@@ -325,6 +331,9 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                 priv->tstamp_retry[tstamp_id]++;
                 if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
                         /* TODO: track the number of skipped packets for ethtool stats */
+                        pr_err("Failed to get timestamp: timestamp is only partially updated\n");
+                        diff = now - tx_tstamp;
+                        pr_err("tstamp: %llx, now: %llx, diff: %llx(%llu)\n", tx_tstamp, now, diff, diff);
                         priv->tstamp_retry[tstamp_id] = 0;
                         clear_bit_unlock(tstamp_id, &priv->state);
                         return;
