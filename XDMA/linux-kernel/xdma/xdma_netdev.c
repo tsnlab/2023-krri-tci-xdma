@@ -13,6 +13,8 @@
 #define LOWER_29_BITS ((1ULL << 29) - 1)
 #define TX_WORK_OVERFLOW_MARGIN 100
 
+#define TX_TSTAMP_UPDATE_THRESHOLD 0xFFFF
+
 static void tx_desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len)
 {
         u32 control_field;
@@ -315,14 +317,19 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                 }
                 schedule_work(&priv->tx_work[tstamp_id]);
                 return;
+        } else if (now < tx_tstamp || (now - tx_tstamp) > TX_TSTAMP_UPDATE_THRESHOLD) {
+                /* Tx timestamp is not fully updated */
+                priv->tstamp_retry[tstamp_id]++;
+                if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
+                        /* TODO: track the number of skipped packets for ethtool stats */
+                        priv->tstamp_retry[tstamp_id] = 0;
+                        clear_bit_unlock(tstamp_id, &priv->state);
+                        return;
+                }
+                schedule_work(&priv->tx_work[tstamp_id]);
+                return;
         }
         priv->tstamp_retry[tstamp_id] = 0;
-        /*
-         * Tx timestamp is updated, or getting updated.
-         * If it is getting updated, the value might be incorrect.
-         * So read it again.
-         */
-        tx_tstamp = alinx_read_tx_timestamp(priv->pdev, tstamp_id);
         shhwtstamps.hwtstamp = ns_to_ktime(alinx_sysclock_to_txtstamp(priv->pdev, tx_tstamp));
         priv->last_tx_tstamp[tstamp_id] = tx_tstamp;
 
