@@ -13,7 +13,7 @@
 #define LOWER_29_BITS ((1ULL << 29) - 1)
 #define TX_WORK_OVERFLOW_MARGIN 100
 
-#define TX_TSTAMP_UPDATE_THRESHOLD 0xFFFF
+#define TX_TSTAMP_UPDATE_THRESHOLD 0xFFFFFF
 
 static void tx_desc_set(struct xdma_desc *desc, dma_addr_t addr, u32 len)
 {
