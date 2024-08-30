@@ -11,7 +11,8 @@
 #include "alinx_arch.h"
 
 #define LOWER_29_BITS ((1ULL << 29) - 1)
-#define TX_WORK_OVERFLOW_MARGIN 100
+#define TX_WORK_OVERFLOW_MARGIN 30
+#define TX_TSTAMP_LOCK_RETRY 10
 
 #define TX_TSTAMP_UPDATE_THRESHOLD 0xFFFFFF
 
@@ -110,6 +111,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         struct tx_buffer* tx_buffer;
         struct tx_metadata* tx_metadata;
         u32 to_value;
+        u8 i;
 
         /* Check desc count */
         netif_stop_queue(ndev);
@@ -176,34 +178,38 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         }
 
         if (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) {
-                if (priv->tstamp_config.tx_type == HWTSTAMP_TX_ON &&
-                        !test_and_set_bit_lock(tx_metadata->timestamp_id, &priv->state)) {
-                        skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
-                        priv->tx_work_skb[tx_metadata->timestamp_id] = skb_get(skb);
-                        /*
-                         * Even if the driver's intention was sys_count == from,
-                         * there might be a slight error caused during conversion (sysclock <-> timestamp)
-                         * So if the diffence is small, don't consider it as overflow.
-                         * Adding/Subtracting directly from values can cause another overflow,
-                         * so just calculate the difference.
-                         */
-                        priv->tx_work_start_after[tx_metadata->timestamp_id] = sys_count_upper | tx_metadata->from.tick;
-                        if (sys_count_lower > tx_metadata->from.tick && sys_count_lower - tx_metadata->from.tick > TX_WORK_OVERFLOW_MARGIN) {
-                                // Overflow
-                                priv->tx_work_start_after[tx_metadata->timestamp_id] += (1 << 29);
+                for (i = 0; i < TX_TSTAMP_LOCK_RETRY; i++) {
+                        if (priv->tstamp_config.tx_type == HWTSTAMP_TX_ON &&
+                                !test_and_set_bit_lock(tx_metadata->timestamp_id, &priv->state)) {
+                                skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
+                                priv->tx_work_skb[tx_metadata->timestamp_id] = skb_get(skb);
+                                /*
+                                 * Even if the driver's intention was sys_count == from,
+                                 * there might be a slight error caused during conversion (sysclock <-> timestamp)
+                                 * So if the diffence is small, don't consider it as overflow.
+                                 * Adding/Subtracting directly from values can cause another overflow,
+                                 * so just calculate the difference.
+                                 */
+                                priv->tx_work_start_after[tx_metadata->timestamp_id] = sys_count_upper | tx_metadata->from.tick;
+                                if (sys_count_lower > tx_metadata->from.tick && sys_count_lower - tx_metadata->from.tick > TX_WORK_OVERFLOW_MARGIN) {
+                                        // Overflow
+                                        priv->tx_work_start_after[tx_metadata->timestamp_id] += (1 << 29);
+                                }
+                                to_value = (tx_metadata->fail_policy == TSN_FAIL_POLICY_RETRY ? tx_metadata->delay_to.tick : tx_metadata->to.tick);
+                                priv->tx_work_wait_until[tx_metadata->timestamp_id] = sys_count_upper | to_value;
+                                if (sys_count_lower > to_value && sys_count_lower - to_value > TX_WORK_OVERFLOW_MARGIN) {
+                                        // Overflow
+                                        priv->tx_work_wait_until[tx_metadata->timestamp_id] += (1 << 29);
+                                }
+                                if (tx_metadata->to.tick <= tx_metadata->from.tick) {
+                                        priv->tx_work_wait_until[tx_metadata->timestamp_id] += (1 << 29);
+                                }
+                                schedule_work(&priv->tx_work[tx_metadata->timestamp_id]);
+                                break;
                         }
-                        to_value = (tx_metadata->fail_policy == TSN_FAIL_POLICY_RETRY ? tx_metadata->delay_to.tick : tx_metadata->to.tick);
-                        priv->tx_work_wait_until[tx_metadata->timestamp_id] = sys_count_upper | to_value;
-                        if (sys_count_lower > to_value && sys_count_lower - to_value > TX_WORK_OVERFLOW_MARGIN) {
-                                // Overflow
-                                priv->tx_work_wait_until[tx_metadata->timestamp_id] += (1 << 29);
-                        }
-                        if (tx_metadata->to.tick <= tx_metadata->from.tick) {
-                                priv->tx_work_wait_until[tx_metadata->timestamp_id] += (1 << 29);
-                        }
-                        schedule_work(&priv->tx_work[tx_metadata->timestamp_id]);
-                } else {
-                        pr_err("Timestamp skipped\n");
+                }
+                if (i >= TX_TSTAMP_LOCK_RETRY) {
+                        pr_err("Timestamp skipped, prev packet retried %u times\n", priv->tstamp_retry[tx_metadata->timestamp_id]);
                 }
                 // TODO: track the number of skipped packets for ethtool stats
         }
