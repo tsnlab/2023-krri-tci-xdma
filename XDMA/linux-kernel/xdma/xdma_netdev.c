@@ -198,6 +198,9 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                                 // Overflow
                                 priv->tx_work_wait_until[tx_metadata->timestamp_id] += (1 << 29);
                         }
+                        if (tx_metadata->to.tick <= tx_metadata->from.tick) {
+                                priv->tx_work_wait_until[tx_metadata->timestamp_id] += (1 << 29);
+                        }
                         schedule_work(&priv->tx_work[tx_metadata->timestamp_id]);
                 }
                 // TODO: track the number of skipped packets for ethtool stats
