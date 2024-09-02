@@ -288,6 +288,9 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
         struct sk_buff* skb = priv->tx_work_skb[tstamp_id];
         sysclock_t now = alinx_get_sys_clock(priv->xdev->pdev);
         sysclock_t diff;
+	static sysclock_t tss[55];
+	static sysclock_t nows[55];
+	int i;
 
         if (tstamp_id >= TSN_TIMESTAMP_ID_MAX) {
                 pr_err("Invalid timestamp ID\n");
@@ -335,18 +338,23 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
         } else if (now < tx_tstamp || (now - tx_tstamp) > TX_TSTAMP_UPDATE_THRESHOLD) {
                 /* Tx timestamp is not fully updated */
 		diff = now - tx_tstamp;
+		tss[priv->tstamp_retry[tstamp_id]] = tx_tstamp;
+		nows[priv->tstamp_retry[tstamp_id]] = now;
                 priv->tstamp_retry[tstamp_id]++;
                 if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
                         /* TODO: track the number of skipped packets for ethtool stats */
                         pr_err("Failed to get timestamp: timestamp is only partially updated\n");
                         //diff = now - tx_tstamp;
                         pr_err("tstamp: %llx, now: %llx, diff: %llx(%llu)\n", tx_tstamp, now, diff, diff);
+			pr_err("Previous records:\n");
+			for (i = 0; i < priv->tstamp_retry[tstamp_id]; i++) {
+				pr_err("\ttstamp: %llx, now: %llx, diff: %llx(%llu)\n", tx_tstamp, now, diff, diff);
+			}
+			pr_err("===========================================================\n");
                         priv->tstamp_retry[tstamp_id] = 0;
                         clear_bit_unlock(tstamp_id, &priv->state);
                         return;
                 }
-		pr_warn("Timestamp is only partially updated\n");
-		pr_warn("tstamp: %llx, now: %llx, diff: %llx(%llu)\n", tx_tstamp, now, diff, diff);
                 schedule_work(&priv->tx_work[tstamp_id]);
                 return;
         }
