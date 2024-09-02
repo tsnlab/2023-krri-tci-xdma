@@ -26,13 +26,10 @@
 
 #define CRC_LEN 4
 
-#define TX_TSTAMP_MAX_RETRY 50
+#define TX_TSTAMP_MAX_RETRY 100
 
 enum xdma_state_t {
-        XDMA_TX1_IN_PROGRESS = 1,
-        XDMA_TX2_IN_PROGRESS = 2,
-        XDMA_TX3_IN_PROGRESS = 3,
-        XDMA_TX4_IN_PROGRESS = 4,
+        XDMA_TX_IN_PROGRESS,
 };
 
 struct xdma_private {
@@ -76,7 +73,8 @@ struct xdma_private {
         uint64_t last_to_overflow_popped;
         uint64_t last_to_overflow_timeout;
 
-        unsigned long state;
+        unsigned long states[TSN_TIMESTAMP_ID_MAX];
+	unsigned long asdf[TSN_TIMESTAMP_ID_MAX];
 };
 
 #define _DEFAULT_FROM_MARGIN_ (500)

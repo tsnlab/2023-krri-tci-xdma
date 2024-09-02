@@ -2,6 +2,7 @@
 #include <net/pkt_cls.h>
 #include <net/flow_offload.h>
 #include <linux/skbuff.h>
+#include <linux/delay.h>
 
 #include "xdma_netdev.h"
 #include "xdma_mod.h"
@@ -12,7 +13,7 @@
 
 #define LOWER_29_BITS ((1ULL << 29) - 1)
 #define TX_WORK_OVERFLOW_MARGIN 30
-#define TX_TSTAMP_LOCK_RETRY 10
+#define TX_TSTAMP_LOCK_RETRY 100
 
 #define TX_TSTAMP_UPDATE_THRESHOLD 0xFFFFFF
 
@@ -180,9 +181,11 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         if (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) {
                 for (i = 0; i < TX_TSTAMP_LOCK_RETRY; i++) {
                         if (priv->tstamp_config.tx_type == HWTSTAMP_TX_ON &&
-                                !test_and_set_bit_lock(tx_metadata->timestamp_id, &priv->state)) {
+                                !test_and_set_bit_lock(XDMA_TX_IN_PROGRESS, &priv->states[tx_metadata->timestamp_id])) {
                                 skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
                                 priv->tx_work_skb[tx_metadata->timestamp_id] = skb_get(skb);
+				priv->tstamp_retry[tx_metadata->timestamp_id] = 0;
+				priv->asdf[tx_metadata->timestamp_id] = 0;
                                 /*
                                  * Even if the driver's intention was sys_count == from,
                                  * there might be a slight error caused during conversion (sysclock <-> timestamp)
@@ -207,11 +210,14 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                                 schedule_work(&priv->tx_work[tx_metadata->timestamp_id]);
                                 break;
                         }
+			udelay(1000);
                 }
                 if (i >= TX_TSTAMP_LOCK_RETRY) {
                         pr_err("Timestamp skipped, prev packet retried %u times\n", priv->tstamp_retry[tx_metadata->timestamp_id]);
                         pr_err("tstamp_id: %u\n", tx_metadata->timestamp_id);
 			pr_err("skb_buff: %p\n", priv->tx_work_skb[tx_metadata->timestamp_id]);
+                        pr_err("state: %lx\n", priv->states[tx_metadata->timestamp_id]);
+                        pr_err("asdf: %lx\n", priv->asdf[tx_metadata->timestamp_id]);
                 }
                 // TODO: track the number of skipped packets for ethtool stats
         }
@@ -290,8 +296,8 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
         struct sk_buff* skb = priv->tx_work_skb[tstamp_id];
         sysclock_t now = alinx_get_sys_clock(priv->xdev->pdev);
         sysclock_t diff;
-	static sysclock_t tss[55];
-	static sysclock_t nows[55];
+	static sysclock_t tss[5555];
+	static sysclock_t nows[5555];
 	int i;
 
         if (tstamp_id >= TSN_TIMESTAMP_ID_MAX) {
@@ -300,12 +306,13 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
         }
 
         if (!priv->tx_work_skb[tstamp_id]) {
-                clear_bit_unlock(tstamp_id, &priv->state);
+                clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->states[tstamp_id]);
                 return;
         }
 
         if (now < priv->tx_work_start_after[tstamp_id]) {
                 schedule_work(&priv->tx_work[tstamp_id]);
+		priv->asdf[tstamp_id] = 1;
                 return;
         }
         /*
@@ -317,24 +324,38 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
         if (tx_tstamp == priv->last_tx_tstamp[tstamp_id] && priv->tstamp_retry[tstamp_id] < TX_TSTAMP_MAX_RETRY) {
                 if (alinx_get_sys_clock(priv->xdev->pdev) < priv->tx_work_wait_until[tstamp_id]) {
                         /* The packet might have not been sent yet */
+			usleep_range(1000, 2000);
                         schedule_work(&priv->tx_work[tstamp_id]);
+		priv->asdf[tstamp_id] = 2;
                         return;
                 }
+		priv->asdf[tstamp_id] = 3;
                 /*
                  * Tx timestamp is not updated. Try again.
                  * Waiting for it to be updated forever is not desirable,
                  * so limit the number of retries
                  */
+		diff = now - tx_tstamp;
+		tss[priv->tstamp_retry[tstamp_id]] = tx_tstamp;
+		nows[priv->tstamp_retry[tstamp_id]] = now;
                 priv->tstamp_retry[tstamp_id]++;
                 if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
                         /* TODO: track the number of skipped packets for ethtool stats */
                         pr_err("Failed to get timestamp: timestamp is not updated\n");
-                        diff = now - tx_tstamp;
+                        pr_err("tstamp_id: %u\n", tstamp_id);
+                        //diff = now - tx_tstamp;
                         pr_err("tstamp: %llx, now: %llx, diff: %llx(%llu)\n", tx_tstamp, now, diff, diff);
+			pr_err("Previous records:\n");
+			for (i = 0; i < priv->tstamp_retry[tstamp_id]; i++) {
+				diff = nows[i] - tss[i];
+				pr_err("\ttstamp: %llx, now: %llx, diff: %llx(%llu)\n", tss[i], nows[i], diff, diff);
+			}
+			pr_err("===========================================================\n");
                         priv->tstamp_retry[tstamp_id] = 0;
-                        clear_bit_unlock(tstamp_id, &priv->state);
+                        clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->states[tstamp_id]);
                         return;
                 }
+			usleep_range(1000, 2000);
                 schedule_work(&priv->tx_work[tstamp_id]);
                 return;
         } else if (now < tx_tstamp || (now - tx_tstamp) > TX_TSTAMP_UPDATE_THRESHOLD) {
@@ -343,6 +364,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
 		tss[priv->tstamp_retry[tstamp_id]] = tx_tstamp;
 		nows[priv->tstamp_retry[tstamp_id]] = now;
                 priv->tstamp_retry[tstamp_id]++;
+		priv->asdf[tstamp_id] = 4;
                 if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
                         /* TODO: track the number of skipped packets for ethtool stats */
                         pr_err("Failed to get timestamp: timestamp is only partially updated\n");
@@ -356,20 +378,24 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
 			}
 			pr_err("===========================================================\n");
                         priv->tstamp_retry[tstamp_id] = 0;
-                        clear_bit_unlock(tstamp_id, &priv->state);
+                        clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->states[tstamp_id]);
                         return;
                 }
+			usleep_range(1000, 2000);
                 schedule_work(&priv->tx_work[tstamp_id]);
                 return;
         }
-        clear_bit_unlock(tstamp_id, &priv->state);
-        priv->tstamp_retry[tstamp_id] = 0;
+		priv->asdf[tstamp_id] = 5;
         shhwtstamps.hwtstamp = ns_to_ktime(alinx_sysclock_to_txtstamp(priv->pdev, tx_tstamp));
         priv->last_tx_tstamp[tstamp_id] = tx_tstamp;
+		priv->asdf[tstamp_id] = 6;
 
         priv->tx_work_skb[tstamp_id] = NULL;
         skb_tstamp_tx(skb, &shhwtstamps);
+		priv->asdf[tstamp_id] = 7;
         dev_kfree_skb_any(skb);
+        //priv->tstamp_retry[tstamp_id] = 0;
+	clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->states[tstamp_id]);
 }
 
 #define DEFINE_TX_WORK(n) \
