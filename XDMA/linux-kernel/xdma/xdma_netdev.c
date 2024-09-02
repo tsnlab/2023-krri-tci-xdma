@@ -210,6 +210,8 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                 }
                 if (i >= TX_TSTAMP_LOCK_RETRY) {
                         pr_err("Timestamp skipped, prev packet retried %u times\n", priv->tstamp_retry[tx_metadata->timestamp_id]);
+                        pr_err("tstamp_id: %u\n", tx_metadata->timestamp_id);
+			pr_err("skb_buff: %p\n", priv->tx_work_skb[tx_metadata->timestamp_id]);
                 }
                 // TODO: track the number of skipped packets for ethtool stats
         }
@@ -344,11 +346,13 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                 if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
                         /* TODO: track the number of skipped packets for ethtool stats */
                         pr_err("Failed to get timestamp: timestamp is only partially updated\n");
+                        pr_err("tstamp_id: %u\n", tstamp_id);
                         //diff = now - tx_tstamp;
                         pr_err("tstamp: %llx, now: %llx, diff: %llx(%llu)\n", tx_tstamp, now, diff, diff);
 			pr_err("Previous records:\n");
 			for (i = 0; i < priv->tstamp_retry[tstamp_id]; i++) {
-				pr_err("\ttstamp: %llx, now: %llx, diff: %llx(%llu)\n", tx_tstamp, now, diff, diff);
+				diff = nows[i] - tss[i];
+				pr_err("\ttstamp: %llx, now: %llx, diff: %llx(%llu)\n", tss[i], nows[i], diff, diff);
 			}
 			pr_err("===========================================================\n");
                         priv->tstamp_retry[tstamp_id] = 0;
