@@ -26,7 +26,7 @@
 
 #define CRC_LEN 4
 
-#define TX_TSTAMP_MAX_RETRY 100
+#define TX_TSTAMP_MAX_RETRY 5000
 
 enum xdma_state_t {
         XDMA_TX_IN_PROGRESS,

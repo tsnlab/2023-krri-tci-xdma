@@ -13,7 +13,7 @@
 
 #define LOWER_29_BITS ((1ULL << 29) - 1)
 #define TX_WORK_OVERFLOW_MARGIN 30
-#define TX_TSTAMP_LOCK_RETRY 100
+#define TX_TSTAMP_LOCK_RETRY 1000
 
 #define TX_TSTAMP_UPDATE_THRESHOLD 0xFFFFFF
 
@@ -345,8 +345,8 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                         pr_err("tstamp_id: %u\n", tstamp_id);
                         //diff = now - tx_tstamp;
                         pr_err("tstamp: %llx, now: %llx, diff: %llx(%llu)\n", tx_tstamp, now, diff, diff);
-			pr_err("Previous records:\n");
-			for (i = 0; i < priv->tstamp_retry[tstamp_id]; i++) {
+			pr_err("Previous records (first five records):\n");
+			for (i = 0; i < 5; i++) {
 				diff = nows[i] - tss[i];
 				pr_err("\ttstamp: %llx, now: %llx, diff: %llx(%llu)\n", tss[i], nows[i], diff, diff);
 			}
@@ -371,8 +371,8 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                         pr_err("tstamp_id: %u\n", tstamp_id);
                         //diff = now - tx_tstamp;
                         pr_err("tstamp: %llx, now: %llx, diff: %llx(%llu)\n", tx_tstamp, now, diff, diff);
-			pr_err("Previous records:\n");
-			for (i = 0; i < priv->tstamp_retry[tstamp_id]; i++) {
+			pr_err("Previous records (first five records):\n");
+			for (i = 0; i < 5; i++) {
 				diff = nows[i] - tss[i];
 				pr_err("\ttstamp: %llx, now: %llx, diff: %llx(%llu)\n", tss[i], nows[i], diff, diff);
 			}
