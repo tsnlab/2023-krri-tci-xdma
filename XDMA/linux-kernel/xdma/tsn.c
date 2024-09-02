@@ -123,6 +123,9 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 	metadata->from.tick = tsn_timestamp_to_sysclock(pdev, timestamps.from);
 	metadata->from.priority = queue_prio;
 	metadata->to.tick = tsn_timestamp_to_sysclock(pdev, timestamps.to);
+	if (metadata->from.tick == metadata->to.tick) {
+		metadata->to.tick--;
+	}
 	metadata->to.priority = queue_prio;
 	metadata->delay_from.tick = tsn_timestamp_to_sysclock(pdev, timestamps.delay_from);
 	metadata->delay_from.priority = queue_prio;

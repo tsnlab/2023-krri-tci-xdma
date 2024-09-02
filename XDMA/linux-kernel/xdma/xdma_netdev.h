@@ -26,7 +26,7 @@
 
 #define CRC_LEN 4
 
-#define TX_TSTAMP_MAX_RETRY 5000
+#define TX_TSTAMP_MAX_RETRY 10
 
 enum xdma_state_t {
         XDMA_TX_IN_PROGRESS,
@@ -75,6 +75,9 @@ struct xdma_private {
 
         unsigned long states[TSN_TIMESTAMP_ID_MAX];
 	unsigned long asdf[TSN_TIMESTAMP_ID_MAX];
+
+	sysclock_t from[TSN_TIMESTAMP_ID_MAX];
+	sysclock_t to[TSN_TIMESTAMP_ID_MAX];
 };
 
 #define _DEFAULT_FROM_MARGIN_ (500)
