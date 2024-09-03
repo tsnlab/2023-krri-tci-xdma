@@ -197,6 +197,10 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
                                 priv->tx_work_wait_until[tx_metadata->timestamp_id] += (1 << 29);
                         }
                         schedule_work(&priv->tx_work[tx_metadata->timestamp_id]);
+                } else if (priv->tstamp_config.tx_type != HWTSTAMP_TX_ON) {
+                        pr_warn("Timestamp skipped: timestamp config is off\n");
+                } else {
+                        pr_warn("Timestamp skipped: driver is waiting for previous packet's timestamp\n");
                 }
                 // TODO: track the number of skipped packets for ethtool stats
         }
@@ -309,6 +313,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                 priv->tstamp_retry[tstamp_id]++;
                 if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
                         /* TODO: track the number of skipped packets for ethtool stats */
+                        pr_err("Failed to get timestamp: timestamp is not getting updated\n");
                         priv->tstamp_retry[tstamp_id] = 0;
                         clear_bit_unlock(tstamp_id, &priv->state);
                         return;
@@ -320,6 +325,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                 priv->tstamp_retry[tstamp_id]++;
                 if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
                         /* TODO: track the number of skipped packets for ethtool stats */
+                        pr_err("Failed to get timestamp: timestamp is only partially updated\n");
                         priv->tstamp_retry[tstamp_id] = 0;
                         clear_bit_unlock(tstamp_id, &priv->state);
                         return;
