@@ -29,13 +29,13 @@
 #define TX_TSTAMP_MAX_RETRY 5
 
 /**
- * The delay between packet transmission and timestamp read
- * should not exceed 0xFFFF. (actually a delay greater than
- * 0x1000 has not been observed, but there's no need to be strict)
- * Errors less than 0xFFFF are not detectable from SW since
- * HW updates timestamp by two bytes at a time.
+ * This value is estimated by experiment.
+ * There might be a delay greater than this,
+ * or an error less than this.
+ * But that's not detectable by SW, until
+ * reading Tx timestamp becomes atomic.
  */
-#define TX_TSTAMP_UPDATE_THRESHOLD 0xFFFF
+#define TX_TSTAMP_UPDATE_THRESHOLD 0xFFFFF
 
 enum xdma_state_t {
         XDMA_TX1_IN_PROGRESS = 1,
