@@ -181,7 +181,7 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         if (skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP) {
                 //for (i = 0; i < TX_TSTAMP_LOCK_RETRY; i++) {
                         if (priv->tstamp_config.tx_type == HWTSTAMP_TX_ON &&
-                                !test_and_set_bit_lock(XDMA_TX_IN_PROGRESS, &priv->states[tx_metadata->timestamp_id])) {
+                                !test_and_set_bit_lock(tx_metadata->timestamp_id, &priv->state)) {
                                 skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
                                 priv->tx_work_skb[tx_metadata->timestamp_id] = skb_get(skb);
 				priv->tstamp_retry[tx_metadata->timestamp_id] = 0;
@@ -312,7 +312,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
 
         if (!priv->tx_work_skb[tstamp_id]) {
 		pr_err("skb NULL\n");
-                clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->states[tstamp_id]);
+                clear_bit_unlock(tstamp_id, &priv->state);
                 return;
         }
 
@@ -339,7 +339,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
 			timeout_cnt = timeout;
 			priv->tx_work_skb[tstamp_id] = NULL;
 			dev_kfree_skb_any(skb);
-			clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->states[tstamp_id]);
+			clear_bit_unlock(tstamp_id, &priv->state);
 			return;
 			
 		}
@@ -374,7 +374,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
 			}
 			pr_err("===========================================================\n");
                         priv->tstamp_retry[tstamp_id] = 0;
-                        clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->states[tstamp_id]);
+                        clear_bit_unlock(tstamp_id, &priv->state);
                         return;
                 }
 			usleep_range(10, 20);
@@ -400,7 +400,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
 			}
 			pr_err("===========================================================\n");
                         priv->tstamp_retry[tstamp_id] = 0;
-                        clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->states[tstamp_id]);
+                        clear_bit_unlock(tstamp_id, &priv->state);
                         return;
                 }
 			usleep_range(10, 20);
@@ -417,7 +417,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
 		priv->asdf[tstamp_id] = 7;
         dev_kfree_skb_any(skb);
         //priv->tstamp_retry[tstamp_id] = 0;
-	clear_bit_unlock(XDMA_TX_IN_PROGRESS, &priv->states[tstamp_id]);
+	clear_bit_unlock(tstamp_id, &priv->state);
 }
 
 #define DEFINE_TX_WORK(n) \

@@ -73,7 +73,7 @@ struct xdma_private {
         uint64_t last_to_overflow_popped;
         uint64_t last_to_overflow_timeout;
 
-        unsigned long states[TSN_TIMESTAMP_ID_MAX];
+        unsigned long state;
 	unsigned long asdf[TSN_TIMESTAMP_ID_MAX];
 
 	sysclock_t from[TSN_TIMESTAMP_ID_MAX];
