@@ -9,6 +9,8 @@
 
 #define NS_IN_1S 1000000000
 
+#define TSN_ALWAYS_OPEN(from) (from - 1) /* For both timestamp and sysclock */
+
 struct timestamps {
 	timestamp_t from;
 	timestamp_t to;
@@ -122,7 +124,11 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 
 	metadata->from.tick = tsn_timestamp_to_sysclock(pdev, timestamps.from);
 	metadata->from.priority = queue_prio;
-	metadata->to.tick = tsn_timestamp_to_sysclock(pdev, timestamps.to);
+	if (timestamps.to == TSN_ALWAYS_OPEN(timestamps.from)) {
+		metadata->to.tick = TSN_ALWAYS_OPEN(metadata->from.tick);
+	} else {
+		metadata->to.tick = tsn_timestamp_to_sysclock(pdev, timestamps.to);
+	}
 	metadata->to.priority = queue_prio;
 	metadata->delay_from.tick = tsn_timestamp_to_sysclock(pdev, timestamps.delay_from);
 	metadata->delay_from.priority = queue_prio;
@@ -311,10 +317,10 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 	if (qbv->enabled == false) {
 		// No Qbv. Just return the current time
 		timestamps->from = from;
-		timestamps->to = from - 1;
+		timestamps->to = TSN_ALWAYS_OPEN(timestamps->from);
 		// delay_* is pointless. Just set it to be right next to the frame
 		timestamps->delay_from = timestamps->from;
-		timestamps->delay_to = timestamps->delay_from - 1;
+		timestamps->delay_to = TSN_ALWAYS_OPEN(timestamps->delay_from);
 		return true;
 	}
 
@@ -336,10 +342,10 @@ static bool get_timestamps(struct timestamps* timestamps, const struct tsn_confi
 			return false;
 		}
 		timestamps->from = from;
-		timestamps->to = from - 1;
+		timestamps->to = TSN_ALWAYS_OPEN(timestamps->from);
 		if (consider_delay) {
 			timestamps->delay_from = timestamps->from;
-			timestamps->delay_to = timestamps->delay_from - 1;
+			timestamps->delay_to = TSN_ALWAYS_OPEN(timestamps->delay_from);
 		}
 		return true;
 	}
