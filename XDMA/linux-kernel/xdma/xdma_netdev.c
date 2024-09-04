@@ -307,7 +307,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                  * Waiting for it to be updated forever is not desirable,
                  * so limit the number of retries
                  */
-                if (++priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
+                if (++(priv->tstamp_retry[tstamp_id]) >= TX_TSTAMP_MAX_RETRY) {
                         /* TODO: track the number of skipped packets for ethtool stats */
                         pr_warn("Failed to get timestamp: timestamp is not getting updated, " \
                                 "the packet might have been dropped\n");
@@ -316,7 +316,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                 goto retry;
         } else if (now - tx_tstamp > TX_TSTAMP_UPDATE_THRESHOLD) {
                 /* Tx timestamp is only partially updated */
-                if (++priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
+                if (++(priv->tstamp_retry[tstamp_id]) >= TX_TSTAMP_MAX_RETRY) {
                         /* TODO: track the number of skipped packets for ethtool stats */
                         pr_err("Failed to get timestamp: timestamp is only partially updated\n");
 			pr_err("%llx %llx %llu\n", now, tx_tstamp, now - tx_tstamp);
