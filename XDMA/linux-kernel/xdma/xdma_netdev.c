@@ -368,6 +368,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                 if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
                         /* TODO: track the number of skipped packets for ethtool stats */
                         pr_err("Failed to get timestamp: timestamp is not updated\n");
+			/*
                         pr_err("tstamp_id: %u\n", tstamp_id);
                         //diff = now - tx_tstamp;
                         pr_err("tstamp: %llx, now: %llx, diff: %llx(%llu)\n", tx_tstamp, now, diff, diff);
@@ -378,6 +379,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
 				pr_err("\ttstamp: %llx, now: %llx, diff: %llx(%llu)\n", tss[i], nows[i], diff, diff);
 			}
 			pr_err("===========================================================\n");
+			*/
                         priv->tstamp_retry[tstamp_id] = 0;
                         clear_bit_unlock(tstamp_id, &priv->state);
                         return;
@@ -400,6 +402,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                 if (priv->tstamp_retry[tstamp_id] >= TX_TSTAMP_MAX_RETRY) {
                         /* TODO: track the number of skipped packets for ethtool stats */
                         pr_err("Failed to get timestamp: timestamp is only partially updated\n");
+			/*
                         pr_err("tstamp_id: %u\n", tstamp_id);
                         //diff = now - tx_tstamp;
                         pr_err("tstamp: %llx, now: %llx, diff: %llx(%llu)\n", tx_tstamp, now, diff, diff);
@@ -409,6 +412,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
 				pr_err("\ttstamp: %llx, now: %llx, diff: %llx(%llu)\n", tss[i], nows[i], diff, diff);
 			}
 			pr_err("===========================================================\n");
+			*/
                         priv->tstamp_retry[tstamp_id] = 0;
                         clear_bit_unlock(tstamp_id, &priv->state);
                         return;
