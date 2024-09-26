@@ -326,6 +326,7 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
          * 2. The work thread might try to read TX timestamp before the register gets updated
          */
         tx_tstamp = alinx_read_tx_timestamp(priv->pdev, tstamp_id);
+	pr_info("tstamp: 0x%016llx sysclock: 0x%016llx diff: 0x%llx (%lld)\n", tx_tstamp, now, now - tx_tstamp, now - tx_tstamp);
         if (tx_tstamp == priv->last_tx_tstamp[tstamp_id] && priv->tstamp_retry[tstamp_id] < TX_TSTAMP_MAX_RETRY) {
 		u32 timeout = alinx_get_normal_timeout_packets(priv->pdev);
 		if (timeout != timeout_cnt) {
