@@ -112,7 +112,6 @@ netdev_tx_t xdma_netdev_start_xmit(struct sk_buff *skb,
         struct tx_buffer* tx_buffer;
         struct tx_metadata* tx_metadata;
         u32 to_value;
-        u8 i;
 
         /* Check desc count */
         netif_stop_queue(ndev);
@@ -351,6 +350,11 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                         return;
                 }
 		priv->asdf[tstamp_id] = 3;
+		pr_err("Timestamp is not updated\n");
+		pr_info("Current Timestamp: 0x%016llx (%llu)\n", tx_tstamp, tx_tstamp);
+		pr_info("Last Timestamp:    0x%016llx (%llu)\n", priv->last_tx_tstamp[tstamp_id], priv->last_tx_tstamp[tstamp_id]);
+		pr_info("Current Sysclock:  0x%016llx (%llu)\n", now, now);
+		pr_info("Difference:        0x%016llx (%lld)\n", now - tx_tstamp, now - tx_tstamp);
                 /*
                  * Tx timestamp is not updated. Try again.
                  * Waiting for it to be updated forever is not desirable,
@@ -382,6 +386,11 @@ static void do_tx_work(struct work_struct *work, u16 tstamp_id) {
                 return;
         } else if (now < tx_tstamp || (now - tx_tstamp) > TX_TSTAMP_UPDATE_THRESHOLD) {
                 /* Tx timestamp is not fully updated */
+		pr_err("Timestamp is partially updated\n");
+		pr_info("Current Timestamp: 0x%016llx (%llu)\n", tx_tstamp, tx_tstamp);
+		pr_info("Last Timestamp:    0x%016llx (%llu)\n", priv->last_tx_tstamp[tstamp_id], priv->last_tx_tstamp[tstamp_id]);
+		pr_info("Current Sysclock:  0x%016llx (%llu)\n", now, now);
+		pr_info("Difference:        0x%016llx (%lld)\n", now - tx_tstamp, now - tx_tstamp);
 		diff = now - tx_tstamp;
 		tss[priv->tstamp_retry[tstamp_id]] = tx_tstamp;
 		nows[priv->tstamp_retry[tstamp_id]] = now;
