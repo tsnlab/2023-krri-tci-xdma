@@ -197,7 +197,26 @@ int process_main_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
 int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 #endif
 
+/******************************************************************************
+ *                                                                            *
+ *                              Global variables                              *
+ *                                                                            *
+ ******************************************************************************/
 
+
+/******************************************************************************
+ *                                                                            *
+ *                            Function Prototypes                             *
+ *                                                                            *
+ ******************************************************************************/
+int process_main_tx_timestamp_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+int tx_timestamp_test_app(int data_size);
+
+/******************************************************************************
+ *                                                                            *
+ *                        Main Command Table (modified)                       *
+ *                                                                            *
+ ******************************************************************************/
 menu_command_t  mainCommand_tbl[] = {
     { "run",   EXECUTION_ATTR,   process_main_runCmd, \
         "   run -m <mode> -f <file name> -s <size>", \
@@ -211,6 +230,9 @@ menu_command_t  mainCommand_tbl[] = {
     {"set",    EXECUTION_ATTR, process_main_setCmd, \
         "   set register [gen, rx, tx, h2c, c2h, irq, con, h2cs, c2hs, com, msix] <addr(Hex)> <data(Hex)>\n", \
         "   set XDMA resource"},
+    {"test", EXECUTION_ATTR, process_main_tx_timestamp_testCmd, \
+        "   test -s <size>", \
+        "   This option was created for the reproduction of the Tx timestamp error issue. (Debugging Purpose)\n"},
 #ifdef ONE_QUEUE_TSN
     {"test",   EXECUTION_ATTR, process_main_testCmd, \
         "   test register -c <count>\n", \
@@ -223,6 +245,95 @@ menu_command_t  mainCommand_tbl[] = {
 #endif
     { 0,           EXECUTION_ATTR,   NULL, " ", " "}
 };
+
+/******************************************************************************
+ *                                                                            *
+ *                     Tx Timestamp Test Command Function                     *
+ *                                                                            *
+ ******************************************************************************/
+/*
+ *   This function is created for the reproduction of the Tx timestamp error issue.(Debugging Purpose)
+ *   by Ganghyeok Lim (2024.10.07)
+ */
+#define TEST_RUN_OPTION_STRING  "s:"
+
+int process_main_tx_timestamp_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
+{
+    int data_size = 1024;
+    int arg_flag;
+
+    while((arg_flag = getopt(argc, (char**)argv, TEST_RUN_OPTION_STRING)) != -1)
+    {
+        switch(arg_flag)
+        {
+            case 's' :
+                if(str2int(optarg, &data_size) != 0)
+                {
+                    printf("Invalid parameter given or out of range for '-s'.");
+                    return -1;
+                }
+                if ((data_size < 64) || (data_size > MAX_BUFFER_LENGTH))
+                {
+                    printf("Data size %d is out of range.", data_size);
+                    return -1;
+                }
+
+                break;
+        }
+    }
+
+    return tx_timestamp_test_app(data_size);
+}
+
+/******************************************************************************
+ *                                                                            *
+ *                  Tx Timestamp Test Application Function                    *
+ *                                                                            *
+ ******************************************************************************/
+#define MY_BUFFER_ALIGNMENT     512
+// #define MY_BUFFER_LENGTH        1024
+
+char*           my_buffer;
+
+int tx_timestamp_test_app(int data_size)
+{
+    uint64_t my_syscount, my_tx_timestamp;
+
+    // 1. Register signal handler
+    register_signal_handler();
+ 
+    // 2. Allocate buffer for Tx (1024Byte)
+    posix_memalign((void **)&my_buffer, MY_BUFFER_ALIGNMENT /*alignment */, data_size);
+
+    while(1)
+    {
+        // 3-1. Call "tx_timestamp_send_func"
+        transmit_data_func(data_size, my_buffer);
+
+        // 3-2. Get System count & Tx timestamp
+        usleep(10*1000); // 10msec sleep before read
+        my_syscount = get_sys_count();
+        my_tx_timestamp = get_tx_timestamp(0);
+
+        // 3-3. Print syscount, tx timestamp value
+        printf("syscount : %x, tx_timestamp : %x\n", my_syscount, my_tx_timestamp);
+
+        // 3-4. Wait for 1 second
+        sleep(1);
+    } 
+
+    free(my_buffer);
+
+    return 0;
+}
+
+
+
+/***************************************************************************** */
+
+
+
+
 
 #define MAIN_RUN_OPTION_STRING  "m:s:f:hv"
 int process_main_runCmd(int argc, const char *argv[],

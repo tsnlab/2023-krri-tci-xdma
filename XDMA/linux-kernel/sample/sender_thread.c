@@ -955,6 +955,114 @@ void* sender_thread(void* arg) {
     return NULL;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+/******************************************************************************
+ *                                                                            *
+ *                         Macro & Global variables                           *
+ *                                                                            *
+ ******************************************************************************/
+typedef struct my_tx_arg {
+    char devname[MAX_DEVICE_NAME];
+    int size;
+} my_tx_arg_t;
+
+
+my_tx_arg_t     my_tx_arg_data;
+stats_t         my_tx_stats;
+int             my_tx_xdma_fd;
+static const char* desMAC = "\xFF\xFF\xFF\xFF\xFF\xFF";
+
+/******************************************************************************
+ *                                                                            *
+ *                   Tx Timestamp Data Transmit Function                      *
+ *                                                                            *
+ ******************************************************************************/
+int transmit_data_func(int data_size, char* buf)
+{
+    char* my_buf = buf;
+    
+
+    // 1. Config Tx argument structure
+    memset(&my_tx_arg_data, 0, sizeof(my_tx_arg_t));
+    memcpy(my_tx_arg_data.devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
+    my_tx_arg_data.size = data_size;
+
+    // 2. Initialize Tx statistics
+    memset(&my_tx_stats, 0, sizeof(stats_t));
+
+    // 3. Open XDMA device
+    if(xdma_api_dev_open(my_tx_arg_data.devname, 0 /* eop_flush */, &my_tx_xdma_fd)) {
+        printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", my_tx_arg_data.devname);
+        printf("<<< %s\n", __func__);
+        return NULL;
+    }
+
+    // 4. Config buffer data for Tx
+    struct tsn_tx_buffer* my_tx_buffer = (struct tsn_tx_buffer*)my_buf;
+    struct tx_metadata* my_tx_metadata = &my_tx_buffer->metadata;
+    uint8_t* my_tx_frame = (uint8_t*)&my_tx_buffer->data;
+    struct ethernet_header* my_tx_eth = (struct ethernet_header*)my_tx_frame;
+
+    // 4-1. Config metadata
+    my_tx_metadata->timestamp_id = 0;
+    // my_tx_metadata->reserved = 0;
+
+    // 4-2. Config ethernet frame
+    memcpy(&(my_tx_eth->dmac), desMAC, 6);
+    memcpy(&(my_tx_eth->smac), myMAC, 6);
+
+    int my_tx_len = data_size;
+    my_tx_metadata->frame_length = my_tx_len;
+    my_tx_eth->type = ETH_TYPE_IPv4;
+
+    // 5. Transmit ethernet frame
+    uint64_t mem_len = sizeof(my_tx_buffer->metadata) + my_tx_buffer->metadata.frame_length;
+    uint64_t bytes_tr;
+    int status = 0;
+
+    status = xdma_api_write_from_buffer_with_fd(tx_devname, tx_fd, (char *)my_tx_buffer, mem_len, &bytes_tr);
+
+    my_tx_stats.txPackets++;
+    my_tx_stats.txBytes += bytes_tr;
+
+
+    close(my_tx_xdma_fd);
+
+    return status;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #ifdef ONE_QUEUE_TSN
 
 #define ONE_QUEUE_TSN_DEBUG 0

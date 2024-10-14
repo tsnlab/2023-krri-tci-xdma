@@ -111,4 +111,12 @@ void* stats_thread(void* arg);
 void* rx_thread(void* arg);
 void* tx_thread(void* arg);
 
+/******************************************************************************
+ *                                                                            *
+ *                            Function Prototypes                             *
+ *                                                                            *
+ ******************************************************************************/
+/* This function is for Reproduction of Tx Timestamp Error Issue (2024.10.8) */
+int transmit_data_func(int data_size, char* buf);
+
 #endif    // __XDMA_COMMON_H__
