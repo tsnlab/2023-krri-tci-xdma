@@ -22,6 +22,7 @@
 #include "platform_config.h"
 #include "xdma_common.h"
 #include "buffer_handler.h"
+#include "ethernet.h"
 
 int watchStop = 1;
 int rx_thread_run = 1;
@@ -230,8 +231,8 @@ menu_command_t  mainCommand_tbl[] = {
     {"set",    EXECUTION_ATTR, process_main_setCmd, \
         "   set register [gen, rx, tx, h2c, c2h, irq, con, h2cs, c2hs, com, msix] <addr(Hex)> <data(Hex)>\n", \
         "   set XDMA resource"},
-    {"test", EXECUTION_ATTR, process_main_tx_timestamp_testCmd, \
-        "   test -s <size>", \
+    {"ts_test", EXECUTION_ATTR, process_main_tx_timestamp_testCmd, \
+        "   ts_test -s <size>", \
         "   This option was created for the reproduction of the Tx timestamp error issue. (Debugging Purpose)\n"},
 #ifdef ONE_QUEUE_TSN
     {"test",   EXECUTION_ATTR, process_main_testCmd, \
@@ -293,7 +294,15 @@ int process_main_tx_timestamp_testCmd(int argc, const char *argv[], menu_command
 #define MY_BUFFER_ALIGNMENT     512
 // #define MY_BUFFER_LENGTH        1024
 
+typedef struct my_tx_arg {
+    char devname[MAX_DEVICE_NAME];
+    int size;
+} my_tx_arg_t;
+
 char*           my_buffer;
+my_tx_arg_t     my_tx_arg_data;
+stats_t         my_tx_stats;
+int             my_tx_xdma_fd;
 
 int tx_timestamp_test_app(int data_size)
 {
@@ -301,39 +310,112 @@ int tx_timestamp_test_app(int data_size)
 
     // 1. Register signal handler
     register_signal_handler();
+
+    // 2. Enable TEAMC & XDMA
+    set_register(REG_TSN_CONTROL, 1);
  
-    // 2. Allocate buffer for Tx (1024Byte)
-    posix_memalign((void **)&my_buffer, MY_BUFFER_ALIGNMENT /*alignment */, data_size);
+    // 3. Allocate buffer for Tx (1024Byte)
+    if(posix_memalign((void **)&my_buffer, MY_BUFFER_ALIGNMENT /*alignment : 512 Bytes*/, data_size))
+    {
+        printf("Buffer allocation : Failed\n");
+        return -1;
+    }
+    else
+    {
+        printf("Buffer allocation : Success\n");
+        printf("My buffer address : %p\n", my_buffer);
+    }
+
+    memset(my_buffer, 0, data_size);
+
+    // 4. Config Tx argument structure
+    memset(&my_tx_arg_data, 0, sizeof(my_tx_arg_t));
+    memcpy(my_tx_arg_data.devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
+    my_tx_arg_data.size = data_size;
+    printf("device name : %s, size : %d\n", my_tx_arg_data.devname, my_tx_arg_data.size);
+
+    // 5. Initialize Tx statistics
+    memset(&my_tx_stats, 0, sizeof(stats_t));
+
+    // 6. Config metadata
+    struct tsn_tx_buffer* my_tx_buffer = (struct tsn_tx_buffer*)my_buffer;
+    struct tx_metadata* my_tx_metadata = &my_tx_buffer->metadata;
+    uint8_t* my_tx_frame = (uint8_t*)&my_tx_buffer->data;
+    struct ethernet_header* my_tx_eth = (struct ethernet_header*)my_tx_frame;
+
+    // 6-1. From/To & Timestamp id & frame length
+    uint64_t now = get_sys_count();
+    my_tx_metadata->from.tick = (uint32_t)((now + 0) & 0x1FFFFFFF);
+    my_tx_metadata->to.tick = (uint32_t)((now + 0xFFFFF) & 0x1FFFFFFF);
+    my_tx_metadata->timestamp_id = 1;
+    my_tx_metadata->fail_policy = 0;
+    my_tx_metadata->frame_length = my_tx_arg_data.size;
+
+    // 6-2. Source MAC, Destination MAC
+    static const char* myMAC = "\x00\x11\x22\x95\x30\x23";
+    static const char* desMAC = "\xFF\xFF\xFF\xFF\xFF\xFF";
+
+    memcpy(&(my_tx_eth->dmac), desMAC, 6);
+    memcpy(&(my_tx_eth->smac), myMAC, 6);
+
+    // 6-3. Ethernet type
+    my_tx_eth->type = ETH_TYPE_IPv4;
+
+    // 7. Transmission
+    uint64_t mem_len = sizeof(my_tx_buffer->metadata) + my_tx_buffer->metadata.frame_length;
+    uint64_t bytes_tr;
+    int status = 0;
+    uint64_t tx_count = 1;
 
     while(1)
     {
-        // 3-1. Call "tx_timestamp_send_func"
-        transmit_data_func(data_size, my_buffer);
+        printf("========== %dth Transmission ==========\n", tx_count++);
 
-        // 3-2. Get System count & Tx timestamp
-        usleep(10*1000); // 10msec sleep before read
+        // 7-1. Open XDMA Device
+        if(xdma_api_dev_open(my_tx_arg_data.devname, 0 /* eop_flush */, &my_tx_xdma_fd)) {
+            printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", my_tx_arg_data.devname);
+            printf("<<< %s\n", __func__);
+            return NULL;
+        }
+        else
+        {
+            printf("Open XDMA : Success\n");
+        }
+
+        // 7-2. XDMA Write
+        status = xdma_api_write_from_buffer_with_fd(my_tx_arg_data.devname, my_tx_xdma_fd, (char *)my_tx_buffer, mem_len, &bytes_tr);
+        if(status == 0)
+        {
+            printf("XDMA Write : Success\n");
+        }
+        else
+        {
+            printf("XDMA Write : Failed\n");
+        }
+
+        // 7-3. Statistics increase
+        my_tx_stats.txPackets++;
+        my_tx_stats.txBytes += bytes_tr;
+
+        close(my_tx_xdma_fd);
+
+        // 7-4. Get System Count & Tx Timestamp
         my_syscount = get_sys_count();
-        my_tx_timestamp = get_tx_timestamp(0);
+        my_tx_timestamp = get_tx_timestamp(1);
+        printf("syscount : %lx, tx_timestamp : %lx\n\n", my_syscount, my_tx_timestamp);
 
-        // 3-3. Print syscount, tx timestamp value
-        printf("syscount : %x, tx_timestamp : %x\n", my_syscount, my_tx_timestamp);
+        // 7-5. Sleep for 250[ms]
+        usleep(250*1000);
+    }
 
-        // 3-4. Wait for 1 second
-        sleep(1);
-    } 
+    set_register(REG_TSN_CONTROL, 0);
 
     free(my_buffer);
 
     return 0;
 }
 
-
-
 /***************************************************************************** */
-
-
-
-
 
 #define MAIN_RUN_OPTION_STRING  "m:s:f:hv"
 int process_main_runCmd(int argc, const char *argv[],
