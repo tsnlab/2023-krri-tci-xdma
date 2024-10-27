@@ -118,6 +118,20 @@ typedef uintptr_t UINTPTR;
 #define REG_TEMAC_STATUS                            0x0500
 #define REG_TEMAC_RX_STAT                           0x0510
 #define REG_TEMAC_TX_STAT                           0x0514
+
+// #define REG_UP_COUNTER_LOW                          0x1000
+// #define REG_UP_COUNTER_HIGH                         0x1004
+// #define REG_DOWN_COUNTER_LOW                        0x1008
+// #define REG_DOWN_COUNTER_HIGH                       0x100C
+#define REG_UP_COUNTER_HIGH                         0x1000
+#define REG_UP_COUNTER_LOW                          0x1004
+#define REG_DN_COUNTER_HIGH                         0x1008
+#define REG_DN_COUNTER_LOW                          0x100C
+#define REG_TIME_HOUR                               0x1010
+#define REG_TIME_MINUTE                             0x1014
+#define REG_TIME_SECOND                             0x1018                                                                            
+
+
 #ifdef ONE_QUEUE_TSN
 #define REG_TEMAC_FCS_COUNT                         0x0520
 #endif
@@ -217,6 +231,7 @@ void dump_registers(int dumpflag, int on);
 
 uint64_t get_sys_count();
 uint64_t get_tx_timestamp(int timestamp_id);
+uint64_t get_my_count();
 
 uint32_t get_register(int offset);
 int set_register(int offset, uint32_t val);

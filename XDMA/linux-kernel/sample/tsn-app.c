@@ -16,6 +16,7 @@
 #include <error_define.h>
 
 #include <arpa/inet.h>
+#include <time.h>
 
 #include "../libxdma/api_xdma.h"
 #include "../libxdma/ioctl_xdma.h"
@@ -200,13 +201,6 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
 
 /******************************************************************************
  *                                                                            *
- *                              Global variables                              *
- *                                                                            *
- ******************************************************************************/
-
-
-/******************************************************************************
- *                                                                            *
  *                            Function Prototypes                             *
  *                                                                            *
  ******************************************************************************/
@@ -291,129 +285,330 @@ int process_main_tx_timestamp_testCmd(int argc, const char *argv[], menu_command
  *                  Tx Timestamp Test Application Function                    *
  *                                                                            *
  ******************************************************************************/
-#define MY_BUFFER_ALIGNMENT     512
-// #define MY_BUFFER_LENGTH        1024
+/* User configurable Macro definition */
+#define MY_BUFFER_ALIGNMENT         (512)
+#define TEST_INTERVAL_MS            (INTERVAL_100MS)
 
+/* Macro definition */
+#define INTERVAL_1000MS             (1000UL)
+#define INTERVAL_100MS              (100UL)
+#define INTERVAL_10MS               (10UL)
+#define TICK_1000MSEC               (125000000UL)
+#define TICK_100MSEC                (12500000UL)
+#define TICK_10MSEC                 (1250000UL)
+#define NUM_ERROR_LOG               (1000UL)
+
+/* Structure for Tx argument */
 typedef struct my_tx_arg {
     char devname[MAX_DEVICE_NAME];
     int size;
 } my_tx_arg_t;
 
-char*           my_buffer;
-my_tx_arg_t     my_tx_arg_data;
-stats_t         my_tx_stats;
-int             my_tx_xdma_fd;
+/* Structure for Error log  */
+typedef struct error_log {
+    uint64_t log_err_index;
+    uint64_t log_tx_index;
+    uint64_t log_prv_syscount;
+    uint64_t log_prv_tx_timestamp;
+    uint64_t log_syscount;
+    uint64_t log_tx_timestamp;
+    uint64_t log_diff_syscount;
+    uint64_t log_diff_tx_timestamp;
+} error_log_t;
+
+/* Global variables for Tx  */
+char*           my_buffer;              // Buffer used for Packet transmission
+int             my_tx_xdma_fd;          // File descriptor for XDMA
+my_tx_arg_t     my_tx_arg_data;         // Tx argument structure (XDMA Device name, size of data to Tx)
+stats_t         my_tx_stats;            // Tx Statistics structure
+uint64_t        tx_length;              // Data size to Tx (Metadata + Ethernet Frame)
+uint64_t        tx_index = 1;           // Index of Transmission
+uint64_t        bytes_tr;               // Transmitted Byte for each XDMA write
+int             xdma_write_status;      // Status of XDMA write api
+
+/* Global variables for Syscount & Tx Timestamp  */
+uint64_t        my_syscount, my_syscount_prv;                       // Syscount of current & previous
+uint64_t        my_tx_timestamp, my_tx_timestamp_prv;               // Tx Timestamp of current & previous
+uint64_t        diff_syscount, diff_tx_timestamp;                   // Difference of Syscount & Tx Timestamp
+uint64_t        time_interval_ms = TEST_INTERVAL_MS;                // Transmission time interval (unit : ms)
+uint64_t        ideal_diff;                                         // Ideal difference value for selected Time interval
+uint64_t        ten_percent_of_ideal_diff;                          // 10% value of Ideal difference value
+uint64_t        tx_timestamp_diff_allowed_min, tx_timestamp_diff_allowed_max; // Allowed min/max value of Tx Timestamp Difference
+
+/* Global variables for Error Information */
+uint64_t        error_count = 0;                        // The number of count that Error occurs
+error_log_t     my_error_log[NUM_ERROR_LOG];                     // Error info structure for each Error.
+FILE*           error_log_fd;                           // File descriptor for error log text file
+
+// Raspberry pi 5 System time
+time_t          my_time;
+struct tm       tm_now;
+struct tm       tm_prv;
 
 int tx_timestamp_test_app(int data_size)
 {
-    uint64_t my_syscount, my_tx_timestamp;
-
-    // 1. Register signal handler
-    register_signal_handler();
-
-    // 2. Enable TEAMC & XDMA
-    set_register(REG_TSN_CONTROL, 1);
- 
-    // 3. Allocate buffer for Tx (1024Byte)
-    if(posix_memalign((void **)&my_buffer, MY_BUFFER_ALIGNMENT /*alignment : 512 Bytes*/, data_size))
-    {
-        printf("Buffer allocation : Failed\n");
-        return -1;
-    }
-    else
-    {
-        printf("Buffer allocation : Success\n");
-        printf("My buffer address : %p\n", my_buffer);
-    }
-
-    memset(my_buffer, 0, data_size);
-
-    // 4. Config Tx argument structure
-    memset(&my_tx_arg_data, 0, sizeof(my_tx_arg_t));
-    memcpy(my_tx_arg_data.devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
-    my_tx_arg_data.size = data_size;
-    printf("device name : %s, size : %d\n", my_tx_arg_data.devname, my_tx_arg_data.size);
-
-    // 5. Initialize Tx statistics
-    memset(&my_tx_stats, 0, sizeof(stats_t));
-
-    // 6. Config metadata
-    struct tsn_tx_buffer* my_tx_buffer = (struct tsn_tx_buffer*)my_buffer;
-    struct tx_metadata* my_tx_metadata = &my_tx_buffer->metadata;
-    uint8_t* my_tx_frame = (uint8_t*)&my_tx_buffer->data;
-    struct ethernet_header* my_tx_eth = (struct ethernet_header*)my_tx_frame;
-
-    // 6-1. From/To & Timestamp id & frame length
-    uint64_t now = get_sys_count();
-    my_tx_metadata->from.tick = (uint32_t)((now + 0) & 0x1FFFFFFF);
-    my_tx_metadata->to.tick = (uint32_t)((now + 0xFFFFF) & 0x1FFFFFFF);
-    my_tx_metadata->timestamp_id = 1;
-    my_tx_metadata->fail_policy = 0;
-    my_tx_metadata->frame_length = my_tx_arg_data.size;
-
-    // 6-2. Source MAC, Destination MAC
-    static const char* myMAC = "\x00\x11\x22\x95\x30\x23";
-    static const char* desMAC = "\xFF\xFF\xFF\xFF\xFF\xFF";
-
-    memcpy(&(my_tx_eth->dmac), desMAC, 6);
-    memcpy(&(my_tx_eth->smac), myMAC, 6);
-
-    // 6-3. Ethernet type
-    my_tx_eth->type = ETH_TYPE_IPv4;
-
-    // 7. Transmission
-    uint64_t mem_len = sizeof(my_tx_buffer->metadata) + my_tx_buffer->metadata.frame_length;
-    uint64_t bytes_tr;
-    int status = 0;
-    uint64_t tx_count = 1;
-
+    uint32_t    my_32bit;
+    
     while(1)
     {
-        printf("========== %dth Transmission ==========\n", tx_count++);
+        my_32bit = get_register(REG_UP_COUNTER_LOW);
+        printf("REG_UP_COUNTER_LOW : %ld\n", my_32bit);
 
-        // 7-1. Open XDMA Device
-        if(xdma_api_dev_open(my_tx_arg_data.devname, 0 /* eop_flush */, &my_tx_xdma_fd)) {
-            printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", my_tx_arg_data.devname);
-            printf("<<< %s\n", __func__);
-            return NULL;
-        }
-        else
-        {
-            printf("Open XDMA : Success\n");
-        }
+        my_32bit = get_register(REG_UP_COUNTER_HIGH);
+        printf("REG_UP_COUNTER_HIGH : %ld\n", my_32bit);
 
-        // 7-2. XDMA Write
-        status = xdma_api_write_from_buffer_with_fd(my_tx_arg_data.devname, my_tx_xdma_fd, (char *)my_tx_buffer, mem_len, &bytes_tr);
-        if(status == 0)
-        {
-            printf("XDMA Write : Success\n");
-        }
-        else
-        {
-            printf("XDMA Write : Failed\n");
-        }
+        my_32bit = get_register(REG_DN_COUNTER_LOW);
+        printf("REG_DOWN_COUNTER_LOW : %ld\n", my_32bit);
 
-        // 7-3. Statistics increase
-        my_tx_stats.txPackets++;
-        my_tx_stats.txBytes += bytes_tr;
+        my_32bit = get_register(REG_DN_COUNTER_HIGH);
+        printf("REG_DOWN_COUNTER_HIGH : %ld\n", my_32bit);
 
-        close(my_tx_xdma_fd);
+        my_32bit = get_register(REG_TIME_HOUR);
+        printf("REG_TIME_HOUR : %ld\n", my_32bit);
 
-        // 7-4. Get System Count & Tx Timestamp
-        my_syscount = get_sys_count();
-        my_tx_timestamp = get_tx_timestamp(1);
-        printf("syscount : %lx, tx_timestamp : %lx\n\n", my_syscount, my_tx_timestamp);
+        my_32bit = get_register(REG_TIME_MINUTE);
+        printf("REG_TIME_MINUTE : %ld\n", my_32bit);
 
-        // 7-5. Sleep for 250[ms]
-        usleep(250*1000);
+        my_32bit = get_register(REG_TIME_SECOND);
+        printf("REG_TIME_SECOND : %ld\n", my_32bit);
+
+
+        usleep(100*1000);
     }
-
-    set_register(REG_TSN_CONTROL, 0);
-
-    free(my_buffer);
 
     return 0;
 }
+
+
+
+// int tx_timestamp_test_app(int data_size)
+// {
+//     // 1. Initialize structures
+//     memset(&my_tx_arg_data, 0, sizeof(my_tx_arg_t));
+//     memset(&my_tx_stats,    0, sizeof(stats_t));
+//     memset(&my_error_log,   0, sizeof(error_log_t));
+//     memset(&tm_now, 0, sizeof(tm_now));
+//     memset(&tm_prv, 0, sizeof(tm_prv));
+
+//     // 2. Register signal handler
+//     register_signal_handler();
+
+//     // 3. Enable TEMAC & XDMA
+//     set_register(REG_TSN_CONTROL, 1);
+
+//     // 4. Open Text file for data logging
+//     error_log_fd = fopen("Tx Timestamp Error Log.txt", "w");
+//     if(error_log_fd == NULL)
+//     {
+//         printf("Cannot Open error log file!\n");
+
+//         return -1;
+//     }
+
+//     fprintf(error_log_fd, "==================== Tx Timestamp Error Log ====================\n");
+//     fprintf(error_log_fd, "Packet transmission interval : %ld[ms]\n", time_interval_ms);
+//     my_time = time(NULL);
+//     tm_now = *localtime(&my_time);
+//     fprintf(error_log_fd, "Test start time : %d-%d-%d %d:%d:%d\n", tm_now.tm_year+1900, tm_now.tm_mon+1, tm_now.tm_mday, tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec);
+    
+//     // 5. Allocate buffer for Tx (data_size * 2 [Byte])
+//     if(posix_memalign((void **)&my_buffer, MY_BUFFER_ALIGNMENT /*alignment : 64 Bytes*/, (data_size*2)))
+//     {
+//         printf("Buffer allocation : Failed\n");
+//         return -1;
+//     }
+//     else
+//     {
+//         printf("Buffer allocation : Success\n");
+//         printf("My buffer address : %p\n", my_buffer);
+//         printf("Buffer Mem align : %d\n", MY_BUFFER_ALIGNMENT);
+//         fprintf(error_log_fd, "Buffer allocation : Success\n");
+//         fprintf(error_log_fd, "My buffer address : %p\n", my_buffer);
+//         fprintf(error_log_fd, "Buffer Mem align : %d\n", MY_BUFFER_ALIGNMENT);
+//         memset(my_buffer, 0, data_size);
+//     }
+    
+//     // 6. Config XDMA Device name & Data size from user
+//     memcpy(my_tx_arg_data.devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
+//     my_tx_arg_data.size = data_size;
+//     printf("XDMA Device name : %s, Data Size : %d\n", my_tx_arg_data.devname, my_tx_arg_data.size);
+//     printf(error_log_fd, "XDMA Device name : %s, Data Size : %d\n", my_tx_arg_data.devname, my_tx_arg_data.size);
+
+//     // 7. Specify start address of each part (metadata, frame, ethernet header)
+//     struct tsn_tx_buffer* my_tx_buffer  = (struct tsn_tx_buffer*)my_buffer;
+//     struct tx_metadata* my_tx_metadata  = &my_tx_buffer->metadata;
+//     uint8_t* my_tx_frame                = (uint8_t*)&my_tx_buffer->data;
+//     struct ethernet_header* my_tx_eth   = (struct ethernet_header*)my_tx_frame;
+
+//     // 8. Config Timestamp id & Ethernet frame length
+//     my_tx_metadata->timestamp_id    = 1;
+//     my_tx_metadata->fail_policy     = 0;
+//     my_tx_metadata->frame_length    = my_tx_arg_data.size;
+//     my_tx_metadata->from.tick       = (uint32_t)(0);            // from : 0, to : 0x1FFFFFFF => Packet transmission is always possible
+//     my_tx_metadata->to.tick         = (uint32_t)(0x1FFFFFFF);
+
+//     // 9. Config Source/Destination MAC
+//     static const char* myMAC    = "\x00\x11\x22\x95\x30\x23";   // My MAC address
+//     static const char* desMAC   = "\xFF\xFF\xFF\xFF\xFF\xFF";   // Broadcast MAC address
+//     memcpy(&(my_tx_eth->dmac), desMAC, 6);
+//     memcpy(&(my_tx_eth->smac), myMAC, 6);
+
+//     // 10. Config Data length to Tx
+//     tx_length = sizeof(my_tx_buffer->metadata) + my_tx_buffer->metadata.frame_length;
+
+//     // 11. Determine Ideal difference value & 10% of ideal difference value for given Time interval
+//     if(time_interval_ms      == INTERVAL_1000MS) ideal_diff = TICK_1000MSEC;   // When sleep time is 1000[ms]
+//     else if(time_interval_ms == INTERVAL_100MS)  ideal_diff = TICK_100MSEC;    // When sleep time is 100[ms]
+//     else if(time_interval_ms == INTERVAL_10MS)   ideal_diff = TICK_10MSEC;     // When sleep time is 10[ms]
+//     ten_percent_of_ideal_diff = ideal_diff / 10;
+//     tx_timestamp_diff_allowed_min  = ideal_diff - ten_percent_of_ideal_diff;
+//     tx_timestamp_diff_allowed_max  = ideal_diff + ten_percent_of_ideal_diff;
+
+//     // 12. Open XDMA Device
+//     if(xdma_api_dev_open(my_tx_arg_data.devname, 0 /* eop_flush */, &my_tx_xdma_fd)) {
+//         printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", my_tx_arg_data.devname);
+//         printf("<<< %s\n", __func__);
+//         fprintf(error_log_fd, "Open XDMA : Failed\n\n");
+//         return NULL;
+//     }
+//     else
+//     {
+//         printf("Open XDMA : Success\n\n");
+//         fprintf(error_log_fd, "Open XDMA : Success\n\n");
+//     }
+
+
+//     while(1)
+//     {
+//         // 13-1. Show Transmission Index
+//         printf("============================= %ldth Transmission =============================\n", tx_index);
+//         printf("Transmission interval : %ld[ms]\n", time_interval_ms);
+
+//         // 13-2. Do XDMA Write
+//         xdma_write_status = xdma_api_write_from_buffer_with_fd(my_tx_arg_data.devname, my_tx_xdma_fd, (char *)my_tx_buffer, tx_length, &bytes_tr);
+//         if(xdma_write_status == 0)
+//         {
+//             // printf("XDMA Write : Success\n");
+//         }
+//         else
+//         {
+//             printf("XDMA Write : Failed\n");
+//         }
+
+//         // 13-3. Get System Count & Tx Timestamp
+//         my_syscount = get_sys_count();
+//         my_tx_timestamp = get_tx_timestamp(1);
+
+//         // 13-4. Increase Statistics (Tx packets, Bytes)
+//         my_tx_stats.txPackets++;
+//         my_tx_stats.txBytes += bytes_tr;
+//         printf("Transmitted packet  : %lld, byte : %lld\n", my_tx_stats.txPackets, my_tx_stats.txBytes);
+
+//         my_time = time(NULL);
+//         tm_now = *localtime(&my_time);
+//         printf("Current Time        :   %d-%d-%d %d:%d:%d\n", tm_now.tm_year+1900, tm_now.tm_mon+1, tm_now.tm_mday, tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec);
+//         printf("Prev Time           :   %d-%d-%d %d:%d:%d\n\n", tm_prv.tm_year+1900, tm_prv.tm_mon+1, tm_prv.tm_mday, tm_prv.tm_hour, tm_prv.tm_min, tm_prv.tm_sec);
+
+//         // 13-5. Calculate diff of System count & Tx Timestamp
+//         if(tx_index > 1)
+//         {
+//             diff_syscount = my_syscount - my_syscount_prv;
+//             diff_tx_timestamp = my_tx_timestamp - my_tx_timestamp_prv;  
+//         } 
+
+//         // 13-6. Print System Count & Tx Timestamp & Diff value
+//         printf("syscount      (hex) : %12lx               |  tx_timestamp      (hex) : %12lx\n", my_syscount, my_tx_timestamp);
+//         printf("syscount_prv  (hex) : %12lx               |  tx_timestamp_prv  (hex) : %12lx\n\n", my_syscount_prv, my_tx_timestamp_prv);
+//         printf("syscount diff (dec) : %12ld (%.4lf[s])   |  tx_timestamp_diff (dec) : %12ld (%.4lf[s])\n", diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC);
+//         printf("syscount diff (hex) : %12lx (%.4lf[s])   |  tx_timestamp_diff (hex) : %12lx (%.4lf[s])\n\n", diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC);
+//         printf("10%% of ideal diff   : %ld => Allowed Tx Timestamp Diff Range : %ld ~ %ld \n\n", ten_percent_of_ideal_diff, tx_timestamp_diff_allowed_min, tx_timestamp_diff_allowed_max);
+
+//         // 13-7. If Error occurs, Print & Save all Error log
+//         if((diff_tx_timestamp < tx_timestamp_diff_allowed_min) || (diff_tx_timestamp > tx_timestamp_diff_allowed_max))
+//         {
+//             if(tx_index > 1)
+//             {
+//                 printf("Error Occured! \n");
+
+//                 if(error_count < NUM_ERROR_LOG)
+//                 {
+//                     my_error_log[error_count].log_err_index = error_count;
+//                     my_error_log[error_count].log_tx_index = tx_index;
+//                     my_error_log[error_count].log_prv_syscount = my_syscount_prv;
+//                     my_error_log[error_count].log_prv_tx_timestamp = my_tx_timestamp_prv;
+//                     my_error_log[error_count].log_syscount = my_syscount;
+//                     my_error_log[error_count].log_tx_timestamp = my_tx_timestamp;
+//                     my_error_log[error_count].log_diff_syscount = diff_syscount;
+//                     my_error_log[error_count].log_diff_tx_timestamp = diff_tx_timestamp;
+//                 }
+//                 else
+//                 {
+//                     printf("Error log structure is Fulled!\n");
+//                 }
+
+//                 fprintf(error_log_fd, \
+//                 "\n============================= %ldth Error =============================\
+//                 \nCurrent Transmission Time    : %d-%d-%d %d:%d:%d\
+//                 \nPrev Transmission Time       : %d-%d-%d %d:%d:%d\
+//                 \nTransmission Index           : %ld\
+//                 \nTransmitted packet           : %lld\
+//                 \n\nsyscount              (hex)  : %12lx                |  tx_timestamp      (hex) : %12lx\
+//                 \nsyscount_prv          (hex)  : %12lx                |  tx_timestamp_prv  (hex) : %12lx\
+//                 \n\nsyscount_diff         (dec)  : %12ld (%.4lf[s])    |  tx_timestamp_diff (dec) : %12ld (%.4lf[s])\
+//                 \nsyscount_diff         (hex)  : %12lx (%.4lf[s])    |  tx_timestamp_diff (hex) : %12lx (%.4lf[s])\
+//                 \n", (error_count+1),\
+//                 tm_now.tm_year+1900, tm_now.tm_mon+1, tm_now.tm_mday, tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec,\
+//                 tm_prv.tm_year+1900, tm_prv.tm_mon+1, tm_prv.tm_mday, tm_prv.tm_hour, tm_prv.tm_min, tm_prv.tm_sec,\
+//                 tx_index, my_tx_stats.txPackets,\
+//                 my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv,\
+//                 diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
+//                 diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC);
+
+//                 fprintf(error_log_fd, "\n10%% of ideal diff   : %ld => Allowed Tx Timestamp Diff Range : %ld ~ %ld \n", ten_percent_of_ideal_diff, tx_timestamp_diff_allowed_min, tx_timestamp_diff_allowed_max);
+                
+//                 // fprintf(error_log_fd, \
+//                 // "\n============== %ldth Error =====================================\
+//                 // \nTx Index                    : %ld\
+//                 // \nError Index                 : %ld\
+//                 // \nSyscount Current      (hex) : %lx\
+//                 // \nSyscount Previous     (hex) : %lx\
+//                 // \nTx Timestamp Current  (hex) : %lx\
+//                 // \nTx Timestamp Previous (hex) : %lx\
+//                 // \nDiff Syscount         (dec) : %ld    (%.4lf[s])\
+//                 // \nDiff Tx Timestamp     (dec) : %ld    (%.4lf[s])\n\
+//                 // ", (error_count+1), tx_index, (error_count+1), my_syscount, my_syscount_prv, my_tx_timestamp, my_tx_timestamp_prv, diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC);
+
+//                 error_count++;
+//             }
+//         }
+
+//         printf("=> total error count : %ld\n\n", error_count);
+
+//         // 13-8. Initialize variable for next transmission
+//         my_syscount_prv = my_syscount;
+//         my_tx_timestamp_prv = my_tx_timestamp;
+//         bytes_tr = 0;
+//         memcpy(&tm_prv, &tm_now, sizeof(tm_prv));
+//         tx_index++;
+
+//         // 13-9. Sleep
+//         usleep(time_interval_ms*1000);
+//     }
+
+//     // 14. Close XDMA device
+//     close(my_tx_xdma_fd);
+
+//     // 15. Disable TEMAC & XDMA
+//     set_register(REG_TSN_CONTROL, 0);
+
+//     // 16. Free buffer
+//     free(my_buffer);
+
+//     // 17. Close Text file for logging data
+//     fclose(error_log_fd);
+
+//     return 0;
+// }
 
 /***************************************************************************** */
 
@@ -842,6 +1037,12 @@ sysclock_t get_tx_timestamp(int timestamp_id) {
     default:
         return 0;
     }
+}
+
+sysclock_t get_my_count() {
+
+    // return get_register(REG_UP_COUNTER_LOW);
+    return ((uint64_t)get_register(REG_DN_COUNTER_HIGH) << 32) | get_register(REG_DN_COUNTER_LOW);
 }
 
 int32_t fn_show_register_genArgument(int32_t argc, const char *argv[]) {
