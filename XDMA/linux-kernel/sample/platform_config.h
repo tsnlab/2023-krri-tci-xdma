@@ -119,17 +119,22 @@ typedef uintptr_t UINTPTR;
 #define REG_TEMAC_RX_STAT                           0x0510
 #define REG_TEMAC_TX_STAT                           0x0514
 
-// #define REG_UP_COUNTER_LOW                          0x1000
-// #define REG_UP_COUNTER_HIGH                         0x1004
-// #define REG_DOWN_COUNTER_LOW                        0x1008
-// #define REG_DOWN_COUNTER_HIGH                       0x100C
-#define REG_UP_COUNTER_HIGH                         0x1000
-#define REG_UP_COUNTER_LOW                          0x1004
-#define REG_DN_COUNTER_HIGH                         0x1008
-#define REG_DN_COUNTER_LOW                          0x100C
-#define REG_TIME_HOUR                               0x1010
-#define REG_TIME_MINUTE                             0x1014
-#define REG_TIME_SECOND                             0x1018                                                                            
+#define REG_UP_COUNTER_HIGH                         (0x1000)              // slv_reg0
+#define REG_UP_COUNTER_LOW                          (0x1000 + 4*1)        // slv_reg1
+#define REG_DN_COUNTER_HIGH                         (0x1000 + 4*2)        // slv_reg2
+#define REG_DN_COUNTER_LOW                          (0x1000 + 4*3)        // slv_reg3
+#define REG_TIME_HOUR                               (0x1000 + 4*4)        // slv_reg4
+#define REG_TIME_MINUTE                             (0x1000 + 4*5)        // slv_reg5
+#define REG_TIME_SECOND                             (0x1000 + 4*6)        // slv_reg6
+#define REG_TIME_TICK                               (0x1000 + 4*7)        // slv_reg7
+#define REG_SCRATCH1                                (0x1000 + 4*8)        // slv_reg8
+#define REG_SCRATCH2                                (0x1000 + 4*9)        // slv_reg9
+#define REG_SCRATCH3                                (0x1000 + 4*10)       // slv_reg10     
+#define REG_SCRATCH4                                (0x1000 + 4*11)       // slv_reg11     
+#define REG_SCRATCH5                                (0x1000 + 4*12)       // slv_reg12     
+#define REG_SCRATCH6                                (0x1000 + 4*13)       // slv_reg13     
+#define REG_SCRATCH7                                (0x1000 + 4*14)       // slv_reg14     
+#define REG_SCRATCH8                                (0x1000 + 4*15)       // slv_reg15     
 
 
 #ifdef ONE_QUEUE_TSN
