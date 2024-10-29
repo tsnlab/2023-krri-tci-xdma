@@ -48,7 +48,7 @@ static uint8_t tsn_get_vlan_prio(struct tsn_config* tsn_config, struct sk_buff* 
 	return 0;
 }
 
-static bool is_gptp_packet(const uint8_t* payload) {
+static bool is_gptp_packet(struct xdma_private* priv, struct sk_buff* skb) {
 	u8 msg_type;
 	u16 eth_type;
 	uint8_t* payload;
@@ -104,7 +104,7 @@ bool tsn_fill_metadata(struct pci_dev* pdev, timestamp_t now, struct sk_buff* sk
 
 	vlan_prio = tsn_get_vlan_prio(tsn_config, skb);
 	tc_id = tsn_get_mqprio_tc(xdev->ndev, vlan_prio);
-	is_gptp = is_gptp_packet(tx_buf->data);
+	is_gptp = is_gptp_packet(priv, skb);
 
 	if (is_gptp) {
 		queue_prio = TSN_PRIO_GPTP;
