@@ -49,11 +49,27 @@ static uint8_t tsn_get_vlan_prio(struct tsn_config* tsn_config, struct sk_buff* 
 }
 
 static bool is_gptp_packet(const uint8_t* payload) {
-	struct ethhdr* eth = (struct ethhdr*)payload;
-	uint16_t eth_type = ntohs(eth->h_proto);
+	u8 msg_type;
+	u16 eth_type;
+	uint8_t* payload;
+	struct ptp_header* ptp;
+	struct ethhdr* eth;
+	struct tsn_vlan_hdr* vlan;
+	int rx_filter = priv->tstamp_config.rx_filter;
+	if (rx_filter == HWTSTAMP_FILTER_NONE) {
+		return false;
+	} else if (rx_filter == HWTSTAMP_FILTER_ALL) {
+		return true;
+	}
+
+	payload = skb->data;
+	eth = (struct ethhdr*)payload;
+	payload += sizeof(*eth);
+	eth_type = ntohs(eth->h_proto);
 	if (eth_type == ETH_P_8021Q) {
-		struct tsn_vlan_hdr* vlan = (struct tsn_vlan_hdr*)(eth + 1);
+		vlan = (struct tsn_vlan_hdr*)payload;
 		eth_type = vlan->pid;
+		payload += sizeof(*vlan);
 	}
 
 	return eth_type == ETH_P_1588;
