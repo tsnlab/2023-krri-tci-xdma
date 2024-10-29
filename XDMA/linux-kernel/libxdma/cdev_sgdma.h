@@ -79,6 +79,23 @@ struct xdma_aperture_ioctl {
 #define IOCTL_XDMA_APERTURE_R   _IOW('q', 7, struct xdma_aperture_ioctl *)
 #define IOCTL_XDMA_APERTURE_W   _IOW('q', 8, struct xdma_aperture_ioctl *)
 
-#include "cdev_sgdma_part.h"
+#if 1 // 20230830 POOKY TSNLAB
+#include "stdint.h"
+#include "../xdma/cdev_sgdma_part.h"
+#endif
+
+/* ltoh: little endian to host */
+/* htol: host to little endian */
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+#define ltohl(x)       (x)
+#define ltohs(x)       (x)
+#define htoll(x)       (x)
+#define htols(x)       (x)
+#elif __BYTE_ORDER == __BIG_ENDIAN
+#define ltohl(x)     __bswap_32(x)
+#define ltohs(x)     __bswap_16(x)
+#define htoll(x)     __bswap_32(x)
+#define htols(x)     __bswap_16(x)
+#endif
 
 #endif /* _XDMA_IOCALLS_POSIX_H_ */

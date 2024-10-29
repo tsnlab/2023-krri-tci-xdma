@@ -1,12 +1,17 @@
 #ifndef __XDMA_COMMON_H__
 #define __XDMA_COMMON_H__
 
+#define __BURST_READ_WRITE__
+
 #define BUFFER_ALIGNMENT  (0x1000)
 #define MAX_BUFFER_LENGTH (0x1000)
 //#define MAX_BUFFER_LENGTH (0x10000 * 16)
-#define NUMBER_OF_BUFFER  (4096)    // (2048)
+//#define NUMBER_OF_BUFFER  (4096)    // (2048)
+#define NUMBER_OF_BUFFER  (2048)    // (2048)
+#define BUFFER_LUMP_SIZE  (MAX_BUFFER_LENGTH * NUMBER_OF_BUFFER)
 #define NUMBER_OF_POOL_BUFFER (NUMBER_OF_BUFFER + 1)
 #define NUMBER_OF_RESERVED_BUFFER (4)
+#define BUFFER_ADDRESS_MASK (~(MAX_BUFFER_LENGTH - 1))
 
 typedef char *    BUF_POINTER;
 
@@ -24,7 +29,7 @@ typedef struct reserved_buffer_stack {
     pthread_mutex_t mutex;
 } reserved_buffer_stack_t;
 
-#define NUMBER_OF_QUEUE  NUMBER_OF_BUFFER    // (2048)
+#define NUMBER_OF_QUEUE  NUMBER_OF_BUFFER
 typedef char *    QueueElement;
 typedef struct circular_queue{
     QueueElement elements[NUMBER_OF_QUEUE];
@@ -37,12 +42,17 @@ typedef struct circular_queue{
 typedef struct stats {
     unsigned long long  rxPackets;
     unsigned long long  rxBytes;
+    unsigned long long  rxErrors;
+    unsigned long long  rxNoBuffer;    // BD is not available
     unsigned long long  rxPps;
-    unsigned long long  rxBps;
+    unsigned long long  rxbps;
     unsigned long long  txPackets;
     unsigned long long  txBytes;
+    unsigned long long  txFiltered;
+    unsigned long long  txErrors;
     unsigned long long  txPps;
-    unsigned long long  txBps;
+    unsigned long long  txbps;
+
 } stats_t;
 
 #define MAX_DEVICE_NAME 20
@@ -53,6 +63,7 @@ enum {
     RUN_MODE_NORMAL,
     RUN_MODE_LOOPBACK,
     RUN_MODE_PERFORMANCE,
+    RUN_MODE_DEBUG,
 
     RUN_MODE_CNT,
 };
@@ -78,6 +89,13 @@ typedef struct stats_thread_arg {
     int mode;
 } stats_thread_arg_t;
 
+typedef struct parse_thread_arg {
+    char devname[MAX_DEVICE_NAME];
+    char fn[MAX_INPUT_FILE_NAME_SIZE];
+    int mode;
+    int size;
+} parse_thread_arg_t;
+
 #define SEC  (1)
 #define MIN  (60 * SEC)
 #define HOUR (60 * MIN)
@@ -97,5 +115,7 @@ typedef struct _execTime
 void* receiver_thread(void* arg);
 void* sender_thread(void* arg);
 void* stats_thread(void* arg);
+void* parse_thread(void* arg);
+void* tx_thread(void* arg);
 
 #endif    // __XDMA_COMMON_H__

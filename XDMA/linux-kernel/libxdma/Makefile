@@ -24,7 +24,7 @@ RANLIB  = $(CROSS_COMPILE)ranlib
 
 LIB = libxdma.a
 
-OBJS = api_xdma.o
+OBJS = api_xdma.o ioctl_xdma.o
 
 INCLUDES =
 
