@@ -1,8 +1,144 @@
 ==================== Tx Timestamp Error Log ====================
-Packet transmission interval : 100[ms]
-Test start time : 2024-10-28 9:1:5
+Packet transmission interval : 10[ms]
+Test start time : 2024-10-30 23:3:59
 Buffer allocation : Success
-My buffer address : 0x55561e819800
+My buffer address : 0x55559377d800
 Buffer Mem align : 512
-Open XDMA : Failed
+Open XDMA : Success
+
+
+============================= 1th Error =============================                
+Raspberry PI5 OS Time                      : 2024-10-30 23:4:0                
+Measured Transmission Time Gap             : 12.0[ms]                
+
+Transmission Index                         : 96                
+Transmitted packet                         : 96                
+
+syscount       (hex)                       :    8696e1f46                |  tx_timestamp      (hex) :    8696e03ab                
+syscount_prv   (hex)                       :    86957c7d3                |  tx_timestamp_prv  (hex) :    86957bafa                
+
+syscount_diff  (dec)                       :      1464179 (0.0117[s])    |  tx_timestamp_diff (dec) :      1460401 (0.0117[s])                
+syscount_diff  (hex)                       :       165773 (0.0117[s])    |  tx_timestamp_diff (hex) :       1648b1 (0.0117[s])                
+
+Ideal Diff                                 : 1250000           (=> 0.0100[s])                
+Allowed Tx Timestamp Diff Range (10% tor.) : 1250000 ~ 1375000 (=> 0.0110[s])
+
+
+============================= 2th Error =============================                
+Raspberry PI5 OS Time                      : 2024-10-30 23:4:1                
+Measured Transmission Time Gap             : 12.0[ms]                
+
+Transmission Index                         : 171                
+Transmitted packet                         : 171                
+
+syscount       (hex)                       :    86f1f4f3f                |  tx_timestamp      (hex) :    86f1f2dde                
+syscount_prv   (hex)                       :    86f0807b4                |  tx_timestamp_prv  (hex) :    86f07f36f                
+
+syscount_diff  (dec)                       :      1525643 (0.0122[s])    |  tx_timestamp_diff (dec) :      1522287 (0.0122[s])                
+syscount_diff  (hex)                       :       17478b (0.0122[s])    |  tx_timestamp_diff (hex) :       173a6f (0.0122[s])                
+
+Ideal Diff                                 : 1250000           (=> 0.0100[s])                
+Allowed Tx Timestamp Diff Range (10% tor.) : 1250000 ~ 1375000 (=> 0.0110[s])
+
+
+============================= 3th Error =============================                
+Raspberry PI5 OS Time                      : 2024-10-30 23:4:3                
+Measured Transmission Time Gap             : 15.0[ms]                
+
+Transmission Index                         : 454                
+Transmitted packet                         : 454                
+
+syscount       (hex)                       :    8849c03fc                |  tx_timestamp      (hex) :    884945b3d                
+syscount_prv   (hex)                       :    8847f58df                |  tx_timestamp_prv  (hex) :    8847f4628                
+
+syscount_diff  (dec)                       :      1878813 (0.0150[s])    |  tx_timestamp_diff (dec) :      1381653 (0.0111[s])                
+syscount_diff  (hex)                       :       1cab1d (0.0150[s])    |  tx_timestamp_diff (hex) :       151515 (0.0111[s])                
+
+Ideal Diff                                 : 1250000           (=> 0.0100[s])                
+Allowed Tx Timestamp Diff Range (10% tor.) : 1250000 ~ 1375000 (=> 0.0110[s])
+
+
+============================= 4th Error =============================                
+Raspberry PI5 OS Time                      : 2024-10-30 23:4:3                
+Measured Transmission Time Gap             : 10.0[ms]                
+
+Transmission Index                         : 455                
+Transmitted packet                         : 455                
+
+syscount       (hex)                       :    884af74be                |  tx_timestamp      (hex) :    884af57eb                
+syscount_prv   (hex)                       :    8849c03fc                |  tx_timestamp_prv  (hex) :    884945b3d                
+
+syscount_diff  (dec)                       :      1274050 (0.0102[s])    |  tx_timestamp_diff (dec) :      1768622 (0.0141[s])                
+syscount_diff  (hex)                       :       1370c2 (0.0102[s])    |  tx_timestamp_diff (hex) :       1afcae (0.0141[s])                
+
+Ideal Diff                                 : 1250000           (=> 0.0100[s])                
+Allowed Tx Timestamp Diff Range (10% tor.) : 1250000 ~ 1375000 (=> 0.0110[s])
+
+
+============================= 5th Error =============================                
+Raspberry PI5 OS Time                      : 2024-10-30 23:4:4                
+Measured Transmission Time Gap             : 14.0[ms]                
+
+Transmission Index                         : 515                
+Transmitted packet                         : 515                
+
+syscount       (hex)                       :    889424e4b                |  tx_timestamp      (hex) :    889422788                
+syscount_prv   (hex)                       :    88927fa3b                |  tx_timestamp_prv  (hex) :    88927e4de                
+
+syscount_diff  (dec)                       :      1725456 (0.0138[s])    |  tx_timestamp_diff (dec) :      1721002 (0.0138[s])                
+syscount_diff  (hex)                       :       1a5410 (0.0138[s])    |  tx_timestamp_diff (hex) :       1a42aa (0.0138[s])                
+
+Ideal Diff                                 : 1250000           (=> 0.0100[s])                
+Allowed Tx Timestamp Diff Range (10% tor.) : 1250000 ~ 1375000 (=> 0.0110[s])
+
+
+============================= 6th Error =============================                
+Raspberry PI5 OS Time                      : 2024-10-30 23:4:5                
+Measured Transmission Time Gap             : 11.0[ms]                
+
+Transmission Index                         : 587                
+Transmitted packet                         : 587                
+
+syscount       (hex)                       :    88eb52bc0                |  tx_timestamp      (hex) :    88eb50cd3                
+syscount_prv   (hex)                       :    88ea01e61                |  tx_timestamp_prv  (hex) :    88ea00b38                
+
+syscount_diff  (dec)                       :      1379679 (0.0110[s])    |  tx_timestamp_diff (dec) :      1376667 (0.0110[s])                
+syscount_diff  (hex)                       :       150d5f (0.0110[s])    |  tx_timestamp_diff (hex) :       15019b (0.0110[s])                
+
+Ideal Diff                                 : 1250000           (=> 0.0100[s])                
+Allowed Tx Timestamp Diff Range (10% tor.) : 1250000 ~ 1375000 (=> 0.0110[s])
+
+
+============================= 7th Error =============================                
+Raspberry PI5 OS Time                      : 2024-10-30 23:4:5                
+Measured Transmission Time Gap             : 10.0[ms]                
+
+Transmission Index                         : 605                
+Transmitted packet                         : 605                
+
+syscount       (hex)                       :    890198c86                |  tx_timestamp      (hex) :    890196b79                
+syscount_prv   (hex)                       :    89006179c                |  tx_timestamp_prv  (hex) :    88ffe693e                
+
+syscount_diff  (dec)                       :      1275114 (0.0102[s])    |  tx_timestamp_diff (dec) :      1770043 (0.0142[s])                
+syscount_diff  (hex)                       :       1374ea (0.0102[s])    |  tx_timestamp_diff (hex) :       1b023b (0.0142[s])                
+
+Ideal Diff                                 : 1250000           (=> 0.0100[s])                
+Allowed Tx Timestamp Diff Range (10% tor.) : 1250000 ~ 1375000 (=> 0.0110[s])
+
+
+============================= 8th Error =============================                
+Raspberry PI5 OS Time                      : 2024-10-30 23:4:6                
+Measured Transmission Time Gap             : 13.0[ms]                
+
+Transmission Index                         : 713                
+Transmitted packet                         : 713                
+
+syscount       (hex)                       :    8984780eb                |  tx_timestamp      (hex) :    898475ba0                
+syscount_prv   (hex)                       :    8982f2d9b                |  tx_timestamp_prv  (hex) :    8982f1b44                
+
+syscount_diff  (dec)                       :      1594192 (0.0128[s])    |  tx_timestamp_diff (dec) :      1589340 (0.0127[s])                
+syscount_diff  (hex)                       :       185350 (0.0128[s])    |  tx_timestamp_diff (hex) :       18405c (0.0127[s])                
+
+Ideal Diff                                 : 1250000           (=> 0.0100[s])                
+Allowed Tx Timestamp Diff Range (10% tor.) : 1250000 ~ 1375000 (=> 0.0110[s])
 
