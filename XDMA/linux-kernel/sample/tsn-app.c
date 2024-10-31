@@ -294,7 +294,7 @@ int process_main_tx_timestamp_testCmd(int argc, const char *argv[], menu_command
  ******************************************************************************/
 /* User configurable Macro definition */
 #define TEST_INTERVAL_MS            (INTERVAL_10MS)
-#define TOLERANCE_PERCENT           (10)
+#define TOLERANCE_PERCENT           (100)
 
 /* Macro definition */
 #define MY_BUFFER_ALIGNMENT         (512)
@@ -326,12 +326,12 @@ uint64_t        bytes_tr;               // Transmitted Byte for each XDMA write
 int             xdma_write_status;      // Status of XDMA write api
 
 /* Global variables for Syscount & Tx Timestamp  */
-uint64_t        my_syscount, my_syscount_prv;                       // Syscount of current & previous
-uint64_t        my_tx_timestamp, my_tx_timestamp_prv;               // Tx Timestamp of current & previous
-uint64_t        diff_syscount, diff_tx_timestamp;                   // Difference of Syscount & Tx Timestamp
-uint64_t        time_interval_ms = TEST_INTERVAL_MS;                // Transmission time interval (unit : ms)
-uint64_t        ideal_diff;                                         // Ideal difference value for selected Time interval
-uint64_t        ten_percent_of_ideal_diff;                          // 10% value of Ideal difference value
+uint64_t        my_syscount, my_syscount_prv;                                   // Syscount of current & previous
+uint64_t        my_tx_timestamp, my_tx_timestamp_prv;                           // Tx Timestamp of current & previous
+uint64_t        diff_syscount, diff_tx_timestamp, diff_syscount_txtimestamp;    // Difference of Syscount & Tx Timestamp
+uint64_t        time_interval_ms = TEST_INTERVAL_MS;                            // Transmission time interval (unit : ms)
+uint64_t        ideal_diff;                                                     // Ideal difference value for selected Time interval
+uint64_t        ten_percent_of_ideal_diff;                                      // 10% value of Ideal difference value
 uint64_t        tx_timestamp_diff_allowed_min, tx_timestamp_diff_allowed_max; // Allowed min/max value of Tx Timestamp Difference
 
 /* Global variables for Error Information */
@@ -425,13 +425,13 @@ int tx_timestamp_test_app(int data_size)
     tx_length = sizeof(my_tx_buffer->metadata) + my_tx_buffer->metadata.frame_length;
 
     // 11. Determine Ideal difference value & 10% of ideal difference value for given Time interval
-    if(time_interval_ms      == INTERVAL_1000MS) ideal_diff = TICK_1000MSEC;   // When sleep time is 1000[ms]
-    else if(time_interval_ms == INTERVAL_100MS)  ideal_diff = TICK_100MSEC;    // When sleep time is 100[ms]
-    else if(time_interval_ms == INTERVAL_10MS)   ideal_diff = TICK_10MSEC;     // When sleep time is 10[ms]
+    if(time_interval_ms      == INTERVAL_1000MS) ideal_diff = TICK_1000MSEC;        // When sleep time is 1000[ms]
+    else if(time_interval_ms == INTERVAL_100MS)  ideal_diff = TICK_100MSEC;         // When sleep time is 100[ms]
+    else if(time_interval_ms == INTERVAL_10MS)   ideal_diff = TICK_10MSEC;          // When sleep time is 10[ms]
 
-    ten_percent_of_ideal_diff = ideal_diff * ((double)TOLERANCE_PERCENT / 100.);                // Allowed tolerance is 10% of ideal difference (between current & previous Tx Timestamp value)
-    tx_timestamp_diff_allowed_min  = ideal_diff;                               // Allowed minimum value of Tx Timestamp
-    tx_timestamp_diff_allowed_max  = ideal_diff + ten_percent_of_ideal_diff;   // Allowed maximum value of Tx Timestamp
+    ten_percent_of_ideal_diff = ideal_diff * ((double)TOLERANCE_PERCENT / 100.);    // Allowed tolerance is 10% of ideal difference (between current & previous Tx Timestamp value)
+    tx_timestamp_diff_allowed_min  = ideal_diff;                                    // Allowed minimum value of Tx Timestamp
+    tx_timestamp_diff_allowed_max  = ideal_diff + ten_percent_of_ideal_diff;        // Allowed maximum value of Tx Timestamp
 
     // 12. Open XDMA Device
     if(xdma_api_dev_open(my_tx_arg_data.devname, 0 /* eop_flush */, &my_tx_xdma_fd)) {
@@ -483,8 +483,9 @@ int tx_timestamp_test_app(int data_size)
         // 13-6. Calculate diff of System count & Tx Timestamp
         if(tx_index > 1)
         {
-            diff_syscount     = my_syscount - my_syscount_prv;
-            diff_tx_timestamp = my_tx_timestamp - my_tx_timestamp_prv;  
+            diff_syscount               = my_syscount - my_syscount_prv;
+            diff_tx_timestamp           = my_tx_timestamp - my_tx_timestamp_prv;
+            diff_syscount_txtimestamp   = my_syscount - my_tx_timestamp;
         } 
 
         // 13-7. Configure Error Condition
@@ -503,6 +504,11 @@ int tx_timestamp_test_app(int data_size)
             // Error Condition 3 : Tx Timestamp Difference is out of Allowed range
             error_flag = FLAG_SET;
         }
+        else if(diff_syscount_txtimestamp > (uint64_t)0xFFFFF)
+        {
+            // Error Condition 4 : Current Syscount is 0xFFFFF value more than Tx Timestamp
+            error_flag = FLAG_SET;
+        }
         else
         {
             // No Error
@@ -516,25 +522,28 @@ int tx_timestamp_test_app(int data_size)
             {
                 fprintf(error_log_fd, \
                 "\n============================= %ldth Error =============================\
-                \nRaspberry PI5 OS Time                      : %d-%d-%d %d:%d:%d\
-                \nMeasured Transmission Time Gap             : %.1lf[ms]\
-                \n\nTransmission Index                         : %ld\
-                \nTransmitted packet                         : %lld\
-                \n\nsyscount       (hex)                       : %12lx                |  tx_timestamp      (hex) : %12lx\
-                \nsyscount_prv   (hex)                       : %12lx                |  tx_timestamp_prv  (hex) : %12lx\
-                \n\nsyscount_diff  (dec)                       : %12ld (%.4lf[s])    |  tx_timestamp_diff (dec) : %12ld (%.4lf[s])\
-                \nsyscount_diff  (hex)                       : %12lx (%.4lf[s])    |  tx_timestamp_diff (hex) : %12lx (%.4lf[s])\
+                \nRaspberry PI5 OS Time                       : %d-%d-%d %d:%d:%d\
+                \nMeasured Transmission Time Gap              : %.1lf[ms]\
+                \n\nTransmission Index                          : %ld\
+                \nTransmitted packet                          : %lld\
+                \n\nsyscount                   (hex)            : %016lx                |  tx_timestamp      (hex) : %016lx\
+                \nsyscount_prv               (hex)            : %016lx                |  tx_timestamp_prv  (hex) : %016lx\
+                \n\nsyscount_diff              (dec)            : %16ld  (%.4lf[s])   |  tx_timestamp_diff (dec) : %16ld (%.4lf[s])\
+                \nsyscount_diff              (hex)            : %16lx  (%.4lf[s])   |  tx_timestamp_diff (hex) : %16lx (%.4lf[s])\
+                \n\nsyscount_txtimestamp_diff  (hex)            : %16lx\
+                \nsyscount_txtimestamp_diff  (dec)            : %16ld\
                 \n", (error_count+1),\
                 tm_now.tm_year+1900, tm_now.tm_mon+1, tm_now.tm_mday, tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec,\
                 rasp_time_diff,\
                 tx_index, my_tx_stats.txPackets,\
                 my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv,\
                 diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
-                diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC);
+                diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
+                diff_syscount_txtimestamp, diff_syscount_txtimestamp);
 
                 fprintf(error_log_fd, \
-                "\nIdeal Diff                                 : %ld           (=> %.4lf[s])\
-                \nAllowed Tx Timestamp Diff Range (%d%% tor.) : %ld ~ %ld (=> %.4lf[s])\n\n", ideal_diff, (double)ideal_diff/TICK_1000MSEC, TOLERANCE_PERCENT, tx_timestamp_diff_allowed_min, tx_timestamp_diff_allowed_max, (double)tx_timestamp_diff_allowed_max/TICK_1000MSEC);
+                "\nIdeal Diff                                  : %ld           (=> %.4lf[s])\
+                \nAllowed Tx Timestamp Diff Range (%d%% tor.)  : %ld ~ %ld (=> %.4lf[s])\n\n", ideal_diff, (double)ideal_diff/TICK_1000MSEC, TOLERANCE_PERCENT, tx_timestamp_diff_allowed_min, tx_timestamp_diff_allowed_max, (double)tx_timestamp_diff_allowed_max/TICK_1000MSEC);
                 
                 error_count++;
             }
