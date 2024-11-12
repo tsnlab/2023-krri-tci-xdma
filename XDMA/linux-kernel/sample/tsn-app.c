@@ -549,7 +549,11 @@ int tx_timestamp_test_app(int data_size)
             }
         }
 
-        printf("=> total error count : %ld\n\n", error_count);
+        printf("=> total error count : %ld\
+        \nsyscount                  (hex) : %016lx    | tx_timestamp     (hex) : %016lx\
+        \nsyscount_prv              (hex) : %016lx    | tx_timestamp_prv (hex) : %016lx\
+        \nsyscount_txtimestamp_diff (hex) : %16lx      (Dec : %16ld)\
+        \n\n", error_count, my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv, diff_syscount_txtimestamp, diff_syscount_txtimestamp);
 
         // 13-9. Initialize variable for Next transmission
         my_syscount_prv     = my_syscount;

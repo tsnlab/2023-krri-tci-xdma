@@ -355,7 +355,7 @@ tsn-app.o: tsn-app.c /usr/include/stdc-predef.h /usr/include/stdio.h \
  ../include/libcom/log.h /usr/include/syslog.h \
  /usr/include/aarch64-linux-gnu/sys/syslog.h \
  /usr/include/aarch64-linux-gnu/bits/syslog-path.h \
- /home/tsnlab/Workspace/2023-krri-tci-xdma/XDMA/linux-kernel/include/version.h \
+ /home/ganghyeok/Workspace/2023-krri-tci-xdma/XDMA/linux-kernel/include/version.h \
  ../include/libcom/error_define.h /usr/include/arpa/inet.h \
  /usr/include/netinet/in.h /usr/include/aarch64-linux-gnu/sys/socket.h \
  /usr/include/aarch64-linux-gnu/bits/types/struct_iovec.h \
