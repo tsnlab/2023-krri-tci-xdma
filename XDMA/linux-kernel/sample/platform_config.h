@@ -119,6 +119,7 @@ typedef uintptr_t UINTPTR;
 #define REG_TEMAC_RX_STAT                           0x0510
 #define REG_TEMAC_TX_STAT                           0x0514
 
+// Register Map for "fpga_test_app"
 #define REG_UP_COUNTER_HIGH                         (0x1000)              // slv_reg0
 #define REG_UP_COUNTER_LOW                          (0x1000 + 4*1)        // slv_reg1
 #define REG_DN_COUNTER_HIGH                         (0x1000 + 4*2)        // slv_reg2
@@ -135,6 +136,14 @@ typedef uintptr_t UINTPTR;
 #define REG_SCRATCH6                                (0x1000 + 4*13)       // slv_reg13     
 #define REG_SCRATCH7                                (0x1000 + 4*14)       // slv_reg14     
 #define REG_SCRATCH8                                (0x1000 + 4*15)       // slv_reg15     
+
+// Register Map for "tx_tstamp_replica_fpga_logic_test_app"
+#define REG_TX_START_CONFIG                         (0x2000 + 4*0)        // slv_reg0[0] => Tx Start bit 
+#define REG_TX_TSTAMP_VALID                         (0x2000 + 4*1)        // slv_reg1[0] => Tx Timestamp Valid bit
+#define REG_SYSCLOCK_UPPER                          (0x2000 + 4*2)        // slv_reg2    => System Clock Upper 32bit
+#define REG_SYSCLOCK_LOWER                          (0x2000 + 4*3)        // slv_reg3    => System Clock Lower 32bit
+#define REG_TX_TSTAMP_UPPER                         (0x2000 + 4*4)        // slv_reg4    => Tx Timestamp Upper 32bit
+#define REG_TX_TSTAMP_LOWER                         (0x2000 + 4*5)        // slv_reg5    => Tx Timestamp Lower 32bit
 
 
 #ifdef ONE_QUEUE_TSN
