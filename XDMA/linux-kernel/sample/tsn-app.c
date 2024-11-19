@@ -562,20 +562,6 @@ int tx_timestamp_test_app(int data_size)
         \n\n", error_count, my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv, diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
         diff_syscount_txtimestamp, diff_syscount_txtimestamp);
 
-        static int exe_count = 0;
-
-        if(exe_count > 10)
-        {
-            if(diff_syscount_txtimestamp < 1000)
-            {
-                
-
-                while(1);
-            }
-        }
-
-        exe_count++;
-
         // 13-9. Initialize variable for Next transmission
         my_syscount_prv     = my_syscount;
         my_tx_timestamp_prv = my_tx_timestamp;
