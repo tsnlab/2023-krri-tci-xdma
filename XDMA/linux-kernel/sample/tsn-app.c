@@ -205,14 +205,29 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
  *                            Function Prototypes                             *
  *                                                                            *
  ******************************************************************************/
+// Function Prototypes of Process Main
 int process_main_tx_timestamp_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_fpga_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_xdma_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 int process_main_tx_tstamp_replica_fpga_logic_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+
+// Function Prototypes of Test Applications
 int tx_timestamp_test_app(int data_size);
 int fpga_test_app(void);
 int xdma_rx_test_app(void);
 int tx_tstamp_replica_fpga_logic_test_app(void);
+
+// Function Prototypes of Common
+void test_app_common(int data_size);
+void error_log_fd_open(void);
+void buffer_allocation(int data_size);
+void ethernet_frame_construction(void);
+void allowed_diff_range_calculation(void);
+
+void error_occurrence_check(void);
+void error_log_print(void);
+void current_info_print(void);
+void re_init_variables(void);
 
 /******************************************************************************
  *                                                                            *
@@ -363,100 +378,17 @@ double          rasp_time_diff;
 
 int tx_timestamp_test_app(int data_size)
 {
-    // 1. Initialize structures
-    memset(&my_tx_arg_data, 0, sizeof(my_tx_arg_t));
-    memset(&my_tx_stats,    0, sizeof(stats_t));
-    memset(&tm_now, 0, sizeof(tm_now));
-    memset(&tm_prv, 0, sizeof(tm_prv));
+    // 1. Process Common Task for Test Application
+    test_app_common(data_size);
 
-    // 2. Register signal handler
-    register_signal_handler();
-
-    // 3. Enable TEMAC & XDMA
-    set_register(REG_TSN_CONTROL, 1);
-
-    // 4. Open Text file for data logging
-    error_log_fd = fopen("Tx Timestamp Error Log.txt", "w");
-    if(error_log_fd == NULL)
-    {
-        printf("Cannot Open error log file!\n");
-
-        return -1;
-    }
-
-    fprintf(error_log_fd, "==================== Tx Timestamp Error Log ====================\n");
-    fprintf(error_log_fd, "Packet transmission interval : %ld[ms]\n", time_interval_ms);
-    my_time = time(NULL);
-    tm_now = *localtime(&my_time);
-    fprintf(error_log_fd, "Test start time : %d-%d-%d %d:%d:%d\n", tm_now.tm_year+1900, tm_now.tm_mon+1, tm_now.tm_mday, tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec);
+    // 2. Allocate buffer for Tx
+    buffer_allocation(data_size);
     
-    // 5. Allocate buffer for Tx (data_size * 2 [Byte])
-    if(posix_memalign((void **)&my_buffer, MY_BUFFER_ALIGNMENT /*alignment : 64 Bytes*/, (data_size*2)))
-    {
-        printf("Buffer allocation : Failed\n");
-        return -1;
-    }
-    else
-    {
-        printf("Buffer allocation : Success\n");
-        printf("My buffer address : %p\n", my_buffer);
-        printf("Buffer Mem align : %d\n", MY_BUFFER_ALIGNMENT);
-        fprintf(error_log_fd, "Buffer allocation : Success\n");
-        fprintf(error_log_fd, "My buffer address : %p\n", my_buffer);
-        fprintf(error_log_fd, "Buffer Mem align : %d\n", MY_BUFFER_ALIGNMENT);
-        memset(my_buffer, 0, data_size);
-    }
-    
-    // 6. Config XDMA Device name & Data size from user
-    memcpy(my_tx_arg_data.devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
-    my_tx_arg_data.size = data_size;
-    printf("XDMA Device name : %s, Data Size : %d\n", my_tx_arg_data.devname, my_tx_arg_data.size);
-    printf(error_log_fd, "XDMA Device name : %s, Data Size : %d\n", my_tx_arg_data.devname, my_tx_arg_data.size);
+    // 3. Construct Ethernet Frame to Transmit
+    ethernet_frame_construction();
 
-    // 7. Specify start address of each part (metadata, frame, ethernet header)
-    struct tsn_tx_buffer* my_tx_buffer  = (struct tsn_tx_buffer*)my_buffer;
-    struct tx_metadata* my_tx_metadata  = &my_tx_buffer->metadata;
-    uint8_t* my_tx_frame                = (uint8_t*)&my_tx_buffer->data;
-    struct ethernet_header* my_tx_eth   = (struct ethernet_header*)my_tx_frame;
-
-    // 8. Config Timestamp id & Ethernet frame length
-    my_tx_metadata->timestamp_id    = 1;
-    my_tx_metadata->fail_policy     = 0;
-    my_tx_metadata->frame_length    = my_tx_arg_data.size;
-    my_tx_metadata->from.tick       = (uint32_t)(0);            // from : 0, to : 0x1FFFFFFF => Packet transmission is always possible (at any time)
-    my_tx_metadata->to.tick         = (uint32_t)(0x1FFFFFFF);
-
-    // 9. Config Source/Destination MAC
-    static const char* myMAC    = "\x00\x11\x22\x95\x30\x23";   // My MAC address
-    static const char* desMAC   = "\xFF\xFF\xFF\xFF\xFF\xFF";   // Broadcast MAC address
-    memcpy(&(my_tx_eth->dmac), desMAC, 6);
-    memcpy(&(my_tx_eth->smac), myMAC, 6);
-
-    // 10. Config Data length to Tx
-    tx_length = sizeof(my_tx_buffer->metadata) + my_tx_buffer->metadata.frame_length;
-
-    // 11. Determine Ideal difference value & 10% of ideal difference value for given Time interval
-    if(time_interval_ms      == INTERVAL_1000MS) ideal_diff = TICK_1000MSEC;        // When sleep time is 1000[ms]
-    else if(time_interval_ms == INTERVAL_100MS)  ideal_diff = TICK_100MSEC;         // When sleep time is 100[ms]
-    else if(time_interval_ms == INTERVAL_10MS)   ideal_diff = TICK_10MSEC;          // When sleep time is 10[ms]
-
-    ten_percent_of_ideal_diff = ideal_diff * ((double)TOLERANCE_PERCENT / 100.);    // Allowed tolerance is 10% of ideal difference (between current & previous Tx Timestamp value)
-    tx_timestamp_diff_allowed_min  = ideal_diff;                                    // Allowed minimum value of Tx Timestamp
-    tx_timestamp_diff_allowed_max  = ideal_diff + ten_percent_of_ideal_diff;        // Allowed maximum value of Tx Timestamp
-
-    // 12. Open XDMA Device
-    if(xdma_api_dev_open(my_tx_arg_data.devname, 0 /* eop_flush */, &my_tx_xdma_fd)) {
-        printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", my_tx_arg_data.devname);
-        printf("<<< %s\n", __func__);
-        fprintf(error_log_fd, "Open XDMA : Failed\n\n");
-        return NULL;
-    }
-    else
-    {
-        printf("Open XDMA : Success\n\n");
-        fprintf(error_log_fd, "Open XDMA : Success\n\n");
-    }
-
+    // 4. Calculate Allowed Range of Diff value, based on Tolerance & Time Interval (from User)
+    allowed_diff_range_calculation();
 
     while(1)
     {
@@ -464,119 +396,52 @@ int tx_timestamp_test_app(int data_size)
         printf("%ldth Tx ", tx_index);
 
         // 13-2. Do XDMA Write
-        xdma_write_status = xdma_api_write_from_buffer_with_fd(my_tx_arg_data.devname, my_tx_xdma_fd, (char *)my_tx_buffer, tx_length, &bytes_tr);
-        if(xdma_write_status == 0)
-        {
-            // printf("XDMA Write : Success\n");
-        }
-        else
+        xdma_write_status = xdma_api_write_from_buffer_with_fd(my_tx_arg_data.devname, my_tx_xdma_fd, (char *)my_buffer, tx_length, &bytes_tr);
+        if(xdma_write_status != 0)
         {
             printf("XDMA Write : Failed\n");
         }
 
-        // 13-3. Get System Count & Tx Timestamp
-        my_syscount     = get_sys_count();
-        my_tx_timestamp = get_tx_timestamp(1);
-
-        // 13-4. Increase Statistics (Tx packets, Bytes)
+        // 13-3. Increase Statistics (Tx packets, Bytes)
         my_tx_stats.txPackets++;
         my_tx_stats.txBytes += bytes_tr;
 
-        // 13-5. Get Current Raspberry PI5 Time
+        // 13-4. Get System Count & Tx Timestamp
+        my_syscount     = get_sys_count();
+        my_tx_timestamp = get_tx_timestamp(1);
+
+        // 13-5. Calculate diff of System count & Tx Timestamp
+        diff_syscount               = my_syscount - my_syscount_prv;
+        diff_tx_timestamp           = my_tx_timestamp - my_tx_timestamp_prv;
+        diff_syscount_txtimestamp   = my_syscount - my_tx_timestamp;
+
+        // 13-6. Check whether Error Occurred or not
+        error_occurrence_check();
+
+        // 13-7. Get Current Raspberry PI5 Time
         my_time = time(NULL);
         tm_now  = *localtime(&my_time);
 
-        // 13-6. Calculate diff of Raspberry PI5 Time
+        // 13-8. Calculate diff of Raspberry PI5 Time
         gettimeofday(&tv, NULL);
         rasp_time = (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000;   // unit : [ms]
         rasp_time_diff = rasp_time - rasp_time_prv;             // unit : [ms]
 
-        // 13-6. Calculate diff of System count & Tx Timestamp
-        if(tx_index > 1)
+        // 13-9. If Error occurs, Save Error log to Text File
+        if((tx_index > 1) && (error_flag == FLAG_SET))
         {
-            diff_syscount               = my_syscount - my_syscount_prv;
-            diff_tx_timestamp           = my_tx_timestamp - my_tx_timestamp_prv;
-            diff_syscount_txtimestamp   = my_syscount - my_tx_timestamp;
-        } 
-
-        // 13-7. Configure Error Condition
-        if(my_tx_timestamp == my_tx_timestamp_prv)
-        {
-            // Error Condition 1 : Current & Previous Tx Timestamp is equal
-            error_flag = FLAG_SET;
-        }
-        else if(my_tx_timestamp < my_tx_timestamp_prv)
-        {
-            // Error Condition 2 : Current Tx Timestamp is less than Previous
-            error_flag = FLAG_SET;
-        }
-        else if((diff_tx_timestamp < tx_timestamp_diff_allowed_min) || (diff_tx_timestamp > tx_timestamp_diff_allowed_max))
-        {
-            // Error Condition 3 : Tx Timestamp Difference is out of Allowed range
-            error_flag = FLAG_SET;
-        }
-        else if(diff_syscount_txtimestamp > (uint64_t)0xFFFFF)
-        {
-            // Error Condition 4 : Current Syscount is 0xFFFFF value more than Tx Timestamp
-            error_flag = FLAG_SET;
-        }
-        else
-        {
-            // No Error
-            error_flag = FLAG_CLEAR;
+            error_log_print();
+            error_count++;
         }
 
-        // 13-8. If Error occurs, Save Error log to Text File
-        if(error_flag == FLAG_SET)
-        {
-            if(tx_index > 1)
-            {
-                fprintf(error_log_fd, \
-                "\n============================= %ldth Error =============================\
-                \nRaspberry PI5 OS Time                       : %d-%d-%d %d:%d:%d\
-                \nMeasured Transmission Time Gap              : %.1lf[ms]\
-                \n\nTransmission Index                          : %ld\
-                \nTransmitted packet                          : %lld\
-                \n\nsyscount                   (hex)            : %016lx                |  tx_timestamp      (hex) : %016lx\
-                \nsyscount_prv               (hex)            : %016lx                |  tx_timestamp_prv  (hex) : %016lx\
-                \n\nsyscount_diff              (dec)            : %16ld  (%.4lf[s])   |  tx_timestamp_diff (dec) : %16ld (%.4lf[s])\
-                \nsyscount_diff              (hex)            : %16lx  (%.4lf[s])   |  tx_timestamp_diff (hex) : %16lx (%.4lf[s])\
-                \n\nsyscount_txtimestamp_diff  (hex)            : %16lx\
-                \nsyscount_txtimestamp_diff  (dec)            : %16ld\
-                \n", (error_count+1),\
-                tm_now.tm_year+1900, tm_now.tm_mon+1, tm_now.tm_mday, tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec,\
-                rasp_time_diff,\
-                tx_index, my_tx_stats.txPackets,\
-                my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv,\
-                diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
-                diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
-                diff_syscount_txtimestamp, diff_syscount_txtimestamp);
+        // 13-10. Print Information of Current Transmission
+        current_info_print();
 
-                fprintf(error_log_fd, \
-                "\nIdeal Diff                                  : %ld           (=> %.4lf[s])\
-                \nAllowed Tx Timestamp Diff Range (%d%% tor.)  : %ld ~ %ld (=> %.4lf[s])\n\n", ideal_diff, (double)ideal_diff/TICK_1000MSEC, TOLERANCE_PERCENT, tx_timestamp_diff_allowed_min, tx_timestamp_diff_allowed_max, (double)tx_timestamp_diff_allowed_max/TICK_1000MSEC);
-                
-                error_count++;
-            }
-        }
-
-        printf("=> total error count : %ld\
-        \nsyscount                  (hex) : %016lx               |   tx_timestamp     (hex) : %016lx\
-        \nsyscount_prv              (hex) : %016lx               |   tx_timestamp_prv (hex) : %016lx\
-        \nsyscount_diff             (dec) : %16ld (%.4lf[s])   |   tx_timestamp_diff(dec) : %16ld (%.4lf[s])\
-        \n\nsyscount_txtimestamp_diff (hex) : %16lx                   (Dec : %16ld)\
-        \n\n", error_count, my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv, diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
-        diff_syscount_txtimestamp, diff_syscount_txtimestamp);
-
-        // 13-9. Initialize variable for Next transmission
-        my_syscount_prv     = my_syscount;
-        my_tx_timestamp_prv = my_tx_timestamp;
-        rasp_time_prv       = rasp_time;
-        bytes_tr = 0;
-        memcpy(&tm_prv, &tm_now, sizeof(tm_prv));
+        // 13-11. Initialize variable for Next transmission
+        re_init_variables();
         tx_index++;
 
-        // 13-9. Sleep
+        // 13-12. Sleep
         usleep(time_interval_ms*1000);
     }
 
@@ -730,182 +595,76 @@ int xdma_rx_test_app(void)
  ******************************************************************************/
 int tx_tstamp_replica_fpga_logic_test_app(void)
 {
-    // 1. Initialize structures
-    memset(&my_tx_stats, 0, sizeof(stats_t));
-    memset(&tm_now, 0, sizeof(tm_now));
-    memset(&tm_prv, 0, sizeof(tm_prv));
+    // 1. Process Common Task for Test Application
+    test_app_common(0);
 
-    // 2. Register Signal Handler
-    register_signal_handler();
-
-    // 3. Open Text file for data logging
-    error_log_fd = fopen("Tx_Tstamp_Replica_Error_Log.txt", "w");
-    if(error_log_fd == NULL)
-    {
-        printf("Cannot Open error log file!\n");
-
-        return -1;
-    }
-
-    fprintf(error_log_fd, "==================== Tx Tstamp Replica Error Log ====================\n");
-    fprintf(error_log_fd, "Packet transmission interval : %ld[ms]\n", time_interval_ms);
-    my_time = time(NULL);
-    tm_now = *localtime(&my_time);
-    fprintf(error_log_fd, "Test start time : %d-%d-%d %d:%d:%d\n", tm_now.tm_year+1900, tm_now.tm_mon+1, tm_now.tm_mday, tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec);
-
-    // 4. Determine Ideal difference value & 10% of ideal difference value for given Time interval
-    if(time_interval_ms      == INTERVAL_1000MS) ideal_diff = TICK_1000MSEC;        // When sleep time is 1000[ms]
-    else if(time_interval_ms == INTERVAL_100MS)  ideal_diff = TICK_100MSEC;         // When sleep time is 100[ms]
-    else if(time_interval_ms == INTERVAL_10MS)   ideal_diff = TICK_10MSEC;          // When sleep time is 10[ms]
-
-    ten_percent_of_ideal_diff = ideal_diff * ((double)TOLERANCE_PERCENT / 100.);    // Allowed tolerance is 10% of ideal difference (between current & previous Tx Timestamp value)
-    tx_timestamp_diff_allowed_min  = ideal_diff;                                    // Allowed minimum value of Tx Timestamp
-    tx_timestamp_diff_allowed_max  = ideal_diff + ten_percent_of_ideal_diff;        // Allowed maximum value of Tx Timestamp
-
+    // 2. Calculate Allowed Range of Diff value, based on Tolerance & Time Interval (from User)
+    allowed_diff_range_calculation();
 
     while(1)
     {
-        // 5-1. Show Transmission Index
+        // 3-1. Show Transmission Index
         printf("Replica's %ldth Tx ", tx_index);
 
-        // 5-2. Set Tx Start bit
+        // 3-2. Set Tx Start bit
         set_register(REG_TX_START_CONFIG, 1);
 
-        // 5-3. Get System Count & Tx Timestamp
+        // 3-3. Increase Statistics (Tx packets, Bytes)
+        my_tx_stats.txPackets++;
+
+        // 3-4. Get System Count & Tx Timestamp
         my_syscount     = ((uint64_t)get_register(REG_SYSCLOCK_UPPER) << 32) | get_register(REG_SYSCLOCK_LOWER);
         my_tx_timestamp = ((uint64_t)get_register(REG_TX_TSTAMP_UPPER) << 32) | get_register(REG_TX_TSTAMP_LOWER);
 
-        // 5-4. Increase Statistics (Tx packets, Bytes)
-        my_tx_stats.txPackets++;
+        // 3-5. Calculate diff of System count & Tx Timestamp
+        diff_syscount               = my_syscount - my_syscount_prv;
+        diff_tx_timestamp           = my_tx_timestamp - my_tx_timestamp_prv;
+        diff_syscount_txtimestamp   = my_syscount - my_tx_timestamp;
 
-        // 5-5. Get Current Raspberry PI5 Time
+        // 3-6. Check whether Error Occurred or not
+        error_occurrence_check();
+
+        // 3-7. Get Current Raspberry PI5 Time
         my_time = time(NULL);
         tm_now  = *localtime(&my_time);
 
-        // 5-6. Calculate diff of Raspberry PI5 Time
+        // 3-8. Calculate diff of Raspberry PI5 Time
         gettimeofday(&tv, NULL);
         rasp_time = (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000;   // unit : [ms]
         rasp_time_diff = rasp_time - rasp_time_prv;             // unit : [ms]
 
-        // 5-7. Calculate diff of System count & Tx Timestamp
-        if(tx_index > 1)
+        // 3-9. If Error occurs, Save Error log to Text File
+        if((tx_index > 1) && (error_flag == FLAG_SET))
         {
-            diff_syscount               = my_syscount - my_syscount_prv;
-            diff_tx_timestamp           = my_tx_timestamp - my_tx_timestamp_prv;
-            diff_syscount_txtimestamp   = my_syscount - my_tx_timestamp;
-        } 
-
-        // 5-8. Configure Error Condition
-        if(my_tx_timestamp == my_tx_timestamp_prv)
-        {
-            // Error Condition 1 : Current & Previous Tx Timestamp is equal
-            error_flag = FLAG_SET;
-            error_type = 1;
-        }
-        else if(my_tx_timestamp < my_tx_timestamp_prv)
-        {
-            // Error Condition 2 : Current Tx Timestamp is less than Previous
-            error_flag = FLAG_SET;
-            error_type = 2;
-        }
-        else if((diff_tx_timestamp < tx_timestamp_diff_allowed_min) || (diff_tx_timestamp > tx_timestamp_diff_allowed_max))
-        {
-            // Error Condition 3 : Tx Timestamp Difference is out of Allowed range
-            error_flag = FLAG_SET;
-            error_type = 3;
-        }
-        else if(diff_syscount_txtimestamp > (uint64_t)0xFFFFF)
-        {
-            // Error Condition 4 : Current Syscount is 0xFFFFF value more than Tx Timestamp
-            error_flag = FLAG_SET;
-            error_type = 4;
-        }
-        else
-        {
-            // No Error
-            error_flag = FLAG_CLEAR;
-            error_type = 0;
+            error_log_print();
+            error_count++;
         }
 
-        // 5-9. If Error occurs, Save Error log to Text File
-        if(error_flag == FLAG_SET)
-        {
-            if(tx_index > 1)
-            {
-                fprintf(error_log_fd, \
-                "\n============================= %ldth Error =============================\
-                \nRaspberry PI5 OS Time                       : %d-%d-%d %d:%d:%d\
-                \nMeasured Transmission Time Gap              : %.1lf[ms]\
-                \n\nTransmission Index                          : %ld\
-                \nTransmitted packet                          : %lld\
-                \n\nsyscount                   (hex)            : %016lx                |  tx_timestamp      (hex) : %016lx\
-                \nsyscount_prv               (hex)            : %016lx                |  tx_timestamp_prv  (hex) : %016lx\
-                \n\nsyscount_diff              (dec)            : %16ld  (%.4lf[s])   |  tx_timestamp_diff (dec) : %16ld (%.4lf[s])\
-                \nsyscount_diff              (hex)            : %16lx  (%.4lf[s])   |  tx_timestamp_diff (hex) : %16lx (%.4lf[s])\
-                \n\nsyscount_txtimestamp_diff  (hex)            : %16lx\
-                \nsyscount_txtimestamp_diff  (dec)            : %16ld\
-                \n", (error_count+1),\
-                tm_now.tm_year+1900, tm_now.tm_mon+1, tm_now.tm_mday, tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec,\
-                rasp_time_diff,\
-                tx_index, my_tx_stats.txPackets,\
-                my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv,\
-                diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
-                diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
-                diff_syscount_txtimestamp, diff_syscount_txtimestamp);
+        // 3-10. Print Information of Current Transmission
+        current_info_print();
 
-                fprintf(error_log_fd, \
-                "\nIdeal Diff                                   : %ld           (=> %.4lf[s])\
-                \nAllowed Tx Timestamp Diff Range (%d%% tor.)  : %ld ~ %ld (=> %.4lf[s])\n\n", ideal_diff, (double)ideal_diff/TICK_1000MSEC, TOLERANCE_PERCENT, tx_timestamp_diff_allowed_min, tx_timestamp_diff_allowed_max, (double)tx_timestamp_diff_allowed_max/TICK_1000MSEC);
-                
-                if(error_type == 1)
-                {
-                    fprintf(error_log_fd, "Error Cause : Current & Previous Tx Timestamp is equal\n\n");
-                }
-                else if(error_type == 2)
-                {
-                    fprintf(error_log_fd, "Error Cause : Current Tx Timestamp is less than Previous\n\n");
-                }
-                else if(error_type == 3)
-                {
-                    fprintf(error_log_fd, "Error Cause : Tx Timestamp Difference is out of Allowed range\n\n");
-                }
-                else if(error_type == 4)
-                {
-                    fprintf(error_log_fd, "############################################################## Error Cause : Current Syscount is 0xFFFFF value more than Tx Timestamp ##############################################################\n\n");
-                }
-
-                error_count++;
-            }
-        }
-
-        printf("=> total error count : %ld\
-        \nsyscount                  (hex) : %016lx               |   tx_timestamp     (hex) : %016lx\
-        \nsyscount_prv              (hex) : %016lx               |   tx_timestamp_prv (hex) : %016lx\
-        \nsyscount_diff             (dec) : %16ld (%.4lf[s])   |   tx_timestamp_diff(dec) : %16ld (%.4lf[s])\
-        \n\nsyscount_txtimestamp_diff (hex) : %16lx                   (Dec : %16ld)\
-        \n\n", error_count, my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv, diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
-        diff_syscount_txtimestamp, diff_syscount_txtimestamp);
-
-        // 5-10. Initialize variable for Next transmission
-        my_syscount_prv     = my_syscount;
-        my_tx_timestamp_prv = my_tx_timestamp;
-        rasp_time_prv       = rasp_time;
-        memcpy(&tm_prv, &tm_now, sizeof(tm_prv));
+        // 3-11. Initialize variable for Next transmission
+        re_init_variables();
         tx_index++;
 
-        // 5-11. Clear Tx Start bit
+        // 3-12. Clear Tx Start bit
         set_register(REG_TX_START_CONFIG, 0);
 
-        // 5-12. Wait for Specifed Time Value
+        // 3-13. Wait for Specifed Time Value
         usleep(time_interval_ms*1000);
     }
 
-    // 6. Close Text file for logging data
+    // 4. Close Text file for logging data
     fclose(error_log_fd);
 
     return 0;
 }
 
+/******************************************************************************
+ *                                                                            *
+ *                            Process Main Function                           *
+ *                                                                            *
+ ******************************************************************************/
 
 int process_main_fpga_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
 {
@@ -921,6 +680,226 @@ int process_main_tx_tstamp_replica_fpga_logic_testCmd(int argc, const char *argv
 {
     return tx_tstamp_replica_fpga_logic_test_app();
 }
+
+
+/******************************************************************************
+ *                                                                            *
+ *                   Common Function used in Test Application                 *
+ *                                                                            *
+ ******************************************************************************/
+void test_app_common(int data_size)
+{
+    // 1. Initialize Structures
+    memset(&my_tx_arg_data, 0, sizeof(my_tx_arg_t));
+    memset(&my_tx_stats,    0, sizeof(stats_t));
+    memset(&tm_now, 0, sizeof(tm_now));
+    memset(&tm_prv, 0, sizeof(tm_prv));
+
+    // 2. Register Signal Handler
+    register_signal_handler();
+
+    // 3. Enable TEMAC & XDMA
+    set_register(REG_TSN_CONTROL, 1);
+
+    // 4. Get Current Raspbian OS Time
+    my_time = time(NULL);
+    tm_now = *localtime(&my_time);
+
+    // 5. Open Text File for Error Log
+    error_log_fd_open();
+
+    // 6. Config XDMA Device Name & Transmission Data Size from User
+    memcpy(my_tx_arg_data.devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
+    my_tx_arg_data.size = data_size;
+
+    // 7. Open XDMA Device and Get File Descriptor of it
+    if(xdma_api_dev_open(my_tx_arg_data.devname, 0 /* eop_flush */, &my_tx_xdma_fd)) {
+        printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", my_tx_arg_data.devname);
+        printf("<<< %s\n", __func__);
+        fprintf(error_log_fd, "Open XDMA : Failed\n\n");
+        return NULL;
+    }
+    else
+    {
+        printf("Open XDMA : Success\n\n");
+        fprintf(error_log_fd, "Open XDMA : Success\n\n");
+    }
+}
+
+void error_log_fd_open(void)
+{
+    // 1. Open File Descrpitor of Error Log Text File
+    error_log_fd = fopen("Tx Timestamp Error Log.txt", "w");
+    if(error_log_fd == NULL)
+    {
+        printf("Cannot Open error log file!\n");
+
+        return -1;
+    }
+
+    // 2. Write Packet Transmission Interval & Test Start Time
+    fprintf(error_log_fd, "==================== Tx Timestamp Error Log ====================\n");
+    fprintf(error_log_fd, "Packet transmission interval : %ld[ms]\n", time_interval_ms);
+    fprintf(error_log_fd, "Test start time : %d-%d-%d %d:%d:%d\n", tm_now.tm_year+1900, tm_now.tm_mon+1, tm_now.tm_mday, tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec);
+}
+
+void buffer_allocation(int data_size)
+{
+    if(posix_memalign((void **)&my_buffer, MY_BUFFER_ALIGNMENT /*alignment : 64 Bytes*/, (data_size*2)))
+    {
+        printf("Buffer allocation : Failed\n");
+        return -1;
+    }
+    else
+    {
+        printf("Buffer allocation : Success\n");
+        printf("My buffer address : %p\n", my_buffer);
+        printf("Buffer Mem align : %d\n", MY_BUFFER_ALIGNMENT);
+        fprintf(error_log_fd, "Buffer allocation : Success\n");
+        fprintf(error_log_fd, "My buffer address : %p\n", my_buffer);
+        fprintf(error_log_fd, "Buffer Mem align : %d\n", MY_BUFFER_ALIGNMENT);
+        memset(my_buffer, 0, data_size);
+    }
+}
+
+void ethernet_frame_construction(void)
+{
+    // 1. Specify the Start Address of Each Section (Metadata, Frame Data)
+    struct tsn_tx_buffer* my_tx_buffer  = (struct tsn_tx_buffer*)my_buffer;
+    struct tx_metadata* my_tx_metadata  = &my_tx_buffer->metadata;
+    uint8_t* my_tx_frame                = (uint8_t*)&my_tx_buffer->data;
+    struct ethernet_header* my_tx_eth   = (struct ethernet_header*)my_tx_frame;
+
+    // 2. Config Timestamp ID & Ethernet Frame Length
+    my_tx_metadata->timestamp_id    = 1;
+    my_tx_metadata->fail_policy     = 0;
+    my_tx_metadata->frame_length    = my_tx_arg_data.size;
+    my_tx_metadata->from.tick       = (uint32_t)(0);            // from : 0, to : 0x1FFFFFFF => Packet transmission is always possible (at any time)
+    my_tx_metadata->to.tick         = (uint32_t)(0x1FFFFFFF);
+
+    // 3. Config Source/Destination MAC
+    static const char* myMAC    = "\x00\x11\x22\x95\x30\x23";   // My MAC address
+    static const char* desMAC   = "\xFF\xFF\xFF\xFF\xFF\xFF";   // Broadcast MAC address
+    memcpy(&(my_tx_eth->dmac), desMAC, 6);
+    memcpy(&(my_tx_eth->smac), myMAC, 6);
+
+    // 4. Config Transmission Data Length
+    tx_length = sizeof(my_tx_buffer->metadata) + my_tx_buffer->metadata.frame_length;
+}
+
+void allowed_diff_range_calculation(void)
+{   
+    // 1. Determine Ideal Diff value from Ethernet Frame Transmission Time Interval
+    if(time_interval_ms      == INTERVAL_1000MS) ideal_diff = TICK_1000MSEC;        // When sleep time is 1000[ms]
+    else if(time_interval_ms == INTERVAL_100MS)  ideal_diff = TICK_100MSEC;         // When sleep time is 100[ms]
+    else if(time_interval_ms == INTERVAL_10MS)   ideal_diff = TICK_10MSEC;          // When sleep time is 10[ms]
+
+    // 2. Calculate Allowed Range of Diff Value
+    ten_percent_of_ideal_diff = ideal_diff * ((double)TOLERANCE_PERCENT / 100.);    // Allowed tolerance is 10% of ideal difference (between current & previous Tx Timestamp value)
+    tx_timestamp_diff_allowed_min  = ideal_diff;                                    // Allowed minimum value of Tx Timestamp
+    tx_timestamp_diff_allowed_max  = ideal_diff + ten_percent_of_ideal_diff;        // Allowed maximum value of Tx Timestamp
+}
+
+void error_occurrence_check(void)
+{
+    // 1. Configure Error Condition
+    if(my_tx_timestamp == my_tx_timestamp_prv)
+    {
+        // Error Condition 1 : Current & Previous Tx Timestamp is equal
+        error_flag = FLAG_SET;
+        error_type = 1;
+    }
+    else if(my_tx_timestamp < my_tx_timestamp_prv)
+    {
+        // Error Condition 2 : Current Tx Timestamp is less than Previous
+        error_flag = FLAG_SET;
+        error_type = 2;
+    }
+    else if((diff_tx_timestamp < tx_timestamp_diff_allowed_min) || (diff_tx_timestamp > tx_timestamp_diff_allowed_max))
+    {
+        // Error Condition 3 : Tx Timestamp Difference is out of Allowed range
+        error_flag = FLAG_SET;
+        error_type = 3;
+    }
+    else if(diff_syscount_txtimestamp > (uint64_t)0xFFFFF)
+    {
+        // Error Condition 4 : Current Syscount is 0xFFFFF value more than Tx Timestamp
+        error_flag = FLAG_SET;
+        error_type = 4;
+    }
+    else
+    {
+        // No Error
+        error_flag = FLAG_CLEAR;
+        error_type = 0;
+    }
+}
+
+void error_log_print(void)
+{
+    fprintf(error_log_fd, \
+    "\n============================= %ldth Error =============================\
+    \nRaspberry PI5 OS Time                       : %d-%d-%d %d:%d:%d\
+    \nMeasured Transmission Time Gap              : %.1lf[ms]\
+    \n\nTransmission Index                          : %ld\
+    \nTransmitted packet                          : %lld\
+    \n\nsyscount                   (hex)            : %016lx                |  tx_timestamp      (hex) : %016lx\
+    \nsyscount_prv               (hex)            : %016lx                |  tx_timestamp_prv  (hex) : %016lx\
+    \n\nsyscount_diff              (dec)            : %16ld  (%.4lf[s])   |  tx_timestamp_diff (dec) : %16ld (%.4lf[s])\
+    \nsyscount_diff              (hex)            : %16lx  (%.4lf[s])   |  tx_timestamp_diff (hex) : %16lx (%.4lf[s])\
+    \n\nsyscount_txtimestamp_diff  (hex)            : %16lx\
+    \nsyscount_txtimestamp_diff  (dec)            : %16ld\
+    \n", (error_count+1),\
+    tm_now.tm_year+1900, tm_now.tm_mon+1, tm_now.tm_mday, tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec,\
+    rasp_time_diff,\
+    tx_index, my_tx_stats.txPackets,\
+    my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv,\
+    diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
+    diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
+    diff_syscount_txtimestamp, diff_syscount_txtimestamp);
+
+    fprintf(error_log_fd, \
+    "\nIdeal Diff                                   : %ld           (=> %.4lf[s])\
+    \nAllowed Tx Timestamp Diff Range (%d%% tor.)  : %ld ~ %ld (=> %.4lf[s])\n\n", ideal_diff, (double)ideal_diff/TICK_1000MSEC, TOLERANCE_PERCENT, tx_timestamp_diff_allowed_min, tx_timestamp_diff_allowed_max, (double)tx_timestamp_diff_allowed_max/TICK_1000MSEC);
+    
+    if(error_type == 1)
+    {
+        fprintf(error_log_fd, "Error Cause : Current & Previous Tx Timestamp is equal\n\n");
+    }
+    else if(error_type == 2)
+    {
+        fprintf(error_log_fd, "Error Cause : Current Tx Timestamp is less than Previous\n\n");
+    }
+    else if(error_type == 3)
+    {
+        fprintf(error_log_fd, "Error Cause : Tx Timestamp Difference is out of Allowed range\n\n");
+    }
+    else if(error_type == 4)
+    {
+        fprintf(error_log_fd, "############################################################## Error Cause : Current Syscount is 0xFFFFF value more than Tx Timestamp ##############################################################\n\n");
+    }
+}
+
+void current_info_print(void)
+{
+    printf("=> total error count : %ld\
+    \nsyscount                  (hex) : %016lx               |   tx_timestamp     (hex) : %016lx\
+    \nsyscount_prv              (hex) : %016lx               |   tx_timestamp_prv (hex) : %016lx\
+    \nsyscount_diff             (dec) : %16ld (%.4lf[s])   |   tx_timestamp_diff(dec) : %16ld (%.4lf[s])\
+    \n\nsyscount_txtimestamp_diff (hex) : %16lx                   (Dec : %16ld)\
+    \n\n", error_count, my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv, diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
+    diff_syscount_txtimestamp, diff_syscount_txtimestamp);
+}
+
+void re_init_variables(void)
+{
+    my_syscount_prv     = my_syscount;
+    my_tx_timestamp_prv = my_tx_timestamp;
+    rasp_time_prv       = rasp_time;
+    bytes_tr = 0;
+    memcpy(&tm_prv, &tm_now, sizeof(tm_prv));
+}
+
 
 /***************************************************************************** */
 
