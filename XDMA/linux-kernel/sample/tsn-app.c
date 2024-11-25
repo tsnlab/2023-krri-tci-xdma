@@ -223,6 +223,10 @@ void error_log_fd_open(void);
 void buffer_allocation(int data_size);
 void ethernet_frame_construction(void);
 void allowed_diff_range_calculation(void);
+void my_signal_stop_handler();
+void my_register_signal_handler();
+void my_xdma_signal_handler(int sig);
+void test_app_exit_task(void);
 
 void error_occurrence_check(void);
 void error_log_print(void);
@@ -271,6 +275,17 @@ menu_command_t  mainCommand_tbl[] = {
 #endif
     { 0,           EXECUTION_ATTR,   NULL, " ", " "}
 };
+
+/******************************************************************************
+ *                           Common for Test App                              *
+ ******************************************************************************/
+#define TEST_TYPE_TS_TEST               1
+#define TEST_TYPE_FPGA_TEST             2
+#define TEST_TYPE_XDMA_RX_TEST          3
+#define TEST_TYPE_TX_TSTAMP_REPLICA     4
+
+int test_type;   // 0 : ts_test, 1 : fpga_test, 2 : xdma_rx_test, 3 : tx_tstamp_replica_fpga_logic_test
+
 
 /******************************************************************************
  *                                                                            *
@@ -378,6 +393,8 @@ double          rasp_time_diff;
 
 int tx_timestamp_test_app(int data_size)
 {
+    test_type = TEST_TYPE_TS_TEST;
+
     // 1. Process Common Task for Test Application
     test_app_common(data_size);
 
@@ -445,18 +462,6 @@ int tx_timestamp_test_app(int data_size)
         usleep(time_interval_ms*1000);
     }
 
-    // 14. Close XDMA device
-    close(my_tx_xdma_fd);
-
-    // 15. Disable TEMAC & XDMA
-    set_register(REG_TSN_CONTROL, 0);
-
-    // 16. Free buffer
-    free(my_buffer);
-
-    // 17. Close Text file for logging data
-    fclose(error_log_fd);
-
     return 0;
 }
 
@@ -471,6 +476,8 @@ int fpga_test_app(void)
     uint32_t    my_32bit;
     uint32_t    hour, minute, second;
     uint32_t    test_write_data = 0;
+
+    test_type = TEST_TYPE_FPGA_TEST;
     
     while(1)
     {
@@ -525,6 +532,8 @@ int xdma_rx_test_app(void)
     int my_rx_xdma_fd;
     int data_size = 16;     // 16 Byte (= 128bit)
     int bytes_rcv = 0;
+
+    test_type = TEST_TYPE_XDMA_RX_TEST;
 
     // 1. Register signal handler
     register_signal_handler();
@@ -582,8 +591,6 @@ int xdma_rx_test_app(void)
         usleep(20*1000);
     }    
 
-    free(my_buffer);
-
     return 0;
 }
 
@@ -595,6 +602,8 @@ int xdma_rx_test_app(void)
  ******************************************************************************/
 int tx_tstamp_replica_fpga_logic_test_app(void)
 {
+    test_type = TEST_TYPE_TX_TSTAMP_REPLICA;
+
     // 1. Process Common Task for Test Application
     test_app_common(0);
 
@@ -654,9 +663,6 @@ int tx_tstamp_replica_fpga_logic_test_app(void)
         usleep(time_interval_ms*1000);
     }
 
-    // 4. Close Text file for logging data
-    fclose(error_log_fd);
-
     return 0;
 }
 
@@ -696,7 +702,7 @@ void test_app_common(int data_size)
     memset(&tm_prv, 0, sizeof(tm_prv));
 
     // 2. Register Signal Handler
-    register_signal_handler();
+    my_register_signal_handler();
 
     // 3. Enable TEMAC & XDMA
     set_register(REG_TSN_CONTROL, 1);
@@ -800,6 +806,67 @@ void allowed_diff_range_calculation(void)
     tx_timestamp_diff_allowed_max  = ideal_diff + ten_percent_of_ideal_diff;        // Allowed maximum value of Tx Timestamp
 }
 
+void my_signal_stop_handler() {
+
+    if(watchStop) {
+        my_xdma_signal_handler(2);
+    } else {
+        watchStop = 1;
+    }
+}
+
+void my_register_signal_handler() {
+
+    signal(SIGINT,  my_signal_stop_handler);
+    signal(SIGKILL, my_xdma_signal_handler);
+    signal(SIGQUIT, my_xdma_signal_handler);
+    signal(SIGTERM, my_xdma_signal_handler);
+    signal(SIGTSTP, my_xdma_signal_handler);
+    signal(SIGHUP,  my_xdma_signal_handler);
+    signal(SIGABRT, my_xdma_signal_handler);
+}
+
+void my_xdma_signal_handler(int sig)
+{
+    printf("\nXDMA-APP is exiting, cause (%d)!!\n", sig);
+    sleep(1);
+    test_app_exit_task();
+    printf("Tasks for Exit are Done!\n\n");
+    sleep(1);
+    exit(0);
+}
+
+void test_app_exit_task(void)
+{
+    if(test_type == TEST_TYPE_TS_TEST)
+    {
+        // Close XDMA device
+        close(my_tx_xdma_fd);
+
+        // Disable TEMAC & XDMA
+        set_register(REG_TSN_CONTROL, 0);
+
+        // Free buffer
+        free(my_buffer);
+
+        // Close Text file for logging data
+        fclose(error_log_fd);
+    }
+    else if(test_type == TEST_TYPE_FPGA_TEST)
+    {
+        // Do Nothing
+    }
+    else if(test_type == TEST_TYPE_XDMA_RX_TEST)
+    {
+        free(my_buffer);
+    }
+    else if(test_type == TEST_TYPE_TX_TSTAMP_REPLICA)
+    {
+        // Close Text file for logging data
+        fclose(error_log_fd);
+    }
+}
+
 void error_occurrence_check(void)
 {
     // 1. Configure Error Condition
@@ -823,9 +890,18 @@ void error_occurrence_check(void)
     }
     else if(diff_syscount_txtimestamp > (uint64_t)0xFFFFF)
     {
-        // Error Condition 4 : Current Syscount is 0xFFFFF value more than Tx Timestamp
         error_flag = FLAG_SET;
-        error_type = 4;
+        
+        if(diff_syscount < (uint64_t)0xFFFFFFFFFFFF)
+        {
+            // Error Condition 4 : AXI4L Read Transaction Error Occurred
+            error_type = 4;
+        }
+        else
+        {
+            // Error Condition 5 : Timestamp Future Error Occurred
+            error_type = 5;
+        }
     }
     else
     {
@@ -876,7 +952,11 @@ void error_log_print(void)
     }
     else if(error_type == 4)
     {
-        fprintf(error_log_fd, "############################################################## Error Cause : Current Syscount is 0xFFFFF value more than Tx Timestamp ##############################################################\n\n");
+        fprintf(error_log_fd, "Error Cause : AXI4L Read Transaction Error\n\n");
+    }
+    else if(error_type == 5)
+    {
+        fprintf(error_log_fd, "Error Cause : Timestamp Future Error Occurred\n\n");
     }
 }
 
