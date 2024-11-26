@@ -379,6 +379,8 @@ uint8_t         error_flag = 0;
 uint8_t         error_type = 0;
 uint64_t        error_count = 0;                        // The number of count that Error occurs
 FILE*           error_log_fd;                           // File descriptor for error log text file
+uint64_t        axi4l_read_error_count = 0;
+uint64_t        tstamp_future_error_count = 0;
 
 // Raspberry pi 5 System time
 time_t          my_time;
@@ -410,7 +412,7 @@ int tx_timestamp_test_app(int data_size)
     while(1)
     {
         // 13-1. Show Transmission Index
-        printf("%ldth Tx ", tx_index);
+        printf("[ %ldth Tx ]", tx_index);
 
         // 13-2. Do XDMA Write
         xdma_write_status = xdma_api_write_from_buffer_with_fd(my_tx_arg_data.devname, my_tx_xdma_fd, (char *)my_buffer, tx_length, &bytes_tr);
@@ -896,11 +898,13 @@ void error_occurrence_check(void)
         {
             // Error Condition 4 : AXI4L Read Transaction Error Occurred
             error_type = 4;
+            axi4l_read_error_count++;
         }
         else
         {
             // Error Condition 5 : Timestamp Future Error Occurred
             error_type = 5;
+            tstamp_future_error_count++;
         }
     }
     else
@@ -962,12 +966,15 @@ void error_log_print(void)
 
 void current_info_print(void)
 {
-    printf("=> total error count : %ld\
+    printf("\
+    \nTotal Error Count               : %ld\
+    \nTstamp Future Error Count       : %ld\
+    \nAXI4L Read Error Count          : %ld\
     \nsyscount                  (hex) : %016lx               |   tx_timestamp     (hex) : %016lx\
     \nsyscount_prv              (hex) : %016lx               |   tx_timestamp_prv (hex) : %016lx\
     \nsyscount_diff             (dec) : %16ld (%.4lf[s])   |   tx_timestamp_diff(dec) : %16ld (%.4lf[s])\
     \n\nsyscount_txtimestamp_diff (hex) : %16lx                   (Dec : %16ld)\
-    \n\n", error_count, my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv, diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
+    \n\n", error_count, tstamp_future_error_count, axi4l_read_error_count, my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv, diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
     diff_syscount_txtimestamp, diff_syscount_txtimestamp);
 }
 
