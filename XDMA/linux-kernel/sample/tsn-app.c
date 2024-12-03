@@ -381,6 +381,9 @@ uint64_t        error_count = 0;                        // The number of count t
 FILE*           error_log_fd;                           // File descriptor for error log text file
 uint64_t        axi4l_read_error_count = 0;
 uint64_t        tstamp_future_error_count = 0;
+uint64_t        sw_time_gap_error_count = 0;
+uint64_t        xdma_consume_time_pre_error_count = 0;
+uint64_t        xdma_consume_time_post_error_count = 0;
 
 // Raspberry pi 5 System time
 time_t          my_time;
@@ -435,7 +438,10 @@ int tx_timestamp_test_app(int data_size)
         diff_syscount_txtimestamp   = my_syscount - my_tx_timestamp;
 
         // 13-6. Check whether Error Occurred or not
-        error_occurrence_check();
+        if(tx_index > 1)
+        {
+            error_occurrence_check();
+        }
 
         // 13-7. Get Current Raspberry PI5 Time
         my_time = time(NULL);
@@ -871,6 +877,18 @@ void test_app_exit_task(void)
 
 void error_occurrence_check(void)
 {
+    uint64_t diff_allowed_min, diff_allowed_max;
+    uint8_t syscount_range_over_flag, tx_timestamp_range_over_flag;
+
+    diff_allowed_min = tx_timestamp_diff_allowed_min;
+    diff_allowed_max = tx_timestamp_diff_allowed_max;
+
+    if((diff_syscount < diff_allowed_min) || (diff_syscount > diff_allowed_max))            syscount_range_over_flag = FLAG_SET;
+    else                                                                                    syscount_range_over_flag = FLAG_CLEAR;
+
+    if((diff_tx_timestamp < diff_allowed_min) || (diff_tx_timestamp > diff_allowed_max))    tx_timestamp_range_over_flag = FLAG_SET;
+    else                                                                                    tx_timestamp_range_over_flag = FLAG_CLEAR;
+
     // 1. Configure Error Condition
     if(my_tx_timestamp == my_tx_timestamp_prv)
     {
@@ -884,34 +902,58 @@ void error_occurrence_check(void)
         error_flag = FLAG_SET;
         error_type = 2;
     }
-    else if((diff_tx_timestamp < tx_timestamp_diff_allowed_min) || (diff_tx_timestamp > tx_timestamp_diff_allowed_max))
+    else if((syscount_range_over_flag == FLAG_SET) && (tx_timestamp_range_over_flag == FLAG_SET))
     {
-        // Error Condition 3 : Tx Timestamp Difference is out of Allowed range
+        // Error Condition 3 : SW Execution Time Gap
         error_flag = FLAG_SET;
         error_type = 3;
+        sw_time_gap_error_count++;
     }
-    else if(diff_syscount_txtimestamp > (uint64_t)0xFFFFF)
+    else if((syscount_range_over_flag == FLAG_SET) && (tx_timestamp_range_over_flag == FLAG_CLEAR))
     {
-        error_flag = FLAG_SET;
-        
-        if(diff_syscount < (uint64_t)0xFFFFFFFFFFFF)
+        if(diff_syscount > (uint64_t)0xFFFFFFFFFFFF)
         {
-            // Error Condition 4 : AXI4L Read Transaction Error Occurred
+            // Error Condition 4 : AXI4L Read Transaction Error
+            error_flag = FLAG_SET;
             error_type = 4;
             axi4l_read_error_count++;
         }
         else
         {
-            // Error Condition 5 : Timestamp Future Error Occurred
+            // Error Condition 5 : XDMA Transmit Frame and then, XDMA Consume Time
+            error_flag = FLAG_SET;
             error_type = 5;
+            xdma_consume_time_pre_error_count++;
+        }
+    }
+    else if((syscount_range_over_flag == FLAG_CLEAR) && (tx_timestamp_range_over_flag == FLAG_SET))
+    {
+        // Error Condition 6 : At Previous Tx Index, XDMA Transmit Frame and then XDMA Consume Time
+        error_flag = FLAG_SET;
+        error_type = 6;
+        xdma_consume_time_post_error_count++;
+    }
+    else if((syscount_range_over_flag == FLAG_CLEAR) && (tx_timestamp_range_over_flag == FLAG_CLEAR))
+    {
+        if(diff_syscount_txtimestamp > (uint64_t)0xFFFFFFFFFFFF)
+        {
+            // Error Condition 7 : Timestamp Future Error Occurred
+            error_flag = FLAG_SET;
+            error_type = 7;
             tstamp_future_error_count++;
+        }
+        else
+        {
+            // No Error
+            error_flag = FLAG_CLEAR;
+            error_type = 0;
         }
     }
     else
     {
-        // No Error
-        error_flag = FLAG_CLEAR;
-        error_type = 0;
+        // Un-Categorized Error
+        error_flag = FLAG_SET;
+        error_type = 8;
     }
 }
 
@@ -952,7 +994,7 @@ void error_log_print(void)
     }
     else if(error_type == 3)
     {
-        fprintf(error_log_fd, "Error Cause : Tx Timestamp Difference is out of Allowed range\n\n");
+        fprintf(error_log_fd, "Error Cause : SW Execution Time Gap is too big\n\n");
     }
     else if(error_type == 4)
     {
@@ -960,7 +1002,19 @@ void error_log_print(void)
     }
     else if(error_type == 5)
     {
-        fprintf(error_log_fd, "Error Cause : Timestamp Future Error Occurred\n\n");
+        fprintf(error_log_fd, "Error Cause : XDMA Transmit Frame and then, XDMA Consume Time\n\n");
+    }
+    else if(error_type == 6)
+    {
+        fprintf(error_log_fd, "Error Cause : At Previous Tx Index, XDMA Transmit Frame and then XDMA Consume Time\n\n");
+    }
+    else if(error_type == 7)
+    {
+        fprintf(error_log_fd, "Error Cause : Timestamp Future Error\n\n");
+    }
+    else if(error_type == 8)
+    {
+        fprintf(error_log_fd, "Error Cause : Un-Categorized Error\n\n");
     }
 }
 
@@ -968,13 +1022,16 @@ void current_info_print(void)
 {
     printf("\
     \nTotal Error Count               : %ld\
+    \nSW Time Gap Error Count         : %ld\
     \nTstamp Future Error Count       : %ld\
     \nAXI4L Read Error Count          : %ld\
+    \nXDMA Time Pre Error Count       : %ld\
+    \nXDMA Time Post Error Count      : %ld\
     \nsyscount                  (hex) : %016lx               |   tx_timestamp     (hex) : %016lx\
     \nsyscount_prv              (hex) : %016lx               |   tx_timestamp_prv (hex) : %016lx\
     \nsyscount_diff             (dec) : %16ld (%.4lf[s])   |   tx_timestamp_diff(dec) : %16ld (%.4lf[s])\
     \n\nsyscount_txtimestamp_diff (hex) : %16lx                   (Dec : %16ld)\
-    \n\n", error_count, tstamp_future_error_count, axi4l_read_error_count, my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv, diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
+    \n\n", error_count, sw_time_gap_error_count, tstamp_future_error_count, axi4l_read_error_count, xdma_consume_time_pre_error_count, xdma_consume_time_post_error_count, my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv, diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
     diff_syscount_txtimestamp, diff_syscount_txtimestamp);
 }
 
