@@ -110,7 +110,6 @@ struct reginfo reg_tx[] = {
 /*****************************************************************************/
 
 void xdma_signal_handler(int sig) {
-
     printf("\nXDMA-APP is exiting, cause (%d)!!\n", sig);
     tx_thread_run = 0;
     sleep(1);
@@ -200,852 +199,1112 @@ int process_main_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
 int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
 #endif
 
-/******************************************************************************
- *                                                                            *
- *                            Function Prototypes                             *
- *                                                                            *
- ******************************************************************************/
-// Function Prototypes of Process Main
-int process_main_tx_timestamp_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
-int process_main_fpga_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
-int process_main_xdma_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
-int process_main_tx_tstamp_replica_fpga_logic_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+/* ================================================================================================================================================ */
+//                                                                                                                                                  //
+//                                                                                                                                                  //
+//                                                      Application SW Codes by Ganghyeok                                                           //
+//                                                                                                                                                  //
+//                                                                                                                                                  //
+/* ================================================================================================================================================ */
 
-// Function Prototypes of Test Applications
-int tx_timestamp_test_app(int data_size);
-int fpga_test_app(void);
-int xdma_rx_test_app(void);
-int tx_tstamp_replica_fpga_logic_test_app(void);
+// ======================================================================================== //
+//                                                                                          //
+//  [1] Function Prototypes                                                                 //
+//                                                                                          //
+// ======================================================================================== //
+    // 1. Function Prototypes which are Commonly Used
+    void common_register_signal_handler(void);
+    void common_signal_stop_handler(void);
+    void common_xdma_signal_handler(int sig);
 
-// Function Prototypes of Common
-void test_app_common(int data_size);
-void error_log_fd_open(void);
-void buffer_allocation(int data_size);
-void ethernet_frame_construction(void);
-void allowed_diff_range_calculation(void);
-void my_signal_stop_handler();
-void my_register_signal_handler();
-void my_xdma_signal_handler(int sig);
-void test_app_exit_task(void);
+    // 2. Function Prototypes of Frame Transmission Test
+    int process_main_frame_transmit_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+    int frame_tx_test_app(int tx_payload_size);
+    void app1_init(int tx_payload_size);
+    void app1_buffer_alloc(int tx_payload_size);
+    void app1_tx_frame_construct(void);
+    void app1_exit_task(void);
 
-void error_occurrence_check(void);
-void error_log_print(void);
-void current_info_print(void);
-void re_init_variables(void);
+    // 2-1. Various Type of Frames
+    void frame_type_datapath_vrfy_1(uint16_t frame_length);
+    void frame_type_datapath_vrfy_2(uint16_t frame_length);
+    void frame_type_ieee802(uint16_t frame_length);
+    void frame_type_vlan(uint16_t frame_length);
+    void frame_type_dix2(uint16_t frame_length);
+    void frame_type_jumbo(uint16_t frame_length);
 
-/******************************************************************************
- *                                                                            *
- *                        Main Command Table (modified)                       *
- *                                                                            *
- ******************************************************************************/
-menu_command_t  mainCommand_tbl[] = {
-    { "run",   EXECUTION_ATTR,   process_main_runCmd, \
-        "   run -m <mode> -f <file name> -s <size>", \
-        "   Run tsn test application with data szie in mode\n"
-        "            <mode> default value: 0 (0: tsn, 1: normal, 2: loopback-integrity check, 3: performance)\n"
-        "       <file name> default value: ./tests/data/datafile0_4K.bin(Binary file for test)\n"
-        "            <size> default value: 1024 (64 ~ 4096)"},
-    {"show",   EXECUTION_ATTR, process_main_showCmd, \
-        "   show register [gen, rx, tx, h2c, c2h, irq, con, h2cs, c2hs, com, msix]\n", \
-        "   Show XDMA resource"},
-    {"set",    EXECUTION_ATTR, process_main_setCmd, \
-        "   set register [gen, rx, tx, h2c, c2h, irq, con, h2cs, c2hs, com, msix] <addr(Hex)> <data(Hex)>\n", \
-        "   set XDMA resource"},
-    {"ts_test", EXECUTION_ATTR, process_main_tx_timestamp_testCmd, \
-        "   ts_test -s <size>", \
-        "   This option was created for the reproduction of the Tx timestamp error issue. (Debugging Purpose)\n"},
-    {"fpga_test", EXECUTION_ATTR, process_main_fpga_testCmd, \
-        "   fpga_test", \
-        "   This option was created for Register Read of FPGA\n"},
-    {"xdma_rx_test", EXECUTION_ATTR, process_main_xdma_testCmd, \
-    "   xdma_rx_test", \
-    "   This option was created for Test of xdma rx\n"},
-    {"tx_tstamp_replica_fpga_logic_test", EXECUTION_ATTR, process_main_tx_tstamp_replica_fpga_logic_testCmd, \
-    "   tx_tstamp replica fpga logic test", \
-    "   This option was created for Test of XDMA's Read Operation Reliability\n"},
-#ifdef ONE_QUEUE_TSN
-    {"test",   EXECUTION_ATTR, process_main_testCmd, \
-        "   test register -c <count>\n", \
-        "   test FPGA register read/write"},
-    { "send",  EXECUTION_ATTR,   process_main_sendCmd, \
-        "   send -f <from_tick> -m <margin>", \
-        "   Send a test packet\n"
-        "       <from_tick> default value: 12500\n"
-        "          <margin> default value: 5000"},
-#endif
-    { 0,           EXECUTION_ATTR,   NULL, " ", " "}
-};
+    // 3. Function Prototypes of Frame Reception Test
+    int process_main_frame_receive_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+    int frame_rx_test_app(void);
+    void app2_init(void);
+    void app2_buffer_alloc(int data_size);
+    void app2_xdma_read(void);
+    void app2_rx_meta_read(void);
+    void app2_rx_frame_read(void);
 
-/******************************************************************************
- *                           Common for Test App                              *
- ******************************************************************************/
-#define TEST_TYPE_TS_TEST               1
-#define TEST_TYPE_FPGA_TEST             2
-#define TEST_TYPE_XDMA_RX_TEST          3
-#define TEST_TYPE_TX_TSTAMP_REPLICA     4
-
-int test_type;   // 0 : ts_test, 1 : fpga_test, 2 : xdma_rx_test, 3 : tx_tstamp_replica_fpga_logic_test
+    // 4. Function Prototypes of Register Read/Write Test
+    int process_main_register_read_write_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+    int register_rw_test_app(void);
 
 
-/******************************************************************************
- *                                                                            *
- *                     Tx Timestamp Test Command Function                     *
- *                                                                            *
- ******************************************************************************/
-/*
- *   This function is created for the reproduction of the Tx timestamp error issue.(Debugging Purpose)
- *   by Ganghyeok Lim (2024.10.07)
- */
-#define TEST_RUN_OPTION_STRING  "s:"
+// ======================================================================================== //
+//                                                                                          //
+//  [2] Common Macro & Variables                                                            //
+//                                                                                          //
+// ======================================================================================== //
 
-int process_main_tx_timestamp_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
-{
-    int data_size = 1024;
-    int arg_flag;
+// ================================================================ //
+//   # Macro definition                                             //
+// ================================================================ //
 
-    while((arg_flag = getopt(argc, (char**)argv, TEST_RUN_OPTION_STRING)) != -1)
+
+// ================================================================ //
+//   # Variable definition                                          //
+// ================================================================ //
+
+// ======================================================================================== //
+//                                                                                          //
+//  [3] Common Functions                                                                    //
+//                                                                                          //
+// ======================================================================================== //
+
+// ================================================================ //
+//   # Register Signal Handler                                      //
+// ================================================================ //
+    // 1. Common Register Signal Handler
+    void common_register_signal_handler(void)
     {
-        switch(arg_flag)
-        {
-            case 's' :
-                if(str2int(optarg, &data_size) != 0)
-                {
-                    printf("Invalid parameter given or out of range for '-s'.");
-                    return -1;
-                }
-                if ((data_size < 64) || (data_size > MAX_BUFFER_LENGTH))
-                {
-                    printf("Data size %d is out of range.", data_size);
-                    return -1;
-                }
+        signal(SIGINT,  common_signal_stop_handler);
+        signal(SIGKILL, common_xdma_signal_handler);
+        signal(SIGQUIT, common_xdma_signal_handler);
+        signal(SIGTERM, common_xdma_signal_handler);
+        signal(SIGTSTP, common_xdma_signal_handler);
+        signal(SIGHUP,  common_xdma_signal_handler);
+        signal(SIGABRT, common_xdma_signal_handler);
+    }
 
-                break;
+    // 2. Common Signal Stop Handler
+    void common_signal_stop_handler(void)
+    {
+        if(watchStop) {
+            common_xdma_signal_handler(2);
+        } else {
+            watchStop = 1;
         }
     }
 
-    return tx_timestamp_test_app(data_size);
-}
+    // 3. Common XDMA Signal Handler
+    void common_xdma_signal_handler(int sig)
+    {
+        printf("\nXDMA-APP is exiting, cause (%d)!!\n", sig);
+        sleep(1);
+        app1_exit_task();
+        printf("Tasks for Exit are Done!\n\n");
+        sleep(1);
+        exit(0);
+    }
 
 
-/******************************************************************************
- *                                                                            *
- *                  Tx Timestamp Test Application Function                    *
- *                                                                            *
- ******************************************************************************/
-/* User configurable Macro definition */
-#define TEST_INTERVAL_MS            (INTERVAL_10MS)
-#define TOLERANCE_PERCENT           (100)
 
-/* Macro definition */
-#define MY_BUFFER_ALIGNMENT         (512)
-#define INTERVAL_1000MS             (1000UL)
-#define INTERVAL_100MS              (100UL)
-#define INTERVAL_10MS               (10UL)
-#define TICK_1000MSEC               (125000000UL)
-#define TICK_100MSEC                (12500000UL)
-#define TICK_10MSEC                 (1250000UL)
-#define NUM_ERROR_LOG               (1000UL)
-#define FLAG_SET                    (1)
-#define FLAG_CLEAR                  (0)
+// ======================================================================================== //
+//                                                                                          //
+//  [3] Process Main Function's Definition                                                  //
+//                                                                                          //
+// ======================================================================================== //
+    #define FRAME_TRANSMIT_TEST_RUN_OPTION_STRING  "s:"
 
-/* Structure for Tx argument */
-typedef struct my_tx_arg {
-    char devname[MAX_DEVICE_NAME];
-    int size;
-} my_tx_arg_t;
-
-
-/* Global variables for Tx  */
-char*           my_buffer;              // Buffer used for Packet transmission
-int             my_tx_xdma_fd;          // File descriptor for XDMA
-my_tx_arg_t     my_tx_arg_data;         // Tx argument structure (XDMA Device name, size of data to Tx)
-stats_t         my_tx_stats;            // Tx Statistics structure
-uint64_t        tx_length;              // Data size to Tx (Metadata + Ethernet Frame)
-uint64_t        tx_index = 1;           // Index of Transmission
-uint64_t        bytes_tr;               // Transmitted Byte for each XDMA write
-int             xdma_write_status;      // Status of XDMA write api
-
-/* Global variables for Syscount & Tx Timestamp  */
-uint64_t        my_syscount, my_syscount_prv;                                   // Syscount of current & previous
-uint64_t        my_tx_timestamp, my_tx_timestamp_prv;                           // Tx Timestamp of current & previous
-uint64_t        diff_syscount, diff_tx_timestamp, diff_syscount_txtimestamp;    // Difference of Syscount & Tx Timestamp
-uint64_t        time_interval_ms = TEST_INTERVAL_MS;                            // Transmission time interval (unit : ms)
-uint64_t        ideal_diff;                                                     // Ideal difference value for selected Time interval
-uint64_t        ten_percent_of_ideal_diff;                                      // 10% value of Ideal difference value
-uint64_t        tx_timestamp_diff_allowed_min, tx_timestamp_diff_allowed_max; // Allowed min/max value of Tx Timestamp Difference
-
-/* Global variables for Error Information */
-uint8_t         error_flag = 0;
-uint8_t         error_type = 0;
-uint64_t        error_count = 0;                        // The number of count that Error occurs
-FILE*           error_log_fd;                           // File descriptor for error log text file
-uint64_t        axi4l_read_error_count = 0;
-uint64_t        tstamp_future_error_count = 0;
-uint64_t        sw_time_gap_error_count = 0;
-uint64_t        xdma_consume_time_pre_error_count = 0;
-uint64_t        xdma_consume_time_post_error_count = 0;
-
-// Raspberry pi 5 System time
-time_t          my_time;
-struct tm       tm_now;
-struct tm       tm_prv;
-
-/* Microsecond Time Count */
-struct timeval  tv;
-double          rasp_time, rasp_time_prv;
-double          rasp_time_diff;
-
-
-int tx_timestamp_test_app(int data_size)
-{
-    test_type = TEST_TYPE_TS_TEST;
-
-    // 1. Process Common Task for Test Application
-    test_app_common(data_size);
-
-    // 2. Allocate buffer for Tx
-    buffer_allocation(data_size);
+    // 1. Process Main Function of Frame Transmission Test
+    int process_main_frame_transmit_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
+    {
+        int tx_payload_size = 1024;
+        int arg_flag;
     
-    // 3. Construct Ethernet Frame to Transmit
-    ethernet_frame_construction();
-
-    // 4. Calculate Allowed Range of Diff value, based on Tolerance & Time Interval (from User)
-    allowed_diff_range_calculation();
-
-    while(1)
-    {
-        // 13-1. Show Transmission Index
-        printf("[ %ldth Tx ]", tx_index);
-
-        // 13-2. Do XDMA Write
-        xdma_write_status = xdma_api_write_from_buffer_with_fd(my_tx_arg_data.devname, my_tx_xdma_fd, (char *)my_buffer, tx_length, &bytes_tr);
-        if(xdma_write_status != 0)
+        while((arg_flag = getopt(argc, (char**)argv, FRAME_TRANSMIT_TEST_RUN_OPTION_STRING)) != -1)
         {
-            printf("XDMA Write : Failed\n");
-        }
-
-        // 13-3. Increase Statistics (Tx packets, Bytes)
-        my_tx_stats.txPackets++;
-        my_tx_stats.txBytes += bytes_tr;
-
-        // 13-4. Get System Count & Tx Timestamp
-        my_syscount     = get_sys_count();
-        my_tx_timestamp = get_tx_timestamp(1);
-
-        // 13-5. Calculate diff of System count & Tx Timestamp
-        diff_syscount               = my_syscount - my_syscount_prv;
-        diff_tx_timestamp           = my_tx_timestamp - my_tx_timestamp_prv;
-        diff_syscount_txtimestamp   = my_syscount - my_tx_timestamp;
-
-        // 13-6. Check whether Error Occurred or not
-        if(tx_index > 1)
-        {
-            error_occurrence_check();
-        }
-
-        // 13-7. Get Current Raspberry PI5 Time
-        my_time = time(NULL);
-        tm_now  = *localtime(&my_time);
-
-        // 13-8. Calculate diff of Raspberry PI5 Time
-        gettimeofday(&tv, NULL);
-        rasp_time = (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000;   // unit : [ms]
-        rasp_time_diff = rasp_time - rasp_time_prv;             // unit : [ms]
-
-        // 13-9. If Error occurs, Save Error log to Text File
-        if((tx_index > 1) && (error_flag == FLAG_SET))
-        {
-            error_log_print();
-            error_count++;
-        }
-
-        // 13-10. Print Information of Current Transmission
-        current_info_print();
-
-        // 13-11. Initialize variable for Next transmission
-        re_init_variables();
-        tx_index++;
-
-        // 13-12. Sleep
-        usleep(time_interval_ms*1000);
-    }
-
-    return 0;
-}
-
-
-/******************************************************************************
- *                                                                            *
- *                        FPGA Test Application Function                      *
- *                                                                            *
- ******************************************************************************/
-int fpga_test_app(void)
-{
-    uint32_t    my_32bit;
-    uint32_t    hour, minute, second;
-    uint32_t    test_write_data = 0;
-
-    test_type = TEST_TYPE_FPGA_TEST;
+            switch(arg_flag)
+            {
+                case 's' :
+                    if(str2int(optarg, &tx_payload_size) != 0)
+                    {
+                        printf("Invalid parameter given or out of range for '-s'.");
+                        return -1;
+                    }
+                    if ((tx_payload_size < 64) || (tx_payload_size > MAX_BUFFER_LENGTH))
+                    {
+                        printf("Data size %d is out of range.", tx_payload_size);
+                        return -1;
+                    }
     
-    while(1)
-    {
-        hour = get_register(REG_TIME_HOUR);
-        minute = get_register(REG_TIME_MINUTE);
-        second = get_register(REG_TIME_SECOND);
-
-        printf("============= Counter & Clock =============\n");
-        printf("// FPGA Run Time => %02ld : %02ld : %02ld\n\n", hour, minute, second);
-
-        printf("// Up Counter\n");
-        my_32bit = get_register(REG_UP_COUNTER_HIGH);
-        printf("REG_UP_COUNTER_HIGH   : %010ld\n", my_32bit);
-        my_32bit = get_register(REG_UP_COUNTER_LOW);
-        printf("REG_UP_COUNTER_LOW    : %010ld\n\n", my_32bit);
-
-        printf("// Down Counter\n");
-        my_32bit = get_register(REG_DN_COUNTER_HIGH);
-        printf("REG_DOWN_COUNTER_HIGH : %010ld\n", my_32bit);
-        my_32bit = get_register(REG_DN_COUNTER_LOW);
-        printf("REG_DOWN_COUNTER_LOW  : %010ld\n\n", my_32bit);
-
-        for(int i = 0; i < 8; i++)
-        {
-            set_register(REG_SCRATCH1 + 4*i, test_write_data);
-            usleep(10);
-            my_32bit = get_register(REG_SCRATCH1 + 4*i);
-            printf("Data in Scratch Register%d : %010ld\n", (i+1), my_32bit);
+                    break;
+            }
         }
 
-        printf("\n\n");
-
-        test_write_data += 10;
-
-        usleep(100*1000);
+        return frame_tx_test_app(tx_payload_size);
     }
-
-    return 0;
-}
-
-
-/******************************************************************************
- *                                                                            *
- *                      XDMA RX Test Application Function                     *
- *                                                                            *
- ******************************************************************************/
-#define BUF_ALIGN       (16)     // 16Byte Alignment
-
-int xdma_rx_test_app(void)
-{
-    char my_devname[MAX_DEVICE_NAME];
-    int my_rx_xdma_fd;
-    int data_size = 16;     // 16 Byte (= 128bit)
-    int bytes_rcv = 0;
-
-    test_type = TEST_TYPE_XDMA_RX_TEST;
-
-    // 1. Register signal handler
-    register_signal_handler();
-
-    // 2. Enable TEMAC & XDMA
-    set_register(REG_TSN_CONTROL, 1);
-
-    // 3. Allocate buffer for Rx (Size : 16Byte)
-    if(posix_memalign((void **)&my_buffer, BUF_ALIGN /* alignment : 16 Bytes */, data_size /* data_size : 16 Bytes (= 128bits) */))
+    
+    // 2. Process Main Function of Frame Reception Test
+    int process_main_frame_receive_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
     {
-        printf("Buffer allocation : Failed\n");
-        return -1;
+        return frame_rx_test_app();
     }
-    else
+    
+    // 3. Process Main Function of Register Read/Write Test
+    int process_main_register_read_write_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
     {
-        printf("Buffer allocation : Success\n");
-        printf("My buffer address : %p\n", my_buffer);
-        printf("Buffer Mem align : %d\n", BUF_ALIGN);
-        memset(my_buffer, 0, data_size);
+        return register_rw_test_app();
     }
+    
 
-    // 4. Config XDMA Device name
-    memcpy(my_devname, DEF_RX_DEVICE_NAME, sizeof(DEF_RX_DEVICE_NAME));
+// ======================================================================================== //
+//                                                                                          //
+//  [4] Main Command Table                                                                  //
+//                                                                                          //
+// ======================================================================================== //
+    menu_command_t  mainCommand_tbl[] = {
+        { "run",   EXECUTION_ATTR,   process_main_runCmd, \
+            "   run -m <mode> -f <file name> -s <size>", \
+            "   Run tsn test application with data szie in mode\n"
+            "            <mode> default value: 0 (0: tsn, 1: normal, 2: loopback-integrity check, 3: performance)\n"
+            "       <file name> default value: ./tests/data/datafile0_4K.bin(Binary file for test)\n"
+            "            <size> default value: 1024 (64 ~ 4096)"},
+        {"show",   EXECUTION_ATTR, process_main_showCmd, \
+            "   show register [gen, rx, tx, h2c, c2h, irq, con, h2cs, c2hs, com, msix]\n", \
+            "   Show XDMA resource"},
+        {"set",    EXECUTION_ATTR, process_main_setCmd, \
+            "   set register [gen, rx, tx, h2c, c2h, irq, con, h2cs, c2hs, com, msix] <addr(Hex)> <data(Hex)>\n", \
+            "   set XDMA resource"},
+        {"tx_test", EXECUTION_ATTR, process_main_frame_transmit_testCmd, \
+            "   tx_test -s <size>", \
+            "   This option was created for Frame Transmission Test of Re-Designed 1Q TSN IP\n"
+            "   (Allowed Payload Size is between 64 and 2048)"},
+        {"rx_test", EXECUTION_ATTR, process_main_frame_receive_testCmd, \
+            "   rx_test", \
+            "   This option was created for Frame Reception Test of Re-Designed 1Q TSN IP\n"},
+        {"reg_test", EXECUTION_ATTR, process_main_register_read_write_testCmd, \
+            "   reg_test", \
+            "   This option was created for Register Read/Write Test of Re-Designed 1Q TSN IP\n"}, 
+    #ifdef ONE_QUEUE_TSN
+        {"test",   EXECUTION_ATTR, process_main_testCmd, \
+            "   test register -c <count>\n", \
+            "   test FPGA register read/write"},
+        { "send",  EXECUTION_ATTR,   process_main_sendCmd, \
+            "   send -f <from_tick> -m <margin>", \
+            "   Send a test packet\n"
+            "       <from_tick> default value: 12500\n"
+            "          <margin> default value: 5000"},
+    #endif
+        { 0,           EXECUTION_ATTR,   NULL, " ", " "}
+    };
 
-    // 14. Open XDMA Device
-    if(xdma_api_dev_open(my_devname, 0 /* eop_flush */, &my_rx_xdma_fd)) {
-        printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", my_devname);
-        printf("<<< %s\n", __func__);
-        return NULL;
-    }
-    else
+
+// ======================================================================================== //
+//                                                                                          //
+//  [5-1] Test App 1  :  Frame Transmission Test                                            //
+//                                                                                          //
+// ======================================================================================== //
+
+// ================================================================ //
+//   # Macro definition                                             //
+// ================================================================ //
+    // Constant Macro
+    #define APP1_BUFFER_ALIGN               (4096)
+    #define FRAME_TYPE_DATAPATH_VRFY_1      (0)
+    #define FRAME_TYPE_DATAPATH_VRFY_2      (1)
+    #define FRAME_TYPE_IEEE802              (2)
+    #define FRAME_TYPE_VLAN                 (3)
+    #define FRAME_TYPE_DIX2                 (4)
+    #define FRAME_TYPE_JUMBO                (5)
+
+
+    // User Parameter Macro
+    #define APP1_SLEEP_TIME_MS              (10000)                     // Frame Transmission Gap
+    #define FRAME_TYPE                      (FRAME_TYPE_IEEE802)        // Frame Type
+    #define FRAME_LENGTH                    (1500)
+    #define TIMESTMAP_ID                    (3)
+    #define POLICY                          (1)
+
+// ================================================================ //
+//   # Variable definition                                          //
+// ================================================================ //
+    // 1. Structure for Frame Transmission
+    typedef struct app1_frame_tx_arg {
+        char devname[MAX_DEVICE_NAME];
+        int size;
+    } app1_frame_tx_arg_t;
+
+    // 2. Pointer of Frame Transmission Buffer
+    char*                   app1_buffer;
+
+    // 3. H2C File Descriptor of XDMA
+    int                     app1_xdma_h2c_fd;
+
+    // 4. Frame Transmission Argument Structure
+    app1_frame_tx_arg_t     app1_frame_tx_arg_structure;
+
+    // 5. Stats of XDMA
+    stats_t                 app1_xdma_stats;
+
+    // 6. Frame Transmission Length ("2 * 128-bit" + "Payload Size")
+    uint64_t                app1_frame_tx_length;
+
+    // 7. Frame Transmission Index
+    uint32_t                app1_frame_tx_index = 1;
+
+    // 8. The Number of Byte Transmitted by the Prior XDMA Write Operation
+    uint64_t                app1_bytes_transmitted;
+
+    // 9. XDMA Write Status
+    int                     app1_xdma_write_status;
+
+    // 10. Sleep Time [ms]
+    uint64_t                app1_sleep_time_ms = APP1_SLEEP_TIME_MS;
+
+    // 11. XDMA Write Index
+    uint64_t                app1_xdma_write_index = 1;
+
+// ================================================================ //
+//   # Frame Transmission Test App Function Definition              //
+// ================================================================ //
+    int frame_tx_test_app(int tx_payload_size)
     {
-        printf("Open XDMA : Success\n\n");
-    }
+        // 1. Process Common Task for Test Application
+        app1_init(tx_payload_size);
 
-    while(1)
-    {
-        xdma_write_status = xdma_api_read_to_buffer_with_fd(my_devname, my_rx_xdma_fd, (char *)my_buffer, (data_size), &bytes_rcv);
-        if(xdma_write_status == 0)
+        // 2. Allocate Buffer for Tx
+        app1_buffer_alloc(tx_payload_size);
+
+        // 3. Construct Ethernet Frame to Transmit
+        app1_tx_frame_construct();
+
+        while(1)
         {
-            // printf("XDMA Write : Success\n");
+            printf("====== %lu[th] XDMA Write ======\n", app1_xdma_write_index++);
+
+            // 1. XDMA Write Operation
+            app1_xdma_write_status = xdma_api_write_from_buffer_with_fd(app1_frame_tx_arg_structure.devname, app1_xdma_h2c_fd, (char *)app1_buffer, app1_frame_tx_length, &app1_bytes_transmitted);
+            if(app1_xdma_write_status != 0)
+            {
+                printf("XDMA Write : Failed\n");
+            }
+            else
+            {
+                printf("XDMA Write : Success\n");
+            }
+
+            printf("Byte Transmitted : %lu\n\n", app1_bytes_transmitted);
+
+            usleep(app1_sleep_time_ms*1000);
+        }
+    }
+
+// ================================================================ //
+//   # Frame Transmission Test Helper Function                      //
+// ================================================================ //
+    // 1. Init Function of Frame Transmission Test App
+    void app1_init(int tx_payload_size)
+    {
+        // 1. Initialize Structures
+        memset(&app1_frame_tx_arg_structure, 0, sizeof(app1_frame_tx_arg_t));
+        memset(&app1_xdma_stats, 0, sizeof(stats_t));
+        
+        // 2. Register Signal Handler
+        common_register_signal_handler();
+
+        // 3. Enable 1Q TSN Logic
+        // TBD
+
+        // 4. Config XDMA Device Name & Transmission Payload Size to the Frame Transmission Argument Structure
+        memcpy(app1_frame_tx_arg_structure.devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
+        app1_frame_tx_arg_structure.size = tx_payload_size;
+
+        // 5. Open H2C Engine of XDMA & Get the File Descriptor of XDMA H2C
+        if(xdma_api_dev_open(app1_frame_tx_arg_structure.devname, 0 /* eop_flush */, &app1_xdma_h2c_fd)) {
+            printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", app1_frame_tx_arg_structure.devname);
+            printf("<<< %s\n", __func__);
+            return NULL;
         }
         else
         {
-            printf("XDMA Write : Failed\n");
+            printf("Open XDMA : Success\n\n");
         }
+    }
 
-        for (int i = 0; i < data_size; i++) {
-            printf("%02X ", (unsigned char)my_buffer[i]);
-        }
-        printf("  => Rx Byte : %d", bytes_rcv);
-        printf("\n");
-
-        bytes_rcv = 0;
-        usleep(20*1000);
-    }    
-
-    return 0;
-}
-
-
-/******************************************************************************
- *                                                                            *
- *         Tx Timestamp Replica FPGA Logic Test Application Function          *
- *                                                                            *
- ******************************************************************************/
-int tx_tstamp_replica_fpga_logic_test_app(void)
-{
-    test_type = TEST_TYPE_TX_TSTAMP_REPLICA;
-
-    // 1. Process Common Task for Test Application
-    test_app_common(0);
-
-    // 2. Calculate Allowed Range of Diff value, based on Tolerance & Time Interval (from User)
-    allowed_diff_range_calculation();
-
-    while(1)
+    // 2. Buffer Allocation Function
+    void app1_buffer_alloc(int tx_payload_size)
     {
-        // 3-1. Show Transmission Index
-        printf("Replica's %ldth Tx ", tx_index);
-
-        // 3-2. Set Tx Start bit
-        set_register(REG_TX_START_CONFIG, 1);
-
-        // 3-3. Increase Statistics (Tx packets, Bytes)
-        my_tx_stats.txPackets++;
-
-        // 3-4. Get System Count & Tx Timestamp
-        my_syscount     = ((uint64_t)get_register(REG_SYSCLOCK_UPPER) << 32) | get_register(REG_SYSCLOCK_LOWER);
-        my_tx_timestamp = ((uint64_t)get_register(REG_TX_TSTAMP_UPPER) << 32) | get_register(REG_TX_TSTAMP_LOWER);
-
-        // 3-5. Calculate diff of System count & Tx Timestamp
-        diff_syscount               = my_syscount - my_syscount_prv;
-        diff_tx_timestamp           = my_tx_timestamp - my_tx_timestamp_prv;
-        diff_syscount_txtimestamp   = my_syscount - my_tx_timestamp;
-
-        // 3-6. Check whether Error Occurred or not
-        error_occurrence_check();
-
-        // 3-7. Get Current Raspberry PI5 Time
-        my_time = time(NULL);
-        tm_now  = *localtime(&my_time);
-
-        // 3-8. Calculate diff of Raspberry PI5 Time
-        gettimeofday(&tv, NULL);
-        rasp_time = (tv.tv_sec) * 1000 + (tv.tv_usec) / 1000;   // unit : [ms]
-        rasp_time_diff = rasp_time - rasp_time_prv;             // unit : [ms]
-
-        // 3-9. If Error occurs, Save Error log to Text File
-        if((tx_index > 1) && (error_flag == FLAG_SET))
+        if(posix_memalign((void **)&app1_buffer, APP1_BUFFER_ALIGN /*alignment : 64 Bytes*/, (tx_payload_size*2)))
         {
-            error_log_print();
-            error_count++;
+            printf("Buffer allocation : Failed\n");
+            return -1;
+        }
+        else
+        {
+            printf("Buffer allocation : Success\n");
+            printf("Frame Transmission Buffer Address : %p\n", app1_buffer);
+            printf("Buffer Mem Align : %d\n", APP1_BUFFER_ALIGN);
+            memset(app1_buffer, 0, tx_payload_size);
+        }
+    }
+
+    // 3. Construct Frame to Transmit
+    void app1_tx_frame_construct(void)
+    {
+        struct tsn_tx_buffer*   app1_tx_buffer   = (struct tsn_tx_buffer*)app1_buffer;
+
+    // ================================================================= //
+    //                      Metadata1 Construnction                      //
+    // ================================================================= //
+        // Metadata1 Construction (=> From(64-bit) + To(64-bit) + Delay From(64-bit) + Delay To(64-bit))
+        // uint32_t tick_from          = 0x11111111;
+        // uint32_t tick_to            = 0x33333333;
+        uint32_t tick_from          = 0;
+        uint32_t tick_to            = (uint32_t)(0xFFFFFFFF);
+        uint32_t tick_delay_from    = 0x55555555;
+        uint32_t tick_delay_to      = 0x77777777;
+
+        // 1. Tick From
+        app1_buffer[0] = (uint8_t)(tick_from >> 24);
+        app1_buffer[1] = (uint8_t)(tick_from >> 16);
+        app1_buffer[2] = (uint8_t)(tick_from >> 8);
+        app1_buffer[3] = (uint8_t)(tick_from);
+
+        // 2. Tick To
+        app1_buffer[4] = (uint8_t)(tick_to >> 24);
+        app1_buffer[5] = (uint8_t)(tick_to >> 16);
+        app1_buffer[6] = (uint8_t)(tick_to >> 8);
+        app1_buffer[7] = (uint8_t)(tick_to);
+
+        // 3. Tick Delay From
+        app1_buffer[8] = (uint8_t)(tick_delay_from >> 24);
+        app1_buffer[9] = (uint8_t)(tick_delay_from >> 16);
+        app1_buffer[10] = (uint8_t)(tick_delay_from >> 8);
+        app1_buffer[11] = (uint8_t)(tick_delay_from);
+
+        // 4. Tick Delay To
+        app1_buffer[12] = (uint8_t)(tick_delay_to >> 24);
+        app1_buffer[13] = (uint8_t)(tick_delay_to >> 16);
+        app1_buffer[14] = (uint8_t)(tick_delay_to >> 8);
+        app1_buffer[15] = (uint8_t)(tick_delay_to);
+
+
+    // ================================================================= //
+    //                      Metadata2 Construnction                      //
+    // ================================================================= //
+        uint16_t frame_length = FRAME_LENGTH;
+        uint16_t tstamp_id = TIMESTMAP_ID;
+        uint8_t policy = POLICY;
+
+        app1_buffer[16] = (uint8_t)(frame_length >> 8);
+        app1_buffer[17] = (uint8_t)(frame_length);
+        app1_buffer[18] = (uint8_t)(tstamp_id >> 8);
+        app1_buffer[19] = (uint8_t)(tstamp_id);
+        app1_buffer[20] = (uint8_t)(policy);
+
+        app1_buffer[21] = (uint8_t)(0);
+        app1_buffer[22] = (uint8_t)(0);
+        app1_buffer[23] = (uint8_t)(0);
+
+        app1_buffer[24] = (uint8_t)(0);
+        app1_buffer[25] = (uint8_t)(0);
+        app1_buffer[26] = (uint8_t)(0);
+        app1_buffer[27] = (uint8_t)(0);
+        app1_buffer[28] = (uint8_t)(0);
+        app1_buffer[29] = (uint8_t)(0);
+        app1_buffer[30] = (uint8_t)(0);
+        app1_buffer[31] = (uint8_t)(0);
+
+        // 3. Frame Construction
+        uint8_t frame_type = FRAME_TYPE;
+
+        switch(frame_type)
+        {
+            case FRAME_TYPE_DATAPATH_VRFY_1 :
+                frame_type_datapath_vrfy_1(frame_length);
+                break;
+
+            case FRAME_TYPE_DATAPATH_VRFY_2 :
+                frame_type_datapath_vrfy_2(frame_length);
+                break;
+
+            case FRAME_TYPE_IEEE802 :
+                frame_type_ieee802(frame_length);
+                break;
+
+            case FRAME_TYPE_VLAN    :
+                frame_type_vlan(frame_length);
+                break;
+
+            case FRAME_TYPE_DIX2    :
+                frame_type_dix2(frame_length);
+                break;
+
+            case FRAME_TYPE_JUMBO   :
+                frame_type_jumbo(frame_length);
+                break;
         }
 
-        // 3-10. Print Information of Current Transmission
-        current_info_print();
+        // 4. Tx Frame Length
+        app1_frame_tx_length = frame_length + 32;   // 32 : Metadata 1, Metadata2
 
-        // 3-11. Initialize variable for Next transmission
-        re_init_variables();
-        tx_index++;
-
-        // 3-12. Clear Tx Start bit
-        set_register(REG_TX_START_CONFIG, 0);
-
-        // 3-13. Wait for Specifed Time Value
-        usleep(time_interval_ms*1000);
+        usleep(10*1000);
     }
 
-    return 0;
-}
-
-/******************************************************************************
- *                                                                            *
- *                            Process Main Function                           *
- *                                                                            *
- ******************************************************************************/
-
-int process_main_fpga_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
-{
-    return fpga_test_app();
-}
-
-int process_main_xdma_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
-{
-    return xdma_rx_test_app();
-}
-
-int process_main_tx_tstamp_replica_fpga_logic_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
-{
-    return tx_tstamp_replica_fpga_logic_test_app();
-}
-
-
-/******************************************************************************
- *                                                                            *
- *                   Common Function used in Test Application                 *
- *                                                                            *
- ******************************************************************************/
-void test_app_common(int data_size)
-{
-    // 1. Initialize Structures
-    memset(&my_tx_arg_data, 0, sizeof(my_tx_arg_t));
-    memset(&my_tx_stats,    0, sizeof(stats_t));
-    memset(&tm_now, 0, sizeof(tm_now));
-    memset(&tm_prv, 0, sizeof(tm_prv));
-
-    // 2. Register Signal Handler
-    my_register_signal_handler();
-
-    // 3. Enable TEMAC & XDMA
-    set_register(REG_TSN_CONTROL, 1);
-
-    // 4. Get Current Raspbian OS Time
-    my_time = time(NULL);
-    tm_now = *localtime(&my_time);
-
-    // 5. Open Text File for Error Log
-    error_log_fd_open();
-
-    // 6. Config XDMA Device Name & Transmission Data Size from User
-    memcpy(my_tx_arg_data.devname, DEF_TX_DEVICE_NAME, sizeof(DEF_TX_DEVICE_NAME));
-    my_tx_arg_data.size = data_size;
-
-    // 7. Open XDMA Device and Get File Descriptor of it
-    if(xdma_api_dev_open(my_tx_arg_data.devname, 0 /* eop_flush */, &my_tx_xdma_fd)) {
-        printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", my_tx_arg_data.devname);
-        printf("<<< %s\n", __func__);
-        fprintf(error_log_fd, "Open XDMA : Failed\n\n");
-        return NULL;
-    }
-    else
-    {
-        printf("Open XDMA : Success\n\n");
-        fprintf(error_log_fd, "Open XDMA : Success\n\n");
-    }
-}
-
-void error_log_fd_open(void)
-{
-    // 1. Open File Descrpitor of Error Log Text File
-    error_log_fd = fopen("Tx Timestamp Error Log.txt", "w");
-    if(error_log_fd == NULL)
-    {
-        printf("Cannot Open error log file!\n");
-
-        return -1;
-    }
-
-    // 2. Write Packet Transmission Interval & Test Start Time
-    fprintf(error_log_fd, "==================== Tx Timestamp Error Log ====================\n");
-    fprintf(error_log_fd, "Packet transmission interval : %ld[ms]\n", time_interval_ms);
-    fprintf(error_log_fd, "Test start time : %d-%d-%d %d:%d:%d\n", tm_now.tm_year+1900, tm_now.tm_mon+1, tm_now.tm_mday, tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec);
-}
-
-void buffer_allocation(int data_size)
-{
-    if(posix_memalign((void **)&my_buffer, MY_BUFFER_ALIGNMENT /*alignment : 64 Bytes*/, (data_size*2)))
-    {
-        printf("Buffer allocation : Failed\n");
-        return -1;
-    }
-    else
-    {
-        printf("Buffer allocation : Success\n");
-        printf("My buffer address : %p\n", my_buffer);
-        printf("Buffer Mem align : %d\n", MY_BUFFER_ALIGNMENT);
-        fprintf(error_log_fd, "Buffer allocation : Success\n");
-        fprintf(error_log_fd, "My buffer address : %p\n", my_buffer);
-        fprintf(error_log_fd, "Buffer Mem align : %d\n", MY_BUFFER_ALIGNMENT);
-        memset(my_buffer, 0, data_size);
-    }
-}
-
-void ethernet_frame_construction(void)
-{
-    // 1. Specify the Start Address of Each Section (Metadata, Frame Data)
-    struct tsn_tx_buffer* my_tx_buffer  = (struct tsn_tx_buffer*)my_buffer;
-    struct tx_metadata* my_tx_metadata  = &my_tx_buffer->metadata;
-    uint8_t* my_tx_frame                = (uint8_t*)&my_tx_buffer->data;
-    struct ethernet_header* my_tx_eth   = (struct ethernet_header*)my_tx_frame;
-
-    // 2. Config Timestamp ID & Ethernet Frame Length
-    my_tx_metadata->timestamp_id    = 1;
-    my_tx_metadata->fail_policy     = 0;
-    my_tx_metadata->frame_length    = my_tx_arg_data.size;
-    my_tx_metadata->from.tick       = (uint32_t)(0);            // from : 0, to : 0x1FFFFFFF => Packet transmission is always possible (at any time)
-    my_tx_metadata->to.tick         = (uint32_t)(0x1FFFFFFF);
-
-    // 3. Config Source/Destination MAC
-    static const char* myMAC    = "\x00\x11\x22\x95\x30\x23";   // My MAC address
-    static const char* desMAC   = "\xFF\xFF\xFF\xFF\xFF\xFF";   // Broadcast MAC address
-    memcpy(&(my_tx_eth->dmac), desMAC, 6);
-    memcpy(&(my_tx_eth->smac), myMAC, 6);
-
-    // 4. Config Transmission Data Length
-    tx_length = sizeof(my_tx_buffer->metadata) + my_tx_buffer->metadata.frame_length;
-}
-
-void allowed_diff_range_calculation(void)
-{   
-    // 1. Determine Ideal Diff value from Ethernet Frame Transmission Time Interval
-    if(time_interval_ms      == INTERVAL_1000MS) ideal_diff = TICK_1000MSEC;        // When sleep time is 1000[ms]
-    else if(time_interval_ms == INTERVAL_100MS)  ideal_diff = TICK_100MSEC;         // When sleep time is 100[ms]
-    else if(time_interval_ms == INTERVAL_10MS)   ideal_diff = TICK_10MSEC;          // When sleep time is 10[ms]
-
-    // 2. Calculate Allowed Range of Diff Value
-    ten_percent_of_ideal_diff = ideal_diff * ((double)TOLERANCE_PERCENT / 100.);    // Allowed tolerance is 10% of ideal difference (between current & previous Tx Timestamp value)
-    tx_timestamp_diff_allowed_min  = ideal_diff;                                    // Allowed minimum value of Tx Timestamp
-    tx_timestamp_diff_allowed_max  = ideal_diff + ten_percent_of_ideal_diff;        // Allowed maximum value of Tx Timestamp
-}
-
-void my_signal_stop_handler() {
-
-    if(watchStop) {
-        my_xdma_signal_handler(2);
-    } else {
-        watchStop = 1;
-    }
-}
-
-void my_register_signal_handler() {
-
-    signal(SIGINT,  my_signal_stop_handler);
-    signal(SIGKILL, my_xdma_signal_handler);
-    signal(SIGQUIT, my_xdma_signal_handler);
-    signal(SIGTERM, my_xdma_signal_handler);
-    signal(SIGTSTP, my_xdma_signal_handler);
-    signal(SIGHUP,  my_xdma_signal_handler);
-    signal(SIGABRT, my_xdma_signal_handler);
-}
-
-void my_xdma_signal_handler(int sig)
-{
-    printf("\nXDMA-APP is exiting, cause (%d)!!\n", sig);
-    sleep(1);
-    test_app_exit_task();
-    printf("Tasks for Exit are Done!\n\n");
-    sleep(1);
-    exit(0);
-}
-
-void test_app_exit_task(void)
-{
-    if(test_type == TEST_TYPE_TS_TEST)
+    // 4. Test App1 Exit Process
+    void app1_exit_task(void)
     {
         // Close XDMA device
-        close(my_tx_xdma_fd);
+        close(app1_xdma_h2c_fd);
 
         // Disable TEMAC & XDMA
         set_register(REG_TSN_CONTROL, 0);
 
         // Free buffer
-        free(my_buffer);
+        free(app1_buffer);
+    }
 
-        // Close Text file for logging data
-        fclose(error_log_fd);
-    }
-    else if(test_type == TEST_TYPE_FPGA_TEST)
+    // 5. Frame Construction Type Function : For Datapath Verification 1
+    void frame_type_datapath_vrfy_1(uint16_t frame_length)
     {
-        // Do Nothing
-    }
-    else if(test_type == TEST_TYPE_XDMA_RX_TEST)
-    {
-        free(my_buffer);
-    }
-    else if(test_type == TEST_TYPE_TX_TSTAMP_REPLICA)
-    {
-        // Close Text file for logging data
-        fclose(error_log_fd);
-    }
-}
-
-void error_occurrence_check(void)
-{
-    uint64_t diff_allowed_min, diff_allowed_max;
-    uint8_t syscount_range_over_flag, tx_timestamp_range_over_flag;
-
-    diff_allowed_min = tx_timestamp_diff_allowed_min;
-    diff_allowed_max = tx_timestamp_diff_allowed_max;
-
-    if((diff_syscount < diff_allowed_min) || (diff_syscount > diff_allowed_max))            syscount_range_over_flag = FLAG_SET;
-    else                                                                                    syscount_range_over_flag = FLAG_CLEAR;
-
-    if((diff_tx_timestamp < diff_allowed_min) || (diff_tx_timestamp > diff_allowed_max))    tx_timestamp_range_over_flag = FLAG_SET;
-    else                                                                                    tx_timestamp_range_over_flag = FLAG_CLEAR;
-
-    // 1. Configure Error Condition
-    if(my_tx_timestamp == my_tx_timestamp_prv)
-    {
-        // Error Condition 1 : Current & Previous Tx Timestamp is equal
-        error_flag = FLAG_SET;
-        error_type = 1;
-    }
-    else if(my_tx_timestamp < my_tx_timestamp_prv)
-    {
-        // Error Condition 2 : Current Tx Timestamp is less than Previous
-        error_flag = FLAG_SET;
-        error_type = 2;
-    }
-    else if((syscount_range_over_flag == FLAG_SET) && (tx_timestamp_range_over_flag == FLAG_SET))
-    {
-        // Error Condition 3 : SW Execution Time Gap
-        error_flag = FLAG_SET;
-        error_type = 3;
-        sw_time_gap_error_count++;
-    }
-    else if((syscount_range_over_flag == FLAG_SET) && (tx_timestamp_range_over_flag == FLAG_CLEAR))
-    {
-        if(diff_syscount > (uint64_t)0xFFFFFFFFFFFF)
+        // 1. Frame Construction
+        for(uint16_t i = 0; i < frame_length; i++)
         {
-            // Error Condition 4 : AXI4L Read Transaction Error
-            error_flag = FLAG_SET;
-            error_type = 4;
-            axi4l_read_error_count++;
+            if(i % 16 == 0)
+            {
+                app1_buffer[32+i] = 0xd0;
+            }
+            else if(i % 16 == 15)
+            {
+                app1_buffer[32+i] = (uint8_t)(i / 16);
+            }
+            else
+            {
+                app1_buffer[32+i] = 0x00;
+            }
+        }
+    }
+
+    // 6. Frame Construction Type Function : For Datapath Verification 2
+    void frame_type_datapath_vrfy_2(uint16_t frame_length)
+    {
+        for(uint16_t i = 0; i < frame_length; i++)
+        {
+            if(i % 6 == 0)
+            {
+                app1_buffer[32+i] = 0xAA;
+            }
+            else if(i % 6 == 1)
+            {
+                app1_buffer[32+i] = 0xBB;
+            }
+            else if(i % 6 == 2)
+            {
+                app1_buffer[32+i] = 0xCC;
+            }
+            else if(i % 6 == 3)
+            {
+                app1_buffer[32+i] = 0xDD;
+            }
+            else if(i % 6 == 4)
+            {
+                app1_buffer[32+i] = 0xEE;
+            }
+            else if(i % 6 == 5)
+            {
+                app1_buffer[32+i] = 0xFF;
+            }
+        }
+
+        app1_buffer[32] = 0xbe;
+        app1_buffer[33] = 0xef;
+        app1_buffer[frame_length + 30] = 0xca;
+        app1_buffer[frame_length + 31] = 0xfe;
+    }
+
+    // 7. Frame Construction Type Function : IEEE802.3 Frame
+    void frame_type_ieee802(uint16_t frame_length)
+    {
+        // 1. DMAC
+        app1_buffer[32] = 0xa1;
+        app1_buffer[33] = 0xa2;
+        app1_buffer[34] = 0xa3;
+        app1_buffer[35] = 0xa4;
+        app1_buffer[36] = 0xa5;
+        app1_buffer[37] = 0xa6;
+
+        // 2. SMAC
+        app1_buffer[38] = 0xf1;
+        app1_buffer[39] = 0xf2;
+        app1_buffer[40] = 0xf3;
+        app1_buffer[41] = 0xf4;
+        app1_buffer[42] = 0xf5;
+        app1_buffer[43] = 0xf6;
+
+        // 3. LT_Upper
+        app1_buffer[44] = 0x05;
+        
+        // 4. LT_Lower
+        app1_buffer[45] = 0x21;
+
+        // 5. Payload
+        for(uint16_t i = 0; i < (frame_length-14); i++)
+        {
+            if(i % 6 == 0)
+            {
+                app1_buffer[46+i] = 0xAA;
+            }
+            else if(i % 6 == 1)
+            {
+                app1_buffer[46+i] = 0xBB;
+            }
+            else if(i % 6 == 2)
+            {
+                app1_buffer[46+i] = 0xCC;
+            }
+            else if(i % 6 == 3)
+            {
+                app1_buffer[46+i] = 0xDD;
+            }
+            else if(i % 6 == 4)
+            {
+                app1_buffer[46+i] = 0xEE;
+            }
+            else if(i % 6 == 5)
+            {
+                app1_buffer[46+i] = 0xFF;
+            }
+        }
+
+        app1_buffer[frame_length + 30] = 0xca;
+        app1_buffer[frame_length + 31] = 0xfe;
+    }
+
+    // 8. Frame Construction Type Function : VLAN Frame
+    void frame_type_vlan(uint16_t frame_length)
+    {
+        // 1. DMAC
+        app1_buffer[32] = 0xa1;
+        app1_buffer[33] = 0xa2;
+        app1_buffer[34] = 0xa3;
+        app1_buffer[35] = 0xa4;
+        app1_buffer[36] = 0xa5;
+        app1_buffer[37] = 0xa6;
+
+        // 2. SMAC
+        app1_buffer[38] = 0xf1;
+        app1_buffer[39] = 0xf2;
+        app1_buffer[40] = 0xf3;
+        app1_buffer[41] = 0xf4;
+        app1_buffer[42] = 0xf5;
+        app1_buffer[43] = 0xf6;
+
+        // 3. VLAN Tag Upper/Lower
+        app1_buffer[44] = 0x81;
+        app1_buffer[45] = 0x00;
+
+        // 4. LT Upper/Lower
+        app1_buffer[46] = 0xFF;
+        app1_buffer[47] = 0xFF;
+
+        // 5. Payload
+        for(uint16_t i = 0; i < (frame_length-14); i++)
+        {
+            if(i % 6 == 0)
+            {
+                app1_buffer[48+i] = 0xAA;
+            }
+            else if(i % 6 == 1)
+            {
+                app1_buffer[48+i] = 0xBB;
+            }
+            else if(i % 6 == 2)
+            {
+                app1_buffer[48+i] = 0xCC;
+            }
+            else if(i % 6 == 3)
+            {
+                app1_buffer[48+i] = 0xDD;
+            }
+            else if(i % 6 == 4)
+            {
+                app1_buffer[48+i] = 0xEE;
+            }
+            else if(i % 6 == 5)
+            {
+                app1_buffer[48+i] = 0xFF;
+            }
+        }
+
+        app1_buffer[frame_length + 30] = 0xca;
+        app1_buffer[frame_length + 31] = 0xfe;
+    }
+
+    // 9. Frame Construction Type Function : DIX2.0 Frame (ARP Frame)
+    void frame_type_dix2(uint16_t frame_length)
+    {
+
+    }
+
+    // 10. Frame Construction Type Function : Jumbo Frame (VLAN Frame)
+    void frame_type_jumbo(uint16_t frame_length)
+    {
+
+    }
+
+
+// ======================================================================================== //
+//                                                                                          //
+//  [4-2] Test App 2  :  Frame Reception Test                                               //
+//                                                                                          //
+// ======================================================================================== //
+
+// ================================================================ //
+//   # Macro definition                                             //
+// ================================================================ //
+    // Constant Macro
+    #define APP2_BUFFER_ALIGN               (16)
+    #define APP2_DATA_SIZE                  (16)
+
+    // User Parameter Macro
+    #define APP2_SLEEP_TIME_MS              (10000)
+
+
+// ================================================================ //
+//   # Variable definition                                          //
+// ================================================================ //
+    // 1. Structure for Frame Reception
+    typedef struct app2_frame_rx_arg {
+        char devname[MAX_DEVICE_NAME];
+        int size;
+    } app2_frame_rx_arg_t;
+
+    // 2. Pointer of Frame Reception Buffer
+    char*                   app2_buffer;
+
+    // 3. C2H File Descriptor of XDMA
+    int                     app2_xdma_c2h_fd;
+
+    // 4. Frame Reception Argument Structure
+    app2_frame_rx_arg_t     app2_frame_rx_arg_structure;
+
+    // 5. Stats of XDMA
+    stats_t                 app2_xdma_stats;
+
+    // 6. The Number of Byte Received by the Prior XDMA Read Operation
+    uint64_t                app2_bytes_received;
+
+    // 7. XDMA Read Status
+    int                     app2_xdma_read_status;
+
+    // 8. Sleep Time [ms]
+    uint64_t                app2_sleep_time_ms = APP2_SLEEP_TIME_MS;
+
+    // 9. Rx Frame Index
+    uint32_t                rx_frame_index = 1;
+
+    // 9. Rx Frame 16-Byte Length
+    uint16_t                rx_frame_16byte_length;
+
+// ================================================================ //
+//   # Frame Reception Test App Function Definition                 //
+// ================================================================ //
+    int frame_rx_test_app(void)
+    {
+        // 1. Process Common Task for Test Application
+        app2_init();
+
+        // 2. Allocate Buffer for Rx
+        app2_buffer_alloc(APP2_DATA_SIZE);
+
+        
+        while(1)
+        {
+            app2_rx_meta_read();
+            app2_rx_frame_read();         
+        }
+        
+        return 0;
+    }
+
+// ================================================================ //
+//   # Frame Reception Test Helper Function                         //
+// ================================================================ //
+    // 1. Init Function of Frame Reception Test App
+    void app2_init(void)
+    {
+        // 1. Initialize Structures
+        memset(&app2_frame_rx_arg_structure, 0, sizeof(app2_frame_rx_arg_t));
+        memset(&app2_xdma_stats, 0, sizeof(stats_t));
+
+        // 2. Register Signal Handler
+        common_register_signal_handler();
+
+        // 3. Config XDMA Device Name & Transmission Payload Size to the Frame Transmission Argument Structure
+        memcpy(app2_frame_rx_arg_structure.devname, DEF_RX_DEVICE_NAME, sizeof(DEF_RX_DEVICE_NAME));
+
+        // 4. Open H2C Engine of XDMA & Get the File Descriptor of XDMA H2C
+        if(xdma_api_dev_open(app2_frame_rx_arg_structure.devname, 0 /* eop_flush */, &app2_xdma_c2h_fd)) {
+            printf("FAILURE: Could not open %s. Make sure xdma device driver is loaded and you have access rights (maybe use sudo?).\n", app2_frame_rx_arg_structure.devname);
+            printf("<<< %s\n", __func__);
+            return NULL;
         }
         else
         {
-            // Error Condition 5 : XDMA Transmit Frame and then, XDMA Consume Time
-            error_flag = FLAG_SET;
-            error_type = 5;
-            xdma_consume_time_pre_error_count++;
+            printf("Open XDMA : Success\n\n");
         }
     }
-    else if((syscount_range_over_flag == FLAG_CLEAR) && (tx_timestamp_range_over_flag == FLAG_SET))
+
+    // 2. Buffer Allocation Function
+    void app2_buffer_alloc(int data_size)
     {
-        // Error Condition 6 : At Previous Tx Index, XDMA Transmit Frame and then XDMA Consume Time
-        error_flag = FLAG_SET;
-        error_type = 6;
-        xdma_consume_time_post_error_count++;
-    }
-    else if((syscount_range_over_flag == FLAG_CLEAR) && (tx_timestamp_range_over_flag == FLAG_CLEAR))
-    {
-        if(diff_syscount_txtimestamp > (uint64_t)0xFFFFFFFFFFFF)
+        if(posix_memalign((void **)&app2_buffer, APP2_BUFFER_ALIGN /* alignment : 16 Bytes */, data_size /* data_size : 16 Bytes (= 128bits) */))
         {
-            // Error Condition 7 : Timestamp Future Error Occurred
-            error_flag = FLAG_SET;
-            error_type = 7;
-            tstamp_future_error_count++;
+            printf("Buffer allocation : Failed\n");
+            return -1;
         }
         else
         {
-            // No Error
-            error_flag = FLAG_CLEAR;
-            error_type = 0;
+            printf("Buffer allocation : Success\n");
+            printf("My buffer address : %p\n", app2_buffer);
+            printf("Buffer Mem align : %d\n", APP2_BUFFER_ALIGN);
+            memset(app2_buffer, 0, data_size);
         }
     }
-    else
-    {
-        // Un-Categorized Error
-        error_flag = FLAG_SET;
-        error_type = 8;
-    }
-}
 
-void error_log_print(void)
-{
-    fprintf(error_log_fd, \
-    "\n============================= %ldth Error =============================\
-    \nRaspberry PI5 OS Time                       : %d-%d-%d %d:%d:%d\
-    \nMeasured Transmission Time Gap              : %.1lf[ms]\
-    \n\nTransmission Index                          : %ld\
-    \nTransmitted packet                          : %lld\
-    \n\nsyscount                   (hex)            : %016lx                |  tx_timestamp      (hex) : %016lx\
-    \nsyscount_prv               (hex)            : %016lx                |  tx_timestamp_prv  (hex) : %016lx\
-    \n\nsyscount_diff              (dec)            : %16ld  (%.4lf[s])   |  tx_timestamp_diff (dec) : %16ld (%.4lf[s])\
-    \nsyscount_diff              (hex)            : %16lx  (%.4lf[s])   |  tx_timestamp_diff (hex) : %16lx (%.4lf[s])\
-    \n\nsyscount_txtimestamp_diff  (hex)            : %16lx\
-    \nsyscount_txtimestamp_diff  (dec)            : %16ld\
-    \n", (error_count+1),\
-    tm_now.tm_year+1900, tm_now.tm_mon+1, tm_now.tm_mday, tm_now.tm_hour, tm_now.tm_min, tm_now.tm_sec,\
-    rasp_time_diff,\
-    tx_index, my_tx_stats.txPackets,\
-    my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv,\
-    diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
-    diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
-    diff_syscount_txtimestamp, diff_syscount_txtimestamp);
+    // 3. XDMA Read Function
+    void app2_xdma_read(void)
+    {
+        app2_xdma_read_status = xdma_api_read_to_buffer_with_fd(app2_frame_rx_arg_structure.devname, app2_xdma_c2h_fd, (char *)app2_buffer, APP2_DATA_SIZE, &app2_bytes_received);
 
-    fprintf(error_log_fd, \
-    "\nIdeal Diff                                   : %ld           (=> %.4lf[s])\
-    \nAllowed Tx Timestamp Diff Range (%d%% tor.)  : %ld ~ %ld (=> %.4lf[s])\n\n", ideal_diff, (double)ideal_diff/TICK_1000MSEC, TOLERANCE_PERCENT, tx_timestamp_diff_allowed_min, tx_timestamp_diff_allowed_max, (double)tx_timestamp_diff_allowed_max/TICK_1000MSEC);
-    
-    if(error_type == 1)
-    {
-        fprintf(error_log_fd, "Error Cause : Current & Previous Tx Timestamp is equal\n\n");
+        if(app2_xdma_read_status == 0)
+        {
+            // printf("XDMA Read : Success\n");
+        }
+        else
+        {
+            printf("XDMA Read : Failed\n");
+        }
     }
-    else if(error_type == 2)
-    {
-        fprintf(error_log_fd, "Error Cause : Current Tx Timestamp is less than Previous\n\n");
-    }
-    else if(error_type == 3)
-    {
-        fprintf(error_log_fd, "Error Cause : SW Execution Time Gap is too big\n\n");
-    }
-    else if(error_type == 4)
-    {
-        fprintf(error_log_fd, "Error Cause : AXI4L Read Transaction Error\n\n");
-    }
-    else if(error_type == 5)
-    {
-        fprintf(error_log_fd, "Error Cause : XDMA Transmit Frame and then, XDMA Consume Time\n\n");
-    }
-    else if(error_type == 6)
-    {
-        fprintf(error_log_fd, "Error Cause : At Previous Tx Index, XDMA Transmit Frame and then XDMA Consume Time\n\n");
-    }
-    else if(error_type == 7)
-    {
-        fprintf(error_log_fd, "Error Cause : Timestamp Future Error\n\n");
-    }
-    else if(error_type == 8)
-    {
-        fprintf(error_log_fd, "Error Cause : Un-Categorized Error\n\n");
-    }
-}
 
-void current_info_print(void)
-{
-    printf("\
-    \nTotal Error Count               : %ld\
-    \nSW Time Gap Error Count         : %ld\
-    \nTstamp Future Error Count       : %ld\
-    \nAXI4L Read Error Count          : %ld\
-    \nXDMA Time Pre Error Count       : %ld\
-    \nXDMA Time Post Error Count      : %ld\
-    \nsyscount                  (hex) : %016lx               |   tx_timestamp     (hex) : %016lx\
-    \nsyscount_prv              (hex) : %016lx               |   tx_timestamp_prv (hex) : %016lx\
-    \nsyscount_diff             (dec) : %16ld (%.4lf[s])   |   tx_timestamp_diff(dec) : %16ld (%.4lf[s])\
-    \n\nsyscount_txtimestamp_diff (hex) : %16lx                   (Dec : %16ld)\
-    \n\n", error_count, sw_time_gap_error_count, tstamp_future_error_count, axi4l_read_error_count, xdma_consume_time_pre_error_count, xdma_consume_time_post_error_count, my_syscount, my_tx_timestamp, my_syscount_prv, my_tx_timestamp_prv, diff_syscount, (double)diff_syscount/TICK_1000MSEC, diff_tx_timestamp, (double)diff_tx_timestamp/TICK_1000MSEC,\
-    diff_syscount_txtimestamp, diff_syscount_txtimestamp);
-}
+    // 4. Rx Metadata Read Function
+    void app2_rx_meta_read(void)
+    {
+        uint64_t rx_tstamp = 0;
+        uint16_t rx_frame_length = 0;
+        uint16_t rx_vlan_tag = 0;
+        uint64_t rx_dmac = 0, rx_smac = 0;
+        uint16_t rx_ether_type = 0;
 
-void re_init_variables(void)
-{
-    my_syscount_prv     = my_syscount;
-    my_tx_timestamp_prv = my_tx_timestamp;
-    rasp_time_prv       = rasp_time;
-    bytes_tr = 0;
-    memcpy(&tm_prv, &tm_now, sizeof(tm_prv));
-}
+        printf("\n\n\n========================= %luth Rx Frame =========================\n\n", rx_frame_index++);
+
+        // ================================================================ //
+        //   # First 16-Byte Read                                           //
+        // ================================================================ //
+        // 1. Read 1st 16-Byte
+        app2_xdma_read();
+
+        for(int i = 0; i < APP2_DATA_SIZE; i++)
+        {
+            printf("%02X ", (unsigned char)app2_buffer[i]);
+        }
+        printf("  => Rx Byte : %d", app2_bytes_received);
+        printf("\n");
+
+        // 2. Get Rx Tstamp
+        for(int i = 0; i <= 7; i++)
+        {
+            rx_tstamp = rx_tstamp | ((uint64_t)app2_buffer[i] << 8*(7-i));
+        }
+
+        // 3. Get Frame Length
+        rx_frame_length = (uint16_t)(((uint16_t)app2_buffer[8] << 8) | (uint16_t)app2_buffer[9]);
+
+        // 4. Get DMAC
+        for(int i = 10; i <= 15; i++)
+        {
+            rx_dmac = rx_dmac | ((uint64_t)app2_buffer[i] << 8*(15-i));
+        }
+
+        // 5. Calculate 16-Byte Frame Length
+        if(rx_frame_length % 16 == 0)
+        {
+            rx_frame_16byte_length = rx_frame_length / 16;
+        }
+        else
+        {
+            rx_frame_16byte_length = (rx_frame_length / 16) + 1;
+        }
+
+        // 6. Print Rx Frame Information
+        printf("Rx Tstamp       : %016llX\n", rx_tstamp);
+        printf("Rx Frame Length : %d\n", rx_frame_length);
+        printf("Rx DMAC         : %012llX\n", rx_dmac);
+        printf("\n");
+
+        // ================================================================ //
+        //   # Second 16-Byte Read                                          //
+        // ================================================================ //
+        // 1. Read 2nd 16-Byte
+        app2_xdma_read();
+
+        for(int i = 0; i < APP2_DATA_SIZE; i++)
+        {
+            printf("%02X ", (unsigned char)app2_buffer[i]);
+        }
+        printf("  => Rx Byte : %d", app2_bytes_received);
+        printf("\n");
+
+        // 2. Get SMAC
+        for(int i = 0; i <= 5; i++)
+        {
+            rx_smac = rx_smac | ((uint64_t)app2_buffer[i] << 8*(5-i));
+        }
+
+        // 3. Get Ether-Type
+        rx_ether_type = (uint16_t)(((uint16_t)app2_buffer[6] << 8) | (uint16_t)app2_buffer[7]);
+
+        // 4. Print Rx Frame Information
+        printf("Rx SMAC         : %012llX\n", rx_smac);
+        printf("Rx Ether-Type   : %04X\n", rx_ether_type);
+        printf("\n");
+    }
+
+    // 5. Rx Frame Data Read Function
+    void app2_rx_frame_read(void)
+    {
+        printf("// Frame Data (Payload)\n");
+
+        // for(int i = 0; i < rx_frame_16byte_length - 1; i++)
+        // {
+        //     app2_xdma_read();
+
+        //     for(int j = 0; j < APP2_DATA_SIZE; j++)
+        //     {
+        //         printf("%02X ", (unsigned char)app2_buffer[j]);
+        //     }
+        //     printf("  => Rx Byte : %d", app2_bytes_received);
+        //     printf("\n");
+
+        //     app2_bytes_received = 0;
+        //     usleep(20*1000);
+        // }
+
+        for(int i = 0; i < rx_frame_16byte_length; i++)
+        {
+            app2_xdma_read();
+
+            for(int i = 0; i < APP2_DATA_SIZE; i++)
+            {
+                printf("%02X ", (unsigned char)app2_buffer[i]);
+            }
+            printf("  => Rx Byte : %d", app2_bytes_received);
+            printf("\n");
+
+            app2_bytes_received = 0;
+            usleep(20*1000);
+        }
+    }
 
 
-/***************************************************************************** */
+// ======================================================================================== //
+//                                                                                          //
+//  [4-3] Test App 3  :  Register Read / Write Test                                         //
+//                                                                                          //
+// ======================================================================================== //
+
+// ================================================================ //
+//   # Macro definition                                             //
+// ================================================================ //
+
+
+// ================================================================ //
+//   # Variable definition                                          //
+// ================================================================ //
+
+
+// ================================================================ //
+//   # Register Read / Write Test App Function Definition           //
+// ================================================================ //
+    int register_rw_test_app(void)
+    {
+        // 1. General System Information
+        uint32_t rd_reg_80th_hi, rd_reg_80th_lo;    // TSN System Info
+        uint32_t rd_reg_76th_hi, rd_reg_76th_lo;    // FPGA Clock (Hour), FPGA Clock (Minute)
+        uint32_t rd_reg_77th_hi, rd_reg_77th_lo;    // FPGA Clock (Second), FPGA Clock (Tick)
+        uint32_t rd_reg_82th_hi, rd_reg_82th_lo;    // System Count (Host)
+        uint32_t rd_reg_78th_hi, rd_reg_78th_lo;    // System Count (TSN Rx)
+        uint32_t rd_reg_79th_hi, rd_reg_79th_lo;    // System Count (TSN Tx)
+
+        // 2. TSN Tx Information
+        uint32_t rd_reg_42th_hi, rd_reg_42th_lo;    // Buffer Write Status 1 (Address FIFO Data Count)
+        uint32_t rd_reg_45th_hi, rd_reg_45th_lo;    // Address FIFO Data Count
+        uint32_t rd_reg_60th_hi, rd_reg_60th_lo;    // Tx Tstamp 1
+        uint32_t rd_reg_61th_hi, rd_reg_61th_lo;    // Tx Tstamp 2
+        uint32_t rd_reg_62th_hi, rd_reg_62th_lo;    // Tx Tstamp 3
+        uint32_t rd_reg_63th_hi, rd_reg_63th_lo;    // Tx Tstamp 4
+        uint32_t rd_reg_24th_hi, rd_reg_24th_lo;    // FS Total Rx Frame Count
+        uint32_t rd_reg_37th_hi, rd_reg_37th_lo;    // FSCH Total New Entry Count
+        uint32_t rd_reg_38th_hi, rd_reg_38th_lo;    // FSCH Total Valid Entry Count
+        uint32_t rd_reg_39th_hi, rd_reg_39th_lo;    // FSCH Total Delay Entry Count
+        uint32_t rd_reg_40th_hi, rd_reg_40th_lo;    // FSCH Total Drop Entry Count
+
+        // 3. TSN Rx Information
+        uint32_t rd_reg_1th_hi, rd_reg_1th_lo;      // Rx Tstamp
+        uint32_t rd_reg_4th_hi, rd_reg_4th_lo;      // Total Rx Frame Count
+
+
+        usleep(10*1000);
+
+        // set_register(REG_84TH_HIGH, (uint32_t)(900 << 16 | 6195));
+        // // set_register(REG_84TH_LOW, (uint32_t)(900 << 16 | 6195));
+        // set_register(REG_84TH_LOW, (uint32_t)(510 << 16 | 1 << 7 | 1 << 6 | 1 << 5 | 1 << 4 | 1 << 3 | 1 << 2 | 1 << 1 | 1));
+
+        set_register(REG_86TH_HIGH, 0xdeadbeef);
+        set_register(REG_86TH_LOW, 0xcafebabe);
+
+        // set_register(REG_86TH_HIGH, 0x0);
+        // set_register(REG_86TH_LOW, 0x0);
+
+        // set_register(REG_87TH_HIGH, 0xdeadbeef);
+        // set_register(REG_87TH_LOW, 0xcafebabe);
+
+        // set_register(REG_87TH_HIGH, 0x0);
+        // set_register(REG_87TH_LOW, 0x0);
+
+
+
+        while(1)
+        {
+            printf("=========================== Register Information ===========================\n");
+
+        // ==================================================================== //
+        //  [1] TSN General System Information                                  //
+        // ==================================================================== //
+            rd_reg_80th_hi = get_register(REG_80TH_HIGH);   // TSN System Info
+            rd_reg_80th_lo = get_register(REG_80TH_LOW);    // TSN System Info
+            rd_reg_76th_hi = get_register(REG_76TH_HIGH);   // FPGA Clock (Hour)
+            rd_reg_76th_lo = get_register(REG_76TH_LOW);    // FPGA Clock (Minute)
+            rd_reg_77th_hi = get_register(REG_77TH_HIGH);   // FPGA Clock (Second)
+            rd_reg_77th_lo = get_register(REG_77TH_LOW);    // FPGA Clock (Tick)
+            rd_reg_82th_hi = get_register(REG_82TH_HIGH);   // System Count (Host)
+            rd_reg_82th_lo = get_register(REG_82TH_LOW);    // System Count (Host)
+            rd_reg_78th_hi = get_register(REG_78TH_HIGH);   // System Count (TSN Rx)
+            rd_reg_78th_lo = get_register(REG_78TH_LOW);    // System Count (TSN Rx)
+            rd_reg_79th_hi = get_register(REG_79TH_HIGH);   // System Count (TSN Tx)
+            rd_reg_79th_lo = get_register(REG_79TH_LOW);    // System Count (TSN Tx)
+
+            printf("FPGA Running Time => %02lu : %02lu : %02lu\n\n", rd_reg_76th_hi, rd_reg_76th_lo, rd_reg_77th_hi);
+            printf("// General System Information\n");
+            printf("   1. System Count (Host) (hi)     : %lu\n", rd_reg_82th_hi);
+            printf("      System Count (Host) (lo)     : %lu\n", rd_reg_82th_lo);
+            printf("   2. System Count (Tx)   (hi)     : %lu\n", rd_reg_79th_hi);
+            printf("      System Count (Tx)   (lo)     : %lu\n", rd_reg_79th_lo);
+            printf("   3. System Count (Rx)   (hi)     : %lu\n", rd_reg_78th_hi);
+            printf("      System Count (Rx)   (lo)     : %lu\n", rd_reg_78th_lo);
+            printf("   4. TSN System Info     (hi)     : %lu\n", rd_reg_80th_hi);
+            printf("      TSN System Info     (lo)     : %lu\n", rd_reg_80th_lo);
+            printf("\n\n");
+
+        // ==================================================================== //
+        //  [2] TSN Tx Information                                              //
+        // ==================================================================== //
+            printf("// TSN Tx Information\n");
+
+            // Buffer Write Status 1 (Address FIFO Data Count)
+            rd_reg_42th_hi = get_register(REG_42TH_HIGH);
+            rd_reg_42th_lo = get_register(REG_42TH_LOW);
+
+            printf("   1. Buffer Write Status 1 (hi)  : %lu\n", rd_reg_42th_hi);
+            printf("      Buffer Write Status 1 (lo)  : %lu\n", rd_reg_42th_lo);
+
+            // Address FIFO Data Count
+            rd_reg_45th_hi = get_register(REG_45TH_HIGH);
+            rd_reg_45th_lo = get_register(REG_45TH_LOW);
+
+            printf("   2. Address FIFO Data Count (hi)  : %lu\n", rd_reg_45th_hi);
+            printf("      Address FIFO Data Count (lo)  : %lu\n", rd_reg_45th_lo);
+
+            // Tx Tstamp
+            rd_reg_60th_hi = get_register(REG_60TH_HIGH);   // Tx Tstamp 1 (Upper)
+            rd_reg_60th_lo = get_register(REG_60TH_LOW);    // Tx Tstamp 1 (Lower)
+            rd_reg_61th_hi = get_register(REG_61TH_HIGH);   // Tx Tstamp 2 (Upper)
+            rd_reg_61th_lo = get_register(REG_61TH_LOW);    // Tx Tstamp 2 (Lower)
+            rd_reg_62th_hi = get_register(REG_62TH_HIGH);   // Tx Tstamp 3 (Upper)
+            rd_reg_62th_lo = get_register(REG_62TH_LOW);    // Tx Tstamp 3 (Lower)
+            rd_reg_63th_hi = get_register(REG_63TH_HIGH);   // Tx Tstamp 4 (Upper)
+            rd_reg_63th_lo = get_register(REG_63TH_LOW);    // Tx Tstamp 4 (Lower)
+
+            printf("   3. Tx Tstamp 1 (hi)     : %lu\n", rd_reg_60th_hi);
+            printf("      Tx Tstamp 1 (lo)     : %lu\n", rd_reg_60th_lo);
+            printf("      Tx Tstamp 2 (hi)     : %lu\n", rd_reg_61th_hi);
+            printf("      Tx Tstamp 2 (lo)     : %lu\n", rd_reg_61th_lo);
+            printf("      Tx Tstamp 3 (hi)     : %lu\n", rd_reg_62th_hi);
+            printf("      Tx Tstamp 3 (lo)     : %lu\n", rd_reg_62th_lo);
+            printf("      Tx Tstamp 4 (hi)     : %lu\n", rd_reg_63th_hi);
+            printf("      Tx Tstamp 4 (lo)     : %lu\n", rd_reg_63th_lo);
+            printf("\n");
+
+            // FS Total Rx Frame Count
+            rd_reg_24th_hi = get_register(REG_24TH_HIGH);   // FS Total Rx Frame Count (Upper)
+            rd_reg_24th_lo = get_register(REG_24TH_LOW);    // FS Total Rx Frame Count (Lower)
+
+            printf("   4. FS Total Rx Frame Count (hi)     : %lu\n", rd_reg_24th_hi);
+            printf("      FS Total Rx Frame Count (lo)     : %lu\n", rd_reg_24th_lo);
+            printf("\n");
+
+            // FSCH Total New/Valid/Delay/Drop Entry Count
+            rd_reg_37th_hi = get_register(REG_37TH_HIGH);   // FSCH Total New Entry Count   (Upper)
+            rd_reg_37th_lo = get_register(REG_37TH_LOW);    // FSCH Total New Entry Count   (Lower)
+            rd_reg_38th_hi = get_register(REG_38TH_HIGH);   // FSCH Total Valid Entry Count (Upper)
+            rd_reg_38th_lo = get_register(REG_38TH_LOW);    // FSCH Total Valid Entry Count (Lower)
+            rd_reg_39th_hi = get_register(REG_39TH_HIGH);   // FSCH Total Delay Entry Count (Upper)
+            rd_reg_39th_lo = get_register(REG_39TH_LOW);    // FSCH Total Delay Entry Count (Lower)
+            rd_reg_40th_hi = get_register(REG_40TH_HIGH);   // FSCH Total Drop Entry Count  (Upper)
+            rd_reg_40th_lo = get_register(REG_40TH_LOW);    // FSCH Total Drop Entry Count  (Lower)
+
+            printf("   5. FSCH Total New Entry Count   (hi)  : %lu\n", rd_reg_37th_hi);
+            printf("      FSCH Total New Entry Count   (lo)  : %lu\n", rd_reg_37th_lo);
+            printf("      FSCH Total Valid Entry Count (hi)  : %lu\n", rd_reg_38th_hi);
+            printf("      FSCH Total Valid Entry Count (lo)  : %lu\n", rd_reg_38th_lo);
+            printf("      FSCH Total Delay Entry Count (hi)  : %lu\n", rd_reg_39th_hi);
+            printf("      FSCH Total Delay Entry Count (lo)  : %lu\n", rd_reg_39th_lo);
+            printf("      FSCH Total Drop Entry Count  (hi)  : %lu\n", rd_reg_40th_hi);
+            printf("      FSCH Total Drop Entry Count  (lo)  : %lu\n", rd_reg_40th_lo);
+            printf("\n");
+
+        // ==================================================================== //
+        //  [3] TSN Rx Information                                              //
+        // ==================================================================== //
+            printf("// TSN Rx Information\n");
+
+            // Rx Tstamp
+            rd_reg_1th_hi = get_register(REG_1TH_HIGH);   // Rx Tstamp (Upper)
+            rd_reg_1th_lo = get_register(REG_1TH_LOW);    // Rx Tstamp (Lower)
+
+            printf("   1. Rx Tstamp (hi)     : %lu\n", rd_reg_1th_hi);
+            printf("      Rx Tstamp (lo)     : %lu\n", rd_reg_1th_lo);
+            printf("\n");
+
+            // FD Total Rx Frame Count
+            rd_reg_4th_hi = get_register(REG_4TH_HIGH);   // Rx Tstamp (Upper)
+            rd_reg_4th_lo = get_register(REG_4TH_LOW);    // Rx Tstamp (Lower)
+
+            printf("   2. FD Total Rx Frame Count (hi) : %lu\n", rd_reg_4th_hi);
+            printf("      FD Total Rx Frame Count (lo) : %lu\n", rd_reg_4th_lo);
+            printf("\n");
+            
+            printf("\n\n\n\n");
+            
+            usleep(100*1000);
+
+        }
+        
+
+        return 0;
+    }
+
+
+
+/* ================================================================================================================================================ */
 
 #define MAIN_RUN_OPTION_STRING  "m:s:f:hv"
 int process_main_runCmd(int argc, const char *argv[],
@@ -1472,12 +1731,6 @@ sysclock_t get_tx_timestamp(int timestamp_id) {
     default:
         return 0;
     }
-}
-
-sysclock_t get_my_count() {
-
-    // return get_register(REG_UP_COUNTER_LOW);
-    return ((uint64_t)get_register(REG_DN_COUNTER_HIGH) << 32) | get_register(REG_DN_COUNTER_LOW);
 }
 
 int32_t fn_show_register_genArgument(int32_t argc, const char *argv[]) {
