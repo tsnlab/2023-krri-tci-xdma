@@ -246,6 +246,12 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
     int process_main_register_read_write_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
     int register_rw_test_app(void);
 
+    // 5. Ethernet Path Selection
+    int process_main_sel_path_1_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+    int process_main_sel_path_2_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+    int sel_path_1_test_app(void);
+    int sel_path_2_test_app(void);
+
 
 // ======================================================================================== //
 //                                                                                          //
@@ -353,7 +359,16 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
     {
         return register_rw_test_app();
     }
+
+    int process_main_sel_path_1_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
+    {
+        return sel_path_1_test_app();
+    }
     
+    int process_main_sel_path_2_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
+    {
+        return sel_path_2_test_app();
+    }
 
 // ======================================================================================== //
 //                                                                                          //
@@ -381,6 +396,12 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
             "   rx_test", \
             "   This option was created for Frame Reception Test of Re-Designed 1Q TSN IP\n"},
         {"reg_test", EXECUTION_ATTR, process_main_register_read_write_testCmd, \
+            "   reg_test", \
+            "   This option was created for Register Read/Write Test of Re-Designed 1Q TSN IP\n"},
+        {"sel_path_1", EXECUTION_ATTR, process_main_sel_path_1_testCmd, \
+            "   reg_test", \
+            "   This option was created for Register Read/Write Test of Re-Designed 1Q TSN IP\n"},
+        {"sel_path_2", EXECUTION_ATTR, process_main_sel_path_2_testCmd, \
             "   reg_test", \
             "   This option was created for Register Read/Write Test of Re-Designed 1Q TSN IP\n"}, 
     #ifdef ONE_QUEUE_TSN
@@ -417,9 +438,9 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
 
 
     // User Parameter Macro
-    #define APP1_SLEEP_TIME_MS              (10000)                     // Frame Transmission Gap
-    #define FRAME_TYPE                      (FRAME_TYPE_IEEE802)        // Frame Type
-    #define FRAME_LENGTH                    (1500)
+    #define APP1_SLEEP_TIME_MS              (10)                     // Frame Transmission Gap
+    #define FRAME_TYPE                      (FRAME_TYPE_VLAN)        // Frame Type
+    #define FRAME_LENGTH                    (1500)      // 46, 1456
     #define TIMESTMAP_ID                    (3)
     #define POLICY                          (1)
 
@@ -743,35 +764,37 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
         app1_buffer[44] = 0x05;
         
         // 4. LT_Lower
-        app1_buffer[45] = 0x21;
+        app1_buffer[45] = 0xdc;
 
         // 5. Payload
         for(uint16_t i = 0; i < (frame_length-14); i++)
         {
-            if(i % 6 == 0)
-            {
-                app1_buffer[46+i] = 0xAA;
-            }
-            else if(i % 6 == 1)
-            {
-                app1_buffer[46+i] = 0xBB;
-            }
-            else if(i % 6 == 2)
-            {
-                app1_buffer[46+i] = 0xCC;
-            }
-            else if(i % 6 == 3)
-            {
-                app1_buffer[46+i] = 0xDD;
-            }
-            else if(i % 6 == 4)
-            {
-                app1_buffer[46+i] = 0xEE;
-            }
-            else if(i % 6 == 5)
-            {
-                app1_buffer[46+i] = 0xFF;
-            }
+            // if(i % 6 == 0)
+            // {
+            //     app1_buffer[46+i] = 0xAA;
+            // }
+            // else if(i % 6 == 1)
+            // {
+            //     app1_buffer[46+i] = 0xBB;
+            // }
+            // else if(i % 6 == 2)
+            // {
+            //     app1_buffer[46+i] = 0xCC;
+            // }
+            // else if(i % 6 == 3)
+            // {
+            //     app1_buffer[46+i] = 0xDD;
+            // }
+            // else if(i % 6 == 4)
+            // {
+            //     app1_buffer[46+i] = 0xEE;
+            // }
+            // else if(i % 6 == 5)
+            // {
+            //     app1_buffer[46+i] = 0xFF;
+            // }
+
+            app1_buffer[46+i] = i % 256;
         }
 
         app1_buffer[frame_length + 30] = 0xca;
@@ -808,30 +831,31 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
         // 5. Payload
         for(uint16_t i = 0; i < (frame_length-14); i++)
         {
-            if(i % 6 == 0)
-            {
-                app1_buffer[48+i] = 0xAA;
-            }
-            else if(i % 6 == 1)
-            {
-                app1_buffer[48+i] = 0xBB;
-            }
-            else if(i % 6 == 2)
-            {
-                app1_buffer[48+i] = 0xCC;
-            }
-            else if(i % 6 == 3)
-            {
-                app1_buffer[48+i] = 0xDD;
-            }
-            else if(i % 6 == 4)
-            {
-                app1_buffer[48+i] = 0xEE;
-            }
-            else if(i % 6 == 5)
-            {
-                app1_buffer[48+i] = 0xFF;
-            }
+            // if(i % 6 == 0)
+            // {
+            //     app1_buffer[48+i] = 0xAA;
+            // }
+            // else if(i % 6 == 1)
+            // {
+            //     app1_buffer[48+i] = 0xBB;
+            // }
+            // else if(i % 6 == 2)
+            // {
+            //     app1_buffer[48+i] = 0xCC;
+            // }
+            // else if(i % 6 == 3)
+            // {
+            //     app1_buffer[48+i] = 0xDD;
+            // }
+            // else if(i % 6 == 4)
+            // {
+            //     app1_buffer[48+i] = 0xEE;
+            // }
+            // else if(i % 6 == 5)
+            // {
+            //     app1_buffer[48+i] = 0xFF;
+            // }
+            app1_buffer[48+i] = i % 256;
         }
 
         app1_buffer[frame_length + 30] = 0xca;
@@ -841,7 +865,61 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
     // 9. Frame Construction Type Function : DIX2.0 Frame (ARP Frame)
     void frame_type_dix2(uint16_t frame_length)
     {
+        // 1. DMAC
+        app1_buffer[32] = 0xa1;
+        app1_buffer[33] = 0xa2;
+        app1_buffer[34] = 0xa3;
+        app1_buffer[35] = 0xa4;
+        app1_buffer[36] = 0xa5;
+        app1_buffer[37] = 0xa6;
 
+        // 2. SMAC
+        app1_buffer[38] = 0xf1;
+        app1_buffer[39] = 0xf2;
+        app1_buffer[40] = 0xf3;
+        app1_buffer[41] = 0xf4;
+        app1_buffer[42] = 0xf5;
+        app1_buffer[43] = 0xf6;
+
+        // 3. LT_Upper
+        app1_buffer[44] = 0x08;
+        
+        // 4. LT_Lower
+        app1_buffer[45] = 0x06;
+
+        // 5. Payload
+        for(uint16_t i = 0; i < (frame_length-14); i++)
+        {
+            // if(i % 6 == 0)
+            // {
+            //     app1_buffer[46+i] = 0xAA;
+            // }
+            // else if(i % 6 == 1)
+            // {
+            //     app1_buffer[46+i] = 0xBB;
+            // }
+            // else if(i % 6 == 2)
+            // {
+            //     app1_buffer[46+i] = 0xCC;
+            // }
+            // else if(i % 6 == 3)
+            // {
+            //     app1_buffer[46+i] = 0xDD;
+            // }
+            // else if(i % 6 == 4)
+            // {
+            //     app1_buffer[46+i] = 0xEE;
+            // }
+            // else if(i % 6 == 5)
+            // {
+            //     app1_buffer[46+i] = 0xFF;
+            // }
+
+            app1_buffer[46+i] = i % 256;
+        }
+
+        app1_buffer[frame_length + 30] = 0xca;
+        app1_buffer[frame_length + 31] = 0xfe;
     }
 
     // 10. Frame Construction Type Function : Jumbo Frame (VLAN Frame)
@@ -1126,183 +1204,542 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
 // ================================================================ //
     int register_rw_test_app(void)
     {
-        // 1. General System Information
-        uint32_t rd_reg_80th_hi, rd_reg_80th_lo;    // TSN System Info
-        uint32_t rd_reg_76th_hi, rd_reg_76th_lo;    // FPGA Clock (Hour), FPGA Clock (Minute)
-        uint32_t rd_reg_77th_hi, rd_reg_77th_lo;    // FPGA Clock (Second), FPGA Clock (Tick)
-        uint32_t rd_reg_82th_hi, rd_reg_82th_lo;    // System Count (Host)
-        uint32_t rd_reg_78th_hi, rd_reg_78th_lo;    // System Count (TSN Rx)
-        uint32_t rd_reg_79th_hi, rd_reg_79th_lo;    // System Count (TSN Tx)
+        // 1. General System Info Register
+        uint32_t rd_reg_11th_hi, rd_reg_11th_lo;        // FPGA Logic Version
+        uint32_t rd_reg_13th_hi, rd_reg_13th_lo;        // FPGA Running Time
+        uint32_t rd_reg_12th_hi, rd_reg_12th_lo;        // System Count
 
-        // 2. TSN Tx Information
-        uint32_t rd_reg_42th_hi, rd_reg_42th_lo;    // Buffer Write Status 1 (Address FIFO Data Count)
-        uint32_t rd_reg_45th_hi, rd_reg_45th_lo;    // Address FIFO Data Count
-        uint32_t rd_reg_60th_hi, rd_reg_60th_lo;    // Tx Tstamp 1
-        uint32_t rd_reg_61th_hi, rd_reg_61th_lo;    // Tx Tstamp 2
-        uint32_t rd_reg_62th_hi, rd_reg_62th_lo;    // Tx Tstamp 3
-        uint32_t rd_reg_63th_hi, rd_reg_63th_lo;    // Tx Tstamp 4
-        uint32_t rd_reg_24th_hi, rd_reg_24th_lo;    // FS Total Rx Frame Count
-        uint32_t rd_reg_37th_hi, rd_reg_37th_lo;    // FSCH Total New Entry Count
-        uint32_t rd_reg_38th_hi, rd_reg_38th_lo;    // FSCH Total Valid Entry Count
-        uint32_t rd_reg_39th_hi, rd_reg_39th_lo;    // FSCH Total Delay Entry Count
-        uint32_t rd_reg_40th_hi, rd_reg_40th_lo;    // FSCH Total Drop Entry Count
+        // 2. TSN Tx Info Register
+        uint32_t rd_reg_79th_hi, rd_reg_79th_lo;        // ADDR FIFO Data Count
+        uint32_t rd_reg_91th_hi, rd_reg_91th_lo;        // Tx Tstamp1
+        uint32_t rd_reg_92th_hi, rd_reg_92th_lo;        // Tx Tstamp2
+        uint32_t rd_reg_93th_hi, rd_reg_93th_lo;        // Tx Tstamp3
+        uint32_t rd_reg_94th_hi, rd_reg_94th_lo;        // Tx Tstamp4
 
-        // 3. TSN Rx Information
-        uint32_t rd_reg_1th_hi, rd_reg_1th_lo;      // Rx Tstamp
-        uint32_t rd_reg_4th_hi, rd_reg_4th_lo;      // Total Rx Frame Count
+        uint32_t rd_reg_56th_hi, rd_reg_56th_lo;        // Total Rx Frame Count
+        uint32_t rd_reg_58th_hi, rd_reg_58th_lo;        // Total Back Pressure Event Count
 
+        uint32_t rd_reg_70th_hi, rd_reg_70th_lo;        // FSCH Total New Entry Count
+        uint32_t rd_reg_71th_hi, rd_reg_71th_lo;        // FSCH Total Valid Entry Count
+        uint32_t rd_reg_72th_hi, rd_reg_72th_lo;        // FSCH Total Delay Entry Count
+        uint32_t rd_reg_73th_hi, rd_reg_73th_lo;        // FSCH Total Drop Entry Count
+
+        uint32_t rd_reg_97th_hi, rd_reg_97th_lo;        // FT1 Total Tx Frame Count
+        uint32_t rd_reg_98th_hi, rd_reg_98th_lo;        // FT1 Total Tx Byte Count
+        uint32_t rd_reg_103th_hi, rd_reg_103th_lo;      // FT2 Total Tx Frame Count
+        uint32_t rd_reg_104th_hi, rd_reg_104th_lo;      // FT2 Total Tx Byte Count
+
+        // 3. TSN Rx Info Register
+        // 3-1. ETH Port 1
+        uint32_t rd_reg_16th_hi, rd_reg_16th_lo;        // ETH1 Rx Timestamp
+        uint32_t rd_reg_19th_hi, rd_reg_19th_lo;        // ETH1 Total Rx Frame Count
+        uint32_t rd_reg_20th_hi, rd_reg_20th_lo;        // ETH1 Total Rx Byte Count
+        uint32_t rd_reg_21th_hi, rd_reg_21th_lo;        // ETH1 Total Drop Frame Count
+        uint32_t rd_reg_22th_hi, rd_reg_22th_lo;        // ETH1 Total Drop Byte Count
+        uint32_t rd_reg_31th_hi, rd_reg_31th_lo;        // Rx FIFO Status
+
+        // 3-2. ETH Port 2
+        uint32_t rd_reg_35th_hi, rd_reg_35th_lo;        // ETH1 Rx Timestamp
+        uint32_t rd_reg_38th_hi, rd_reg_38th_lo;        // ETH1 Total Rx Frame Count
+        uint32_t rd_reg_39th_hi, rd_reg_39th_lo;        // ETH1 Total Rx Byte Count
+        uint32_t rd_reg_40th_hi, rd_reg_40th_lo;        // ETH1 Total Drop Frame Count
+        uint32_t rd_reg_41th_hi, rd_reg_41th_lo;        // ETH1 Total Drop Byte Count
+        uint32_t rd_reg_50th_hi, rd_reg_50th_lo;        // Rx FIFO Status
 
         usleep(10*1000);
-
-        // set_register(REG_84TH_HIGH, (uint32_t)(900 << 16 | 6195));
-        // // set_register(REG_84TH_LOW, (uint32_t)(900 << 16 | 6195));
-        // set_register(REG_84TH_LOW, (uint32_t)(510 << 16 | 1 << 7 | 1 << 6 | 1 << 5 | 1 << 4 | 1 << 3 | 1 << 2 | 1 << 1 | 1));
-
-        set_register(REG_86TH_HIGH, 0xdeadbeef);
-        set_register(REG_86TH_LOW, 0xcafebabe);
-
-        // set_register(REG_86TH_HIGH, 0x0);
-        // set_register(REG_86TH_LOW, 0x0);
-
-        // set_register(REG_87TH_HIGH, 0xdeadbeef);
-        // set_register(REG_87TH_LOW, 0xcafebabe);
-
-        // set_register(REG_87TH_HIGH, 0x0);
-        // set_register(REG_87TH_LOW, 0x0);
-
 
 
         while(1)
         {
-            printf("=========================== Register Information ===========================\n");
+            printf("===========================================================================\n");
+            printf("                   1Q TSN Logic's Internal Status Register                 \n");
+            printf("===========================================================================\n");
 
         // ==================================================================== //
         //  [1] TSN General System Information                                  //
         // ==================================================================== //
-            rd_reg_80th_hi = get_register(REG_80TH_HIGH);   // TSN System Info
-            rd_reg_80th_lo = get_register(REG_80TH_LOW);    // TSN System Info
-            rd_reg_76th_hi = get_register(REG_76TH_HIGH);   // FPGA Clock (Hour)
-            rd_reg_76th_lo = get_register(REG_76TH_LOW);    // FPGA Clock (Minute)
-            rd_reg_77th_hi = get_register(REG_77TH_HIGH);   // FPGA Clock (Second)
-            rd_reg_77th_lo = get_register(REG_77TH_LOW);    // FPGA Clock (Tick)
-            rd_reg_82th_hi = get_register(REG_82TH_HIGH);   // System Count (Host)
-            rd_reg_82th_lo = get_register(REG_82TH_LOW);    // System Count (Host)
-            rd_reg_78th_hi = get_register(REG_78TH_HIGH);   // System Count (TSN Rx)
-            rd_reg_78th_lo = get_register(REG_78TH_LOW);    // System Count (TSN Rx)
-            rd_reg_79th_hi = get_register(REG_79TH_HIGH);   // System Count (TSN Tx)
-            rd_reg_79th_lo = get_register(REG_79TH_LOW);    // System Count (TSN Tx)
+            rd_reg_11th_hi = get_register(REG_11TH_HIGH);   // FPGA Logic Version
+            rd_reg_11th_lo = get_register(REG_11TH_LOW);    // FPGA Logic Version
+            rd_reg_13th_hi = get_register(REG_13TH_HIGH);   // FPGA Running Time
+            rd_reg_13th_lo = get_register(REG_13TH_LOW);    // FPGA Running Time
+            rd_reg_12th_hi = get_register(REG_12TH_HIGH);   // System Count
+            rd_reg_12th_lo = get_register(REG_12TH_LOW);    // System Count
 
-            printf("FPGA Running Time => %02lu : %02lu : %02lu\n\n", rd_reg_76th_hi, rd_reg_76th_lo, rd_reg_77th_hi);
-            printf("// General System Information\n");
-            printf("   1. System Count (Host) (hi)     : %lu\n", rd_reg_82th_hi);
-            printf("      System Count (Host) (lo)     : %lu\n", rd_reg_82th_lo);
-            printf("   2. System Count (Tx)   (hi)     : %lu\n", rd_reg_79th_hi);
-            printf("      System Count (Tx)   (lo)     : %lu\n", rd_reg_79th_lo);
-            printf("   3. System Count (Rx)   (hi)     : %lu\n", rd_reg_78th_hi);
-            printf("      System Count (Rx)   (lo)     : %lu\n", rd_reg_78th_lo);
-            printf("   4. TSN System Info     (hi)     : %lu\n", rd_reg_80th_hi);
-            printf("      TSN System Info     (lo)     : %lu\n", rd_reg_80th_lo);
+            printf(" # FPGA Running Time => %02lu : %02lu : %02lu\n", ((rd_reg_13th_lo >> 16U) & 0x7F), ((rd_reg_13th_lo >> 8U) & 0xFF), (rd_reg_13th_lo & 0xFF));
+            printf("\n");
+
+            printf(" # 1Q TSN SYSTEM INFO\n");
+            printf("      FPGA Logic Version         :  %lu.%lu.%lu (Ver : %lu)\n", ((rd_reg_11th_lo >> 24U) & 0xFF), ((rd_reg_11th_lo >> 16U) & 0xFF), ((rd_reg_11th_lo >> 8U) & 0xFF), (rd_reg_11th_lo & 0xFF));
+            printf("      System Count (Host) (hi)   :  %lu\n", rd_reg_12th_hi);
+            printf("      System Count (Host) (lo)   :  %lu\n", rd_reg_12th_lo);
             printf("\n\n");
-
+            
         // ==================================================================== //
         //  [2] TSN Tx Information                                              //
         // ==================================================================== //
-            printf("// TSN Tx Information\n");
-
-            // Buffer Write Status 1 (Address FIFO Data Count)
-            rd_reg_42th_hi = get_register(REG_42TH_HIGH);
-            rd_reg_42th_lo = get_register(REG_42TH_LOW);
-
-            printf("   1. Buffer Write Status 1 (hi)  : %lu\n", rd_reg_42th_hi);
-            printf("      Buffer Write Status 1 (lo)  : %lu\n", rd_reg_42th_lo);
+            printf(" # 1Q TSN TX INFO\n");
+            printf("   [1] COMMON\n");
 
             // Address FIFO Data Count
-            rd_reg_45th_hi = get_register(REG_45TH_HIGH);
-            rd_reg_45th_lo = get_register(REG_45TH_LOW);
+            rd_reg_79th_hi = get_register(REG_79TH_HIGH);
+            rd_reg_79th_lo = get_register(REG_79TH_LOW);
 
-            printf("   2. Address FIFO Data Count (hi)  : %lu\n", rd_reg_45th_hi);
-            printf("      Address FIFO Data Count (lo)  : %lu\n", rd_reg_45th_lo);
-
-            // Tx Tstamp
-            rd_reg_60th_hi = get_register(REG_60TH_HIGH);   // Tx Tstamp 1 (Upper)
-            rd_reg_60th_lo = get_register(REG_60TH_LOW);    // Tx Tstamp 1 (Lower)
-            rd_reg_61th_hi = get_register(REG_61TH_HIGH);   // Tx Tstamp 2 (Upper)
-            rd_reg_61th_lo = get_register(REG_61TH_LOW);    // Tx Tstamp 2 (Lower)
-            rd_reg_62th_hi = get_register(REG_62TH_HIGH);   // Tx Tstamp 3 (Upper)
-            rd_reg_62th_lo = get_register(REG_62TH_LOW);    // Tx Tstamp 3 (Lower)
-            rd_reg_63th_hi = get_register(REG_63TH_HIGH);   // Tx Tstamp 4 (Upper)
-            rd_reg_63th_lo = get_register(REG_63TH_LOW);    // Tx Tstamp 4 (Lower)
-
-            printf("   3. Tx Tstamp 1 (hi)     : %lu\n", rd_reg_60th_hi);
-            printf("      Tx Tstamp 1 (lo)     : %lu\n", rd_reg_60th_lo);
-            printf("      Tx Tstamp 2 (hi)     : %lu\n", rd_reg_61th_hi);
-            printf("      Tx Tstamp 2 (lo)     : %lu\n", rd_reg_61th_lo);
-            printf("      Tx Tstamp 3 (hi)     : %lu\n", rd_reg_62th_hi);
-            printf("      Tx Tstamp 3 (lo)     : %lu\n", rd_reg_62th_lo);
-            printf("      Tx Tstamp 4 (hi)     : %lu\n", rd_reg_63th_hi);
-            printf("      Tx Tstamp 4 (lo)     : %lu\n", rd_reg_63th_lo);
+            printf("       Address FIFO Data Count (hi)  :  %lu\n", rd_reg_79th_hi);
+            printf("       Address FIFO Data Count (lo)  :  %lu\n", rd_reg_79th_lo);
             printf("\n");
 
             // FS Total Rx Frame Count
-            rd_reg_24th_hi = get_register(REG_24TH_HIGH);   // FS Total Rx Frame Count (Upper)
-            rd_reg_24th_lo = get_register(REG_24TH_LOW);    // FS Total Rx Frame Count (Lower)
+            rd_reg_56th_hi = get_register(REG_56TH_HIGH);   // FS Total Rx Frame Count (Upper)
+            rd_reg_56th_lo = get_register(REG_56TH_LOW);    // FS Total Rx Frame Count (Lower)
+            rd_reg_58th_hi = get_register(REG_58TH_HIGH);   // FS Total Back-Pressure Event Count (Upper)
+            rd_reg_58th_lo = get_register(REG_58TH_LOW);    // FS Total Back-Pressure Event Count (Lower)
 
-            printf("   4. FS Total Rx Frame Count (hi)     : %lu\n", rd_reg_24th_hi);
-            printf("      FS Total Rx Frame Count (lo)     : %lu\n", rd_reg_24th_lo);
+            printf("       FS Total Rx Frame Count (hi)                :  %lu\n", rd_reg_56th_hi);
+            printf("       FS Total Rx Frame Count (lo)                :  %lu\n", rd_reg_56th_lo);
+            printf("       FS Total Back-Pressure Event Count (hi)     :  %lu\n", rd_reg_58th_lo);
+            printf("       FS Total Back-Pressure Event Count (lo)     :  %lu\n", rd_reg_58th_lo);
             printf("\n");
 
             // FSCH Total New/Valid/Delay/Drop Entry Count
-            rd_reg_37th_hi = get_register(REG_37TH_HIGH);   // FSCH Total New Entry Count   (Upper)
-            rd_reg_37th_lo = get_register(REG_37TH_LOW);    // FSCH Total New Entry Count   (Lower)
-            rd_reg_38th_hi = get_register(REG_38TH_HIGH);   // FSCH Total Valid Entry Count (Upper)
-            rd_reg_38th_lo = get_register(REG_38TH_LOW);    // FSCH Total Valid Entry Count (Lower)
-            rd_reg_39th_hi = get_register(REG_39TH_HIGH);   // FSCH Total Delay Entry Count (Upper)
-            rd_reg_39th_lo = get_register(REG_39TH_LOW);    // FSCH Total Delay Entry Count (Lower)
-            rd_reg_40th_hi = get_register(REG_40TH_HIGH);   // FSCH Total Drop Entry Count  (Upper)
-            rd_reg_40th_lo = get_register(REG_40TH_LOW);    // FSCH Total Drop Entry Count  (Lower)
+            rd_reg_70th_hi = get_register(REG_70TH_HIGH);   // FSCH Total New Entry Count   (Upper)
+            rd_reg_70th_lo = get_register(REG_70TH_LOW);    // FSCH Total New Entry Count   (Lower)
+            rd_reg_71th_hi = get_register(REG_71TH_HIGH);   // FSCH Total Valid Entry Count (Upper)
+            rd_reg_71th_lo = get_register(REG_71TH_LOW);    // FSCH Total Valid Entry Count (Lower)
+            rd_reg_72th_hi = get_register(REG_72TH_HIGH);   // FSCH Total Delay Entry Count (Upper)
+            rd_reg_72th_lo = get_register(REG_72TH_LOW);    // FSCH Total Delay Entry Count (Lower)
+            rd_reg_73th_hi = get_register(REG_73TH_HIGH);   // FSCH Total Drop Entry Count  (Upper)
+            rd_reg_73th_lo = get_register(REG_73TH_LOW);    // FSCH Total Drop Entry Count  (Lower)
 
-            printf("   5. FSCH Total New Entry Count   (hi)  : %lu\n", rd_reg_37th_hi);
-            printf("      FSCH Total New Entry Count   (lo)  : %lu\n", rd_reg_37th_lo);
-            printf("      FSCH Total Valid Entry Count (hi)  : %lu\n", rd_reg_38th_hi);
-            printf("      FSCH Total Valid Entry Count (lo)  : %lu\n", rd_reg_38th_lo);
-            printf("      FSCH Total Delay Entry Count (hi)  : %lu\n", rd_reg_39th_hi);
-            printf("      FSCH Total Delay Entry Count (lo)  : %lu\n", rd_reg_39th_lo);
-            printf("      FSCH Total Drop Entry Count  (hi)  : %lu\n", rd_reg_40th_hi);
-            printf("      FSCH Total Drop Entry Count  (lo)  : %lu\n", rd_reg_40th_lo);
+            printf("       FSCH Total New Entry Count   (hi)  :  %lu\n", rd_reg_70th_hi);
+            printf("       FSCH Total New Entry Count   (lo)  :  %lu\n", rd_reg_70th_lo);
+            printf("       FSCH Total Valid Entry Count (hi)  :  %lu\n", rd_reg_71th_hi);
+            printf("       FSCH Total Valid Entry Count (lo)  :  %lu\n", rd_reg_71th_lo);
+            printf("       FSCH Total Delay Entry Count (hi)  :  %lu\n", rd_reg_72th_hi);
+            printf("       FSCH Total Delay Entry Count (lo)  :  %lu\n", rd_reg_72th_lo);
+            printf("       FSCH Total Drop Entry Count  (hi)  :  %lu\n", rd_reg_73th_hi);
+            printf("       FSCH Total Drop Entry Count  (lo)  :  %lu\n", rd_reg_73th_lo);
             printf("\n");
+
+            // Tx Tstamp
+            rd_reg_91th_hi = get_register(REG_91TH_HIGH);   // Tx Tstamp 1 (Upper)
+            rd_reg_91th_lo = get_register(REG_91TH_LOW);    // Tx Tstamp 1 (Lower)
+            rd_reg_92th_hi = get_register(REG_92TH_HIGH);   // Tx Tstamp 2 (Upper)
+            rd_reg_92th_lo = get_register(REG_92TH_LOW);    // Tx Tstamp 2 (Lower)
+            rd_reg_93th_hi = get_register(REG_93TH_HIGH);   // Tx Tstamp 3 (Upper)
+            rd_reg_93th_lo = get_register(REG_93TH_LOW);    // Tx Tstamp 3 (Lower)
+            rd_reg_94th_hi = get_register(REG_94TH_HIGH);   // Tx Tstamp 4 (Upper)
+            rd_reg_94th_lo = get_register(REG_94TH_LOW);    // Tx Tstamp 4 (Lower)
+
+            printf("       Tx Tstamp 1 (hi)     :  %lu\n", rd_reg_91th_hi);
+            printf("       Tx Tstamp 1 (lo)     :  %lu\n", rd_reg_91th_lo);
+            printf("       Tx Tstamp 2 (hi)     :  %lu\n", rd_reg_92th_hi);
+            printf("       Tx Tstamp 2 (lo)     :  %lu\n", rd_reg_92th_lo);
+            printf("       Tx Tstamp 3 (hi)     :  %lu\n", rd_reg_93th_hi);
+            printf("       Tx Tstamp 3 (lo)     :  %lu\n", rd_reg_93th_lo);
+            printf("       Tx Tstamp 4 (hi)     :  %lu\n", rd_reg_94th_hi);
+            printf("       Tx Tstamp 4 (lo)     :  %lu\n", rd_reg_94th_lo);
+            printf("\n");
+
+            printf("   [2] ETH PORT 1\n");
+            // FT1 Total Tx Frame/Byte Count
+            rd_reg_97th_hi = get_register(REG_97TH_HIGH);   // FT1 Total Tx Frame Count   (Upper)
+            rd_reg_97th_lo = get_register(REG_97TH_LOW);    // FT1 Total Tx Frame Count   (Lower)
+            rd_reg_98th_hi = get_register(REG_98TH_HIGH);   // FT1 Total Tx Byte Count    (Upper)
+            rd_reg_98th_lo = get_register(REG_98TH_LOW);    // FT1 Total Tx Byte Count    (Lower)
+
+            printf("       FT1 Total Tx Frame Count   (hi)  :  %lu\n", rd_reg_97th_hi);
+            printf("       FT1 Total Tx Frame Count   (lo)  :  %lu\n", rd_reg_97th_lo);
+            printf("       FT1 Total Tx Byte Count    (hi)  :  %lu\n", rd_reg_98th_hi);
+            printf("       FT1 Total Tx Byte Count    (lo)  :  %lu\n", rd_reg_98th_lo);
+            printf("\n");
+
+            printf("   [3] ETH PORT 2\n");
+            // FT2 Total Tx Frame/Byte Count
+            rd_reg_103th_hi = get_register(REG_103TH_HIGH);   // FT2 Total Tx Frame Count   (Upper)
+            rd_reg_103th_lo = get_register(REG_103TH_LOW);    // FT2 Total Tx Frame Count   (Lower)
+            rd_reg_104th_hi = get_register(REG_104TH_HIGH);   // FT2 Total Tx Byte Count    (Upper)
+            rd_reg_104th_lo = get_register(REG_104TH_LOW);    // FT2 Total Tx Byte Count    (Lower)
+
+            printf("       FT2 Total Tx Frame Count   (hi)  :  %lu\n", rd_reg_103th_hi);
+            printf("       FT2 Total Tx Frame Count   (lo)  :  %lu\n", rd_reg_103th_lo);
+            printf("       FT2 Total Tx Byte Count    (hi)  :  %lu\n", rd_reg_104th_hi);
+            printf("       FT2 Total Tx Byte Count    (lo)  :  %lu\n", rd_reg_104th_lo);
+            printf("\n\n");
 
         // ==================================================================== //
         //  [3] TSN Rx Information                                              //
         // ==================================================================== //
-            printf("// TSN Rx Information\n");
+            printf(" # 1Q TSN RX INFO\n");
+            printf("   [1] ETH PORT 1\n");
 
             // Rx Tstamp
-            rd_reg_1th_hi = get_register(REG_1TH_HIGH);   // Rx Tstamp (Upper)
-            rd_reg_1th_lo = get_register(REG_1TH_LOW);    // Rx Tstamp (Lower)
+            rd_reg_16th_hi = get_register(REG_16TH_HIGH);   // Rx Tstamp (Upper)
+            rd_reg_16th_lo = get_register(REG_16TH_LOW);    // Rx Tstamp (Lower)
 
-            printf("   1. Rx Tstamp (hi)     : %lu\n", rd_reg_1th_hi);
-            printf("      Rx Tstamp (lo)     : %lu\n", rd_reg_1th_lo);
+            printf("       Rx Tstamp (hi)                     :  %lu\n", rd_reg_16th_hi);
+            printf("       Rx Tstamp (lo)                     :  %lu\n", rd_reg_16th_lo);
             printf("\n");
 
             // FD Total Rx Frame Count
-            rd_reg_4th_hi = get_register(REG_4TH_HIGH);   // Rx Tstamp (Upper)
-            rd_reg_4th_lo = get_register(REG_4TH_LOW);    // Rx Tstamp (Lower)
+            rd_reg_19th_hi = get_register(REG_19TH_HIGH);   // FD Total Rx Frame Count (Upper)
+            rd_reg_19th_lo = get_register(REG_19TH_LOW);    // FD Total Rx Frame Count (Lower)
 
-            printf("   2. FD Total Rx Frame Count (hi) : %lu\n", rd_reg_4th_hi);
-            printf("      FD Total Rx Frame Count (lo) : %lu\n", rd_reg_4th_lo);
+            printf("       FD Total Rx Frame Count (hi)       :  %lu\n", rd_reg_19th_hi);
+            printf("       FD Total Rx Frame Count (lo)       :  %lu\n", rd_reg_19th_lo);
+
+            // FD Total Rx Byte Count
+            rd_reg_20th_hi = get_register(REG_20TH_HIGH);   // FD Total Rx Byte Count (Upper)
+            rd_reg_20th_lo = get_register(REG_20TH_LOW);    // FD Total Rx Byte Count (Lower)
+
+            printf("       FD Total Rx Byte Count (hi)        :  %lu\n", rd_reg_20th_hi);
+            printf("       FD Total Rx Byte Count (lo)        :  %lu\n", rd_reg_20th_lo);
+
+            // FD Total Rx Drop Frame Count
+            rd_reg_21th_hi = get_register(REG_21TH_HIGH);   // FD Total Rx Drop Frame Count (Upper)
+            rd_reg_21th_lo = get_register(REG_21TH_LOW);    // FD Total Rx Drop Frame Count (Lower)
+
+            printf("       FD Total Rx Drop Frame Count (hi)  :  %lu\n", rd_reg_21th_hi);
+            printf("       FD Total Rx Drop Frame Count (lo)  :  %lu\n", rd_reg_21th_lo);
+
+            // FD Total Rx Drop Byte Count
+            rd_reg_22th_hi = get_register(REG_22TH_HIGH);   // FD Total Rx Drop Byte Count (Upper)
+            rd_reg_22th_lo = get_register(REG_22TH_LOW);    // FD Total Rx Drop Byte Count (Lower)
+
+            printf("       FD Total Rx Drop Byte Count (hi)   :  %lu\n", rd_reg_22th_hi);
+            printf("       FD Total Rx Drop Byte Count (lo)   :  %lu\n", rd_reg_22th_lo);
             printf("\n");
-            
-            printf("\n\n\n\n");
-            
-            usleep(100*1000);
 
+            // Rx Host FIFO, Rx Frame FIFO, Rx Meta FIFO Data Count
+            rd_reg_31th_hi = get_register(REG_31TH_HIGH);   // Rx FIFO Status (Upper)
+            rd_reg_31th_lo = get_register(REG_31TH_LOW);    // Rx FIFO Status (Lower)
+
+            printf("       Rx Host FIFO Data Count            :  %lu (%lu-Byte)\n", rd_reg_31th_hi, rd_reg_31th_hi*16);
+            printf("       Rx Frame FIFO Data Count           :  %lu\n", (rd_reg_31th_lo >> 16U));
+            printf("       Rx Meta FIFO Data Count            :  %lu\n", (rd_reg_31th_lo & 0xFF));
+            printf("\n");
+
+            printf("   [2] ETH PORT 2\n");
+
+            // Rx Tstamp
+            rd_reg_35th_hi = get_register(REG_35TH_HIGH);   // Rx Tstamp (Upper)
+            rd_reg_35th_lo = get_register(REG_35TH_LOW);    // Rx Tstamp (Lower)
+
+            printf("       Rx Tstamp (hi)                     :  %lu\n", rd_reg_35th_hi);
+            printf("       Rx Tstamp (lo)                     :  %lu\n", rd_reg_35th_lo);
+            printf("\n");
+
+            // FD Total Rx Frame Count
+            rd_reg_38th_hi = get_register(REG_38TH_HIGH);   // FD Total Rx Frame Count (Upper)
+            rd_reg_38th_lo = get_register(REG_38TH_LOW);    // FD Total Rx Frame Count (Lower)
+
+            printf("       FD Total Rx Frame Count (hi)       :  %lu\n", rd_reg_38th_hi);
+            printf("       FD Total Rx Frame Count (lo)       :  %lu\n", rd_reg_38th_lo);
+
+            // FD Total Rx Byte Count
+            rd_reg_39th_hi = get_register(REG_39TH_HIGH);   // FD Total Rx Byte Count (Upper)
+            rd_reg_39th_lo = get_register(REG_39TH_LOW);    // FD Total Rx Byte Count (Lower)
+
+            printf("       FD Total Rx Byte Count (hi)        :  %lu\n", rd_reg_39th_hi);
+            printf("       FD Total Rx Byte Count (lo)        :  %lu\n", rd_reg_39th_lo);
+
+            // FD Total Rx Drop Frame Count
+            rd_reg_40th_hi = get_register(REG_40TH_HIGH);   // FD Total Rx Drop Frame Count (Upper)
+            rd_reg_40th_lo = get_register(REG_40TH_LOW);    // FD Total Rx Drop Frame Count (Lower)
+
+            printf("       FD Total Rx Drop Frame Count (hi)  :  %lu\n", rd_reg_40th_hi);
+            printf("       FD Total Rx Drop Frame Count (lo)  :  %lu\n", rd_reg_40th_lo);
+
+            // FD Total Rx Drop Byte Count
+            rd_reg_41th_hi = get_register(REG_41TH_HIGH);   // FD Total Rx Drop Byte Count (Upper)
+            rd_reg_41th_lo = get_register(REG_41TH_LOW);    // FD Total Rx Drop Byte Count (Lower)
+
+            printf("       FD Total Rx Drop Byte Count (hi)   :  %lu\n", rd_reg_41th_hi);
+            printf("       FD Total Rx Drop Byte Count (lo)   :  %lu\n", rd_reg_41th_lo);
+            printf("\n");
+
+            // Rx Host FIFO, Rx Frame FIFO, Rx Meta FIFO Data Count
+            rd_reg_50th_hi = get_register(REG_50TH_HIGH);   // Rx FIFO Status (Upper)
+            rd_reg_50th_lo = get_register(REG_50TH_LOW);    // Rx FIFO Status (Lower)
+
+            printf("       Rx Host FIFO Data Count            :  %lu (%lu-Byte)\n", rd_reg_50th_hi, rd_reg_50th_hi*16);
+            printf("       Rx Frame FIFO Data Count           :  %lu\n", (rd_reg_50th_lo >> 16U));
+            printf("       Rx Meta FIFO Data Count            :  %lu\n", (rd_reg_50th_lo & 0xFF));
+            printf("\n");
+
+
+            usleep(100*1000);
         }
         
 
         return 0;
     }
 
+    // int register_rw_test_app(void)
+    // {
+    //     // 1. General System Information
+    //     uint32_t up_count_high, up_count_low;
+        
+    //     up_count_high   = get_register(TEST_REG_1TH_HIGH);   // Up Count High
+    //     up_count_low    = get_register(TEST_REG_1TH_LOW);    // Up Count Low
 
+    //     printf("   1. Up Count      (hi)  :  %lu\n", up_count_high);
+    //     printf("      Up Count      (lo)  :  %lu\n\n", up_count_low);
+
+    //     set_register(REG_87TH_HIGH, 0xdeadbeef);
+    //     set_register(REG_87TH_LOW, 0xcafebabe);
+
+    //     usleep(100*1000);
+
+    //     return 0;
+    // }
+
+    // int register_rw_test_app(void)
+    // {
+    //     // 1. General System Information
+    //     uint32_t up_count_high, up_count_low;
+    //     uint32_t down_count_high, down_count_low;
+    //     uint32_t time_hour, time_minute;
+    //     uint32_t time_second, time_tick;
+    //     usleep(10*1000);
+
+    //     while(1)
+    //     {
+    //         printf("=========================== Register Information ===========================\n");
+
+    //     // ==================================================================== //
+    //     //  [1] System Information                                  //
+    //     // ==================================================================== //
+    //         up_count_high   = get_register(TEST_REG_1TH_HIGH);   // Up Count High
+    //         up_count_low    = get_register(TEST_REG_1TH_LOW);    // Up Count Low
+    //         down_count_high = get_register(TEST_REG_2TH_HIGH);   // Down Count High
+    //         down_count_low  = get_register(TEST_REG_2TH_LOW);    // Down Count Low
+    //         time_hour       = get_register(TEST_REG_3TH_HIGH);   // Time Hour
+    //         time_minute     = get_register(TEST_REG_3TH_LOW);    // Time Minute
+    //         time_second     = get_register(TEST_REG_4TH_HIGH);   // Time Second
+    //         time_tick       = get_register(TEST_REG_4TH_LOW);    // Time Tick
+
+    //         printf("FPGA Running Time => %02lu : %02lu : %02lu\n\n", time_hour, time_minute, time_second);
+    //         printf("// General System Information\n");
+    //         printf("   1. Up Count      (hi)  :  %lu\n", up_count_high);
+    //         printf("      Up Count      (lo)  :  %lu\n", up_count_low);
+    //         printf("\n");
+    //         printf("   2. Down Count    (hi)  :  %lu\n", down_count_high);
+    //         printf("      Down Count    (lo)  :  %lu\n", down_count_low);
+    //         printf("\n\n\n\n");
+            
+    //         usleep(100*1000);
+    //     }
+        
+    //     return 0;
+    // }
+
+
+    // int register_rw_test_app(void)
+    // {
+    //     // 1. General System Information
+    //     uint32_t rd_reg_80th_hi, rd_reg_80th_lo;    // TSN System Info
+    //     uint32_t rd_reg_76th_hi, rd_reg_76th_lo;    // FPGA Clock (Hour), FPGA Clock (Minute)
+    //     uint32_t rd_reg_77th_hi, rd_reg_77th_lo;    // FPGA Clock (Second), FPGA Clock (Tick)
+    //     uint32_t rd_reg_82th_hi, rd_reg_82th_lo;    // System Count (Host)
+    //     uint32_t rd_reg_78th_hi, rd_reg_78th_lo;    // System Count (TSN Rx)
+    //     uint32_t rd_reg_79th_hi, rd_reg_79th_lo;    // System Count (TSN Tx)
+
+    //     // 2. TSN Tx Information
+    //     uint32_t rd_reg_42th_hi, rd_reg_42th_lo;    // Buffer Write Status 1 (Address FIFO Data Count)
+    //     uint32_t rd_reg_45th_hi, rd_reg_45th_lo;    // Address FIFO Data Count
+    //     uint32_t rd_reg_64th_hi, rd_reg_64th_lo;    // Tx Tstamp 1
+    //     uint32_t rd_reg_65th_hi, rd_reg_65th_lo;    // Tx Tstamp 2
+    //     uint32_t rd_reg_66th_hi, rd_reg_66th_lo;    // Tx Tstamp 3
+    //     uint32_t rd_reg_67th_hi, rd_reg_67th_lo;    // Tx Tstamp 4
+    //     uint32_t rd_reg_24th_hi, rd_reg_24th_lo;    // FS Total Rx Frame Count
+    //     uint32_t rd_reg_37th_hi, rd_reg_37th_lo;    // FSCH Total New Entry Count
+    //     uint32_t rd_reg_38th_hi, rd_reg_38th_lo;    // FSCH Total Valid Entry Count
+    //     uint32_t rd_reg_39th_hi, rd_reg_39th_lo;    // FSCH Total Delay Entry Count
+    //     uint32_t rd_reg_40th_hi, rd_reg_40th_lo;    // FSCH Total Drop Entry Count
+    //     uint32_t rd_reg_58th_hi, rd_reg_58th_lo;    // FT Total Tx Frame Count
+    //     uint32_t rd_reg_59th_hi, rd_reg_59th_lo;    // FT Total Tx Byte Count
+
+    //     // 3. TSN Rx Information
+    //     uint32_t rd_reg_1th_hi, rd_reg_1th_lo;      // Rx Tstamp
+    //     uint32_t rd_reg_4th_hi, rd_reg_4th_lo;      // Total Rx Frame Count
+
+
+    //     usleep(10*1000);
+
+    //     // set_register(REG_84TH_HIGH, (uint32_t)(900 << 16 | 6195));
+    //     // // set_register(REG_84TH_LOW, (uint32_t)(900 << 16 | 6195));
+    //     // set_register(REG_84TH_LOW, (uint32_t)(510 << 16 | 1 << 7 | 1 << 6 | 1 << 5 | 1 << 4 | 1 << 3 | 1 << 2 | 1 << 1 | 1));
+
+    //     set_register(REG_86TH_HIGH, 0xdeadbeef);
+    //     set_register(REG_86TH_LOW, 0xcafebabe);
+
+    //     // set_register(REG_86TH_HIGH, 0x0);
+    //     // set_register(REG_86TH_LOW, 0x0);
+
+    //     // set_register(REG_87TH_HIGH, 0xdeadbeef);
+    //     // set_register(REG_87TH_LOW, 0xcafebabe);
+
+    //     // set_register(REG_87TH_HIGH, 0x0);
+    //     // set_register(REG_87TH_LOW, 0x0);
+
+
+
+    //     while(1)
+    //     {
+    //         printf("=========================== Register Information ===========================\n");
+
+    //     // ==================================================================== //
+    //     //  [1] TSN General System Information                                  //
+    //     // ==================================================================== //
+    //         rd_reg_80th_hi = get_register(REG_80TH_HIGH);   // TSN System Info
+    //         rd_reg_80th_lo = get_register(REG_80TH_LOW);    // TSN System Info
+    //         rd_reg_76th_hi = get_register(REG_76TH_HIGH);   // FPGA Clock (Hour)
+    //         rd_reg_76th_lo = get_register(REG_76TH_LOW);    // FPGA Clock (Minute)
+    //         rd_reg_77th_hi = get_register(REG_77TH_HIGH);   // FPGA Clock (Second)
+    //         rd_reg_77th_lo = get_register(REG_77TH_LOW);    // FPGA Clock (Tick)
+    //         rd_reg_82th_hi = get_register(REG_82TH_HIGH);   // System Count (Host)
+    //         rd_reg_82th_lo = get_register(REG_82TH_LOW);    // System Count (Host)
+    //         rd_reg_78th_hi = get_register(REG_78TH_HIGH);   // System Count (TSN Rx)
+    //         rd_reg_78th_lo = get_register(REG_78TH_LOW);    // System Count (TSN Rx)
+    //         rd_reg_79th_hi = get_register(REG_79TH_HIGH);   // System Count (TSN Tx)
+    //         rd_reg_79th_lo = get_register(REG_79TH_LOW);    // System Count (TSN Tx)
+
+    //         printf("FPGA Running Time => %02lu : %02lu : %02lu\n\n", rd_reg_76th_hi, rd_reg_76th_lo, rd_reg_77th_hi);
+    //         printf("// General System Information\n");
+    //         printf("   1. System Count (Host) (hi)     : %lu\n", rd_reg_82th_hi);
+    //         printf("      System Count (Host) (lo)     : %lu\n", rd_reg_82th_lo);
+    //         printf("\n\n");
+
+    //     // ==================================================================== //
+    //     //  [2] TSN Tx Information                                              //
+    //     // ==================================================================== //
+    //         printf("// TSN Tx Information\n");
+
+    //         // Buffer Write Status 1 (Address FIFO Data Count)
+    //         rd_reg_42th_hi = get_register(REG_42TH_HIGH);
+    //         rd_reg_42th_lo = get_register(REG_42TH_LOW);
+
+    //         printf("   1. Buffer Write Status 1 (hi)  : %lu\n", rd_reg_42th_hi);
+    //         printf("      Buffer Write Status 1 (lo)  : %lu\n", rd_reg_42th_lo);
+
+    //         // Address FIFO Data Count
+    //         rd_reg_45th_hi = get_register(REG_45TH_HIGH);
+    //         rd_reg_45th_lo = get_register(REG_45TH_LOW);
+
+    //         printf("   2. Address FIFO Data Count (hi)  : %lu\n", rd_reg_45th_hi);
+    //         printf("      Address FIFO Data Count (lo)  : %lu\n", rd_reg_45th_lo);
+
+    //         // Tx Tstamp
+    //         rd_reg_64th_hi = get_register(REG_64TH_HIGH);   // Tx Tstamp 1 (Upper)
+    //         rd_reg_64th_lo = get_register(REG_64TH_LOW);    // Tx Tstamp 1 (Lower)
+    //         rd_reg_65th_hi = get_register(REG_65TH_HIGH);   // Tx Tstamp 2 (Upper)
+    //         rd_reg_65th_lo = get_register(REG_65TH_LOW);    // Tx Tstamp 2 (Lower)
+    //         rd_reg_66th_hi = get_register(REG_66TH_HIGH);   // Tx Tstamp 3 (Upper)
+    //         rd_reg_66th_lo = get_register(REG_66TH_LOW);    // Tx Tstamp 3 (Lower)
+    //         rd_reg_67th_hi = get_register(REG_67TH_HIGH);   // Tx Tstamp 4 (Upper)
+    //         rd_reg_67th_lo = get_register(REG_67TH_LOW);    // Tx Tstamp 4 (Lower)
+
+    //         printf("   3. Tx Tstamp 1 (hi)     : %lu\n", rd_reg_64th_hi);
+    //         printf("      Tx Tstamp 1 (lo)     : %lu\n", rd_reg_64th_lo);
+    //         printf("      Tx Tstamp 2 (hi)     : %lu\n", rd_reg_65th_hi);
+    //         printf("      Tx Tstamp 2 (lo)     : %lu\n", rd_reg_65th_lo);
+    //         printf("      Tx Tstamp 3 (hi)     : %lu\n", rd_reg_66th_hi);
+    //         printf("      Tx Tstamp 3 (lo)     : %lu\n", rd_reg_66th_lo);
+    //         printf("      Tx Tstamp 4 (hi)     : %lu\n", rd_reg_67th_hi);
+    //         printf("      Tx Tstamp 4 (lo)     : %lu\n", rd_reg_67th_lo);
+    //         printf("\n");
+
+    //         // FS Total Rx Frame Count
+    //         rd_reg_24th_hi = get_register(REG_24TH_HIGH);   // FS Total Rx Frame Count (Upper)
+    //         rd_reg_24th_lo = get_register(REG_24TH_LOW);    // FS Total Rx Frame Count (Lower)
+
+    //         printf("   4. FS Total Rx Frame Count (hi)     : %lu\n", rd_reg_24th_hi);
+    //         printf("      FS Total Rx Frame Count (lo)     : %lu\n", rd_reg_24th_lo);
+    //         printf("\n");
+
+    //         // FSCH Total New/Valid/Delay/Drop Entry Count
+    //         rd_reg_37th_hi = get_register(REG_37TH_HIGH);   // FSCH Total New Entry Count   (Upper)
+    //         rd_reg_37th_lo = get_register(REG_37TH_LOW);    // FSCH Total New Entry Count   (Lower)
+    //         rd_reg_38th_hi = get_register(REG_38TH_HIGH);   // FSCH Total Valid Entry Count (Upper)
+    //         rd_reg_38th_lo = get_register(REG_38TH_LOW);    // FSCH Total Valid Entry Count (Lower)
+    //         rd_reg_39th_hi = get_register(REG_39TH_HIGH);   // FSCH Total Delay Entry Count (Upper)
+    //         rd_reg_39th_lo = get_register(REG_39TH_LOW);    // FSCH Total Delay Entry Count (Lower)
+    //         rd_reg_40th_hi = get_register(REG_40TH_HIGH);   // FSCH Total Drop Entry Count  (Upper)
+    //         rd_reg_40th_lo = get_register(REG_40TH_LOW);    // FSCH Total Drop Entry Count  (Lower)
+
+    //         printf("   5. FSCH Total New Entry Count   (hi)  : %lu\n", rd_reg_37th_hi);
+    //         printf("      FSCH Total New Entry Count   (lo)  : %lu\n", rd_reg_37th_lo);
+    //         printf("      FSCH Total Valid Entry Count (hi)  : %lu\n", rd_reg_38th_hi);
+    //         printf("      FSCH Total Valid Entry Count (lo)  : %lu\n", rd_reg_38th_lo);
+    //         printf("      FSCH Total Delay Entry Count (hi)  : %lu\n", rd_reg_39th_hi);
+    //         printf("      FSCH Total Delay Entry Count (lo)  : %lu\n", rd_reg_39th_lo);
+    //         printf("      FSCH Total Drop Entry Count  (hi)  : %lu\n", rd_reg_40th_hi);
+    //         printf("      FSCH Total Drop Entry Count  (lo)  : %lu\n", rd_reg_40th_lo);
+    //         printf("\n");
+
+    //         // FT Total Tx Frame/Byte Count
+    //         rd_reg_58th_hi = get_register(REG_58TH_HIGH);   // FT Total Tx Frame Count   (Upper)
+    //         rd_reg_58th_lo = get_register(REG_58TH_LOW);    // FT Total Tx Frame Count   (Lower)
+    //         rd_reg_59th_hi = get_register(REG_59TH_HIGH);   // FT Total Tx Frame Count   (Upper)
+    //         rd_reg_59th_lo = get_register(REG_59TH_LOW);    // FT Total Tx Frame Count   (Lower)
+
+    //         printf("   6. FT Total Tx Frame Count   (hi)  : %lu\n", rd_reg_58th_hi);
+    //         printf("      FT Total Tx Frame Count   (lo)  : %lu\n", rd_reg_58th_lo);
+    //         printf("      FT Total Tx Byte Count    (hi)  : %lu\n", rd_reg_59th_hi);
+    //         printf("      FT Total Tx Byte Count    (lo)  : %lu\n", rd_reg_59th_lo);
+    //         printf("\n");
+
+    //     // ==================================================================== //
+    //     //  [3] TSN Rx Information                                              //
+    //     // ==================================================================== //
+    //         printf("// TSN Rx Information\n");
+
+    //         // Rx Tstamp
+    //         rd_reg_1th_hi = get_register(REG_1TH_HIGH);   // Rx Tstamp (Upper)
+    //         rd_reg_1th_lo = get_register(REG_1TH_LOW);    // Rx Tstamp (Lower)
+
+    //         printf("   1. Rx Tstamp (hi)     : %lu\n", rd_reg_1th_hi);
+    //         printf("      Rx Tstamp (lo)     : %lu\n", rd_reg_1th_lo);
+    //         printf("\n");
+
+    //         // FD Total Rx Frame Count
+    //         rd_reg_4th_hi = get_register(REG_4TH_HIGH);   // Rx Tstamp (Upper)
+    //         rd_reg_4th_lo = get_register(REG_4TH_LOW);    // Rx Tstamp (Lower)
+
+    //         printf("   2. FD Total Rx Frame Count (hi) : %lu\n", rd_reg_4th_hi);
+    //         printf("      FD Total Rx Frame Count (lo) : %lu\n", rd_reg_4th_lo);
+    //         printf("\n");
+            
+    //         printf("\n\n\n\n");
+            
+    //         usleep(100*1000);
+
+    //     }
+        
+
+    //     return 0;
+    // }
+
+
+    int sel_path_1_test_app(void)
+    {
+        set_register(REG_1TH_LOW, 0x00000001);
+        printf("Ethernet Port 1 is Selected!\n\n");
+
+        usleep(10*1000);
+
+        return 0;
+    }
+
+    int sel_path_2_test_app(void)
+    {
+        set_register(REG_1TH_LOW, 0x00000003);
+        printf("Ethernet Port 2 is Selected!\n\n");
+
+        usleep(10*1000);
+
+        return 0;
+    }
 
 /* ================================================================================================================================================ */
 
