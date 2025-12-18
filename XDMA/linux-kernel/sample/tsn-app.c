@@ -247,10 +247,15 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
     int register_rw_test_app(void);
 
     // 5. Ethernet Path Selection
-    int process_main_sel_path_1_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
-    int process_main_sel_path_2_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
-    int sel_path_1_test_app(void);
-    int sel_path_2_test_app(void);
+    int process_main_sel_tx_path_1_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+    int process_main_sel_tx_path_2_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+    int sel_tx_path_1_test_app(void);
+    int sel_tx_path_2_test_app(void);
+
+    int process_main_sel_rx_path_1_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+    int process_main_sel_rx_path_2_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl);
+    int sel_rx_path_1_test_app(void);
+    int sel_rx_path_2_test_app(void);
 
 
 // ======================================================================================== //
@@ -360,14 +365,24 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
         return register_rw_test_app();
     }
 
-    int process_main_sel_path_1_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
+    int process_main_sel_tx_path_1_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
     {
-        return sel_path_1_test_app();
+        return sel_tx_path_1_test_app();
     }
     
-    int process_main_sel_path_2_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
+    int process_main_sel_tx_path_2_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
     {
-        return sel_path_2_test_app();
+        return sel_tx_path_2_test_app();
+    }
+
+    int process_main_sel_rx_path_1_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
+    {
+        return sel_rx_path_1_test_app();
+    }
+    
+    int process_main_sel_rx_path_2_testCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
+    {
+        return sel_rx_path_2_test_app();
     }
 
 // ======================================================================================== //
@@ -398,10 +413,16 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
         {"reg_test", EXECUTION_ATTR, process_main_register_read_write_testCmd, \
             "   reg_test", \
             "   This option was created for Register Read/Write Test of Re-Designed 1Q TSN IP\n"},
-        {"sel_path_1", EXECUTION_ATTR, process_main_sel_path_1_testCmd, \
+        {"sel_tx_path_1", EXECUTION_ATTR, process_main_sel_tx_path_1_testCmd, \
             "   reg_test", \
             "   This option was created for Register Read/Write Test of Re-Designed 1Q TSN IP\n"},
-        {"sel_path_2", EXECUTION_ATTR, process_main_sel_path_2_testCmd, \
+        {"sel_tx_path_2", EXECUTION_ATTR, process_main_sel_tx_path_2_testCmd, \
+            "   reg_test", \
+            "   This option was created for Register Read/Write Test of Re-Designed 1Q TSN IP\n"},
+        {"sel_rx_path_1", EXECUTION_ATTR, process_main_sel_rx_path_1_testCmd, \
+            "   reg_test", \
+            "   This option was created for Register Read/Write Test of Re-Designed 1Q TSN IP\n"},
+        {"sel_rx_path_2", EXECUTION_ATTR, process_main_sel_rx_path_2_testCmd, \
             "   reg_test", \
             "   This option was created for Register Read/Write Test of Re-Designed 1Q TSN IP\n"}, 
     #ifdef ONE_QUEUE_TSN
@@ -438,7 +459,7 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
 
 
     // User Parameter Macro
-    #define APP1_SLEEP_TIME_MS              (10)                     // Frame Transmission Gap
+    #define APP1_SLEEP_TIME_MS              (10000000)                     // Frame Transmission Gap
     #define FRAME_TYPE                      (FRAME_TYPE_VLAN)        // Frame Type
     #define FRAME_LENGTH                    (1500)      // 46, 1456
     #define TIMESTMAP_ID                    (3)
@@ -1246,6 +1267,10 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
         uint32_t rd_reg_41th_hi, rd_reg_41th_lo;        // ETH1 Total Drop Byte Count
         uint32_t rd_reg_50th_hi, rd_reg_50th_lo;        // Rx FIFO Status
 
+        // Test
+        uint32_t rd_reg_1th_hi, rd_reg_1th_lo;
+
+
         usleep(10*1000);
 
 
@@ -1466,6 +1491,13 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
             printf("       Rx Meta FIFO Data Count            :  %lu\n", (rd_reg_50th_lo & 0xFF));
             printf("\n");
 
+            // Test
+            // rd_reg_1th_hi = get_register(REG_1TH_HIGH);
+            // rd_reg_1th_lo = get_register(REG_1TH_LOW);
+
+            // printf("       TSN System Control (hi)            :  %lx\n", rd_reg_1th_hi);
+            // printf("       TSN System Control (lo)            :  %lu\n", rd_reg_1th_lo);
+            // printf("\n");
 
             usleep(100*1000);
         }
@@ -1721,20 +1753,60 @@ int process_main_sendCmd(int argc, const char *argv[], menu_command_t *menu_tbl)
     // }
 
 
-    int sel_path_1_test_app(void)
+    int sel_tx_path_1_test_app(void)
     {
-        set_register(REG_1TH_LOW, 0x00000001);
-        printf("Ethernet Port 1 is Selected!\n\n");
+        uint32_t temp_reg;
+
+        temp_reg = get_register(REG_1TH_LOW);
+        usleep(1*1000);
+
+        set_register(REG_1TH_LOW, (temp_reg & ~(1U << 2)));
+        printf("Tx Path 1 is Selected!\n\n");
 
         usleep(10*1000);
 
         return 0;
     }
 
-    int sel_path_2_test_app(void)
+    int sel_tx_path_2_test_app(void)
     {
-        set_register(REG_1TH_LOW, 0x00000003);
-        printf("Ethernet Port 2 is Selected!\n\n");
+        uint32_t temp_reg;
+
+        temp_reg = get_register(REG_1TH_LOW);
+        usleep(1*1000);
+
+        set_register(REG_1TH_LOW, (temp_reg | (1U << 2)));
+        printf("Tx Path 2 is Selected!\n\n");
+
+        usleep(10*1000);
+
+        return 0;
+    }
+
+    int sel_rx_path_1_test_app(void)
+    {
+        uint32_t temp_reg;
+
+        temp_reg = get_register(REG_1TH_LOW);
+        usleep(1*1000);
+
+        set_register(REG_1TH_LOW, (temp_reg & ~(1U << 1)));
+        printf("Rx Path 1 is Selected!\n\n");
+
+        usleep(10*1000);
+
+        return 0;
+    }
+
+    int sel_rx_path_2_test_app(void)
+    {
+        uint32_t temp_reg;
+
+        temp_reg = get_register(REG_1TH_LOW);
+        usleep(1*1000);
+
+        set_register(REG_1TH_LOW, (temp_reg | (1U << 1)));
+        printf("Rx Path 2 is Selected!\n\n");
 
         usleep(10*1000);
 
